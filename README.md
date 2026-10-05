@@ -10,7 +10,7 @@
 
 <img src="assets/brand/keyra-icon.svg" alt="Keyra ikona" width="120">
 
-**Android · iOS · Radi offline · Bez računa · Bez oglasa**
+**Android · iOS · Bez računa · Bez oglasa**
 
 </div>
 
@@ -20,7 +20,7 @@
 
 Keyra čuva lozinke, bilješke, kartice, identitete, Wi‑Fi podatke i druge osjetljive informacije na jednom preglednom mjestu.
 
-Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez nepotrebnih koraka. Vaš trezor ostaje šifriran na uređaju, a za svakodnevno korištenje nije potreban račun ni internetska veza.
+Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez nepotrebnih koraka. Vaš trezor ostaje šifriran na uređaju, a za svakodnevno korištenje nije potreban račun.
 
 <div align="center">
 <img src="assets/screens/splash.svg" alt="Keyra početni prikaz" width="230">
@@ -39,6 +39,7 @@ Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez ne
 🧩 **Sve na jednom mjestu** — Prijave, bilješke, kartice, identiteti, Wi‑Fi i favoriti.  
 ✨ **Generator lozinki** — Snažne i jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
 📦 **Sigurnosna kopija** — Vaši podaci mogu se spremiti i vratiti u šifriranom obliku.  
+✅ **Zaštićeno spremanje** — Ako spremanje ili uvoz ne uspiju, postojeći sadržaj trezora ostaje sačuvan.  
 🌙 **Premium tamni izgled** — Pregledno sučelje s tirkiznim, plavim i indigo naglascima.
 
 ## Moj trezor
