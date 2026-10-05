@@ -345,9 +345,14 @@ final class EncryptedVault {
 enum PortableBackup {
     private static let maxPayloadBytes = 2_500_000
     private static let maxVaultItems = 10_000
+    private static let saltBytes = 16
+    private static let nonceBytes = 12
+    private static let tagBytes = 16
+    private static let legacyIOSIterations = 120_000
+    private static let legacyAndroidIterations = 180_000
 
     static func encrypt(_ items: [VaultItem], password: String) throws -> String {
-        var salt = [UInt8](repeating: 0, count: 16)
+        var salt = [UInt8](repeating: 0, count: saltBytes)
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
@@ -356,6 +361,9 @@ enum PortableBackup {
         let clear = try JSONEncoder().encode(items)
         let sealed = try AES.GCM.seal(clear, using: key)
         guard let combined = sealed.combined else { throw KeyraError.invalidBackup }
+
+        // Shared KEYRA2 format on iOS and Android:
+        // version.iterations.salt.(12-byte nonce + ciphertext + 16-byte GCM tag)
         return [
             "KEYRA2",
             String(PasswordTools.currentIterations),
@@ -370,34 +378,139 @@ enum PortableBackup {
         }
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
 
-        let iterations: Int
-        let saltPart: Substring
-        let payloadPart: Substring
-        if parts.count == 4, parts[0] == "KEYRA2", let parsed = Int(parts[1]), (100_000...2_000_000).contains(parsed) {
-            iterations = parsed
-            saltPart = parts[2]
-            payloadPart = parts[3]
-        } else if parts.count == 3, parts[0] == "KEYRA1" {
-            iterations = 120_000
-            saltPart = parts[1]
-            payloadPart = parts[2]
-        } else {
-            throw KeyraError.invalidBackup
+        if
+            parts.count == 4,
+            parts[0] == "KEYRA2",
+            let iterations = Int(parts[1]),
+            (100_000...2_000_000).contains(iterations),
+            let salt = decodeSalt(parts[2]),
+            let combined = Data(base64Encoded: String(parts[3]))
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [iterations]
+            )
         }
 
+        // Legacy Android KEYRA2 stored nonce and ciphertext/tag separately.
+        if
+            parts.count == 5,
+            parts[0] == "KEYRA2",
+            let iterations = Int(parts[1]),
+            (100_000...2_000_000).contains(iterations),
+            let salt = decodeSalt(parts[2]),
+            let combined = combineLegacyParts(noncePart: parts[3], payloadPart: parts[4])
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [iterations]
+            )
+        }
+
+        // Legacy iOS KEYRA1 used CryptoKit combined data and 120k iterations.
+        if
+            parts.count == 3,
+            parts[0] == "KEYRA1",
+            let salt = decodeSalt(parts[1]),
+            let combined = Data(base64Encoded: String(parts[2]))
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [legacyIOSIterations, legacyAndroidIterations]
+            )
+        }
+
+        // Legacy Android KEYRA1 stored nonce and ciphertext/tag separately.
+        if
+            parts.count == 4,
+            parts[0] == "KEYRA1",
+            let salt = decodeSalt(parts[1]),
+            let combined = combineLegacyParts(noncePart: parts[2], payloadPart: parts[3])
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [legacyAndroidIterations, legacyIOSIterations]
+            )
+        }
+
+        throw KeyraError.invalidBackup
+    }
+
+    private static func decodeSalt(_ value: Substring) -> Data? {
         guard
-            let salt = Data(base64Encoded: String(saltPart)),
-            let combined = Data(base64Encoded: String(payloadPart))
-        else { throw KeyraError.invalidBackup }
+            let salt = Data(base64Encoded: String(value)),
+            salt.count == saltBytes
+        else {
+            return nil
+        }
+        return salt
+    }
 
-        let key = SymmetricKey(data: try PasswordTools.derive(password, salt: salt, iterations: iterations))
-        let box = try AES.GCM.SealedBox(combined: combined)
-        let clear = try AES.GCM.open(box, using: key)
-        let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
-        guard decoded.count <= maxVaultItems else {
+    private static func combineLegacyParts(
+        noncePart: Substring,
+        payloadPart: Substring
+    ) -> Data? {
+        guard
+            let nonce = Data(base64Encoded: String(noncePart)),
+            nonce.count == nonceBytes,
+            let payload = Data(base64Encoded: String(payloadPart)),
+            payload.count >= tagBytes
+        else {
+            return nil
+        }
+        var combined = Data()
+        combined.append(nonce)
+        combined.append(payload)
+        return combined
+    }
+
+    private static func decryptCombined(
+        _ combined: Data,
+        password: String,
+        salt: Data,
+        iterations: [Int]
+    ) throws -> [VaultItem] {
+        guard
+            salt.count == saltBytes,
+            combined.count >= nonceBytes + tagBytes
+        else {
             throw KeyraError.invalidBackup
         }
-        return decoded
+
+        var lastError: Error?
+        for iterationCount in iterations {
+            do {
+                let key = SymmetricKey(
+                    data: try PasswordTools.derive(
+                        password,
+                        salt: salt,
+                        iterations: iterationCount
+                    )
+                )
+                let box = try AES.GCM.SealedBox(combined: combined)
+                let clear = try AES.GCM.open(box, using: key)
+                let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+                guard decoded.count <= maxVaultItems else {
+                    throw KeyraError.invalidBackup
+                }
+                return decoded
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let lastError = lastError {
+            throw lastError
+        }
+        throw KeyraError.invalidBackup
     }
 }
 
