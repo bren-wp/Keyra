@@ -270,6 +270,7 @@ final class KeyraStore: ObservableObject {
     @Published var selected: VaultItem?
     @Published var message: String?
     @Published var biometricEnabled: Bool
+    @Published var autoLockSeconds: Int
     @Published var isSetup: Bool
 
     private var sessionPassword: String?
@@ -279,6 +280,7 @@ final class KeyraStore: ObservableObject {
         self.isSetup = setup
         self.screen = setup ? .unlock : .onboarding
         self.biometricEnabled = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
+        self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
     func startCreate() { screen = .unlock }
@@ -364,6 +366,27 @@ final class KeyraStore: ObservableObject {
         defaults.set(enabled, forKey: "biometric_enabled")
     }
 
+    func cycleAutoLock() {
+        switch autoLockSeconds {
+        case 0: autoLockSeconds = 30
+        case 30: autoLockSeconds = 60
+        case 60: autoLockSeconds = 300
+        default: autoLockSeconds = 0
+        }
+        defaults.set(autoLockSeconds, forKey: "auto_lock_seconds")
+        message = "Automatsko zaključavanje: " + autoLockLabel
+    }
+
+    var autoLockLabel: String {
+        switch autoLockSeconds {
+        case 0: return "Odmah"
+        case 30: return "30 sekundi"
+        case 60: return "1 minuta"
+        case 300: return "5 minuta"
+        default: return "\(autoLockSeconds) s"
+        }
+    }
+
     func copyBackup() {
         guard let password = sessionPassword else {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
@@ -431,6 +454,7 @@ struct RootView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var splash = true
+    @State private var backgroundedAt: Date?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -490,8 +514,21 @@ struct RootView: View {
             withAnimation(.easeOut(duration: 0.3)) { splash = false }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active && store.isSetup && store.screen != .unlock {
-                store.lock()
+            if phase == .background && store.isSetup && store.screen != .unlock {
+                if store.autoLockSeconds == 0 {
+                    store.lock()
+                } else {
+                    backgroundedAt = Date()
+                }
+            } else if phase == .active {
+                if
+                    let started = backgroundedAt,
+                    store.autoLockSeconds > 0,
+                    Date().timeIntervalSince(started) >= Double(store.autoLockSeconds)
+                {
+                    store.lock()
+                }
+                backgroundedAt = nil
             }
         }
     }
@@ -1895,6 +1932,21 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(cyan)
                     }
+                    SettingRow(
+                        icon: "timer",
+                        title: "Automatsko zaključavanje",
+                        subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
+                    ) {
+                        Button {
+                            store.cycleAutoLock()
+                        } label: {
+                            Text(store.autoLockLabel)
+                                .foregroundStyle(cyan)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Button {
                         store.open(.security)
                     } label: {
