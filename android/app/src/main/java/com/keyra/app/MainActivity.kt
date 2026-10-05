@@ -723,47 +723,123 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     }
 }
 
-private object PortableBackup {
+internal object PortableBackup {
     private const val ITERATIONS = 600_000
+    private const val LEGACY_ANDROID_ITERATIONS = 180_000
+    private const val LEGACY_IOS_ITERATIONS = 120_000
+    private const val IV_BYTES = 12
+    private const val SALT_BYTES = 16
+    private const val TAG_BYTES = 16
 
     fun encrypt(text: String, password: String): String {
-        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val key = derive(password, salt, ITERATIONS)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
-        val data = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        val encrypted = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        val combined = iv + encrypted
+
+        // KEYRA2 is intentionally cross-platform:
+        // version.iterations.salt.(12-byte nonce + ciphertext + 16-byte GCM tag)
         return listOf(
             "KEYRA2",
             ITERATIONS.toString(),
             Base64.encodeToString(salt, Base64.NO_WRAP),
-            Base64.encodeToString(iv, Base64.NO_WRAP),
-            Base64.encodeToString(data, Base64.NO_WRAP)
+            Base64.encodeToString(combined, Base64.NO_WRAP)
         ).joinToString(".")
     }
 
     fun decrypt(payload: String, password: String): String {
-        val p = payload.split(".")
-        val iterations: Int
-        val saltIndex: Int
-        when {
-            p.size == 5 && p[0] == "KEYRA2" -> {
-                iterations = p[1].toInt()
+        val parts = payload.split(".")
+        return when {
+            parts.size == 4 && parts[0] == "KEYRA2" -> {
+                val iterations = parts[1].toInt()
                 require(iterations in 100_000..2_000_000)
-                saltIndex = 2
+                val salt = decodeSalt(parts[2])
+                val combined = Base64.decode(parts[3], Base64.NO_WRAP)
+                decryptCombined(combined, password, salt, listOf(iterations))
             }
-            p.size == 4 && p[0] == "KEYRA1" -> {
-                iterations = 180_000
-                saltIndex = 1
+            // Legacy Android KEYRA2 stored nonce and ciphertext/tag separately.
+            parts.size == 5 && parts[0] == "KEYRA2" -> {
+                val iterations = parts[1].toInt()
+                require(iterations in 100_000..2_000_000)
+                val salt = decodeSalt(parts[2])
+                val iv = Base64.decode(parts[3], Base64.NO_WRAP)
+                val encrypted = Base64.decode(parts[4], Base64.NO_WRAP)
+                decryptParts(iv, encrypted, password, salt, listOf(iterations))
+            }
+            // Legacy iOS KEYRA1 used CryptoKit combined data and 120k PBKDF2 iterations.
+            parts.size == 3 && parts[0] == "KEYRA1" -> {
+                val salt = decodeSalt(parts[1])
+                val combined = Base64.decode(parts[2], Base64.NO_WRAP)
+                decryptCombined(
+                    combined,
+                    password,
+                    salt,
+                    listOf(LEGACY_IOS_ITERATIONS, LEGACY_ANDROID_ITERATIONS)
+                )
+            }
+            // Legacy Android KEYRA1 stored nonce and ciphertext/tag separately.
+            parts.size == 4 && parts[0] == "KEYRA1" -> {
+                val salt = decodeSalt(parts[1])
+                val iv = Base64.decode(parts[2], Base64.NO_WRAP)
+                val encrypted = Base64.decode(parts[3], Base64.NO_WRAP)
+                decryptParts(
+                    iv,
+                    encrypted,
+                    password,
+                    salt,
+                    listOf(LEGACY_ANDROID_ITERATIONS, LEGACY_IOS_ITERATIONS)
+                )
             }
             else -> error("Neispravan format sigurnosne kopije.")
         }
-        val salt = Base64.decode(p[saltIndex], Base64.NO_WRAP)
-        val iv = Base64.decode(p[saltIndex + 1], Base64.NO_WRAP)
-        val data = Base64.decode(p[saltIndex + 2], Base64.NO_WRAP)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, derive(password, salt, iterations), GCMParameterSpec(128, iv))
-        return cipher.doFinal(data).toString(Charsets.UTF_8)
+    }
+
+    private fun decodeSalt(value: String): ByteArray {
+        val salt = Base64.decode(value, Base64.NO_WRAP)
+        require(salt.size == SALT_BYTES) { "Neispravna sol sigurnosne kopije." }
+        return salt
+    }
+
+    private fun decryptCombined(
+        combined: ByteArray,
+        password: String,
+        salt: ByteArray,
+        iterations: List<Int>
+    ): String {
+        require(combined.size >= IV_BYTES + TAG_BYTES) { "Neispravan šifrirani sadržaj." }
+        val iv = combined.copyOfRange(0, IV_BYTES)
+        val encrypted = combined.copyOfRange(IV_BYTES, combined.size)
+        return decryptParts(iv, encrypted, password, salt, iterations)
+    }
+
+    private fun decryptParts(
+        iv: ByteArray,
+        encrypted: ByteArray,
+        password: String,
+        salt: ByteArray,
+        iterations: List<Int>
+    ): String {
+        require(iv.size == IV_BYTES) { "Neispravan nonce sigurnosne kopije." }
+        require(encrypted.size >= TAG_BYTES) { "Neispravan šifrirani sadržaj." }
+
+        var lastError: Throwable? = null
+        for (iterationCount in iterations) {
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(
+                    Cipher.DECRYPT_MODE,
+                    derive(password, salt, iterationCount),
+                    GCMParameterSpec(128, iv)
+                )
+                return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+            } catch (error: Throwable) {
+                lastError = error
+            }
+        }
+        throw lastError ?: IllegalArgumentException("Sigurnosnu kopiju nije moguće dešifrirati.")
     }
 
     private fun derive(password: String, salt: ByteArray, iterations: Int): SecretKey {
