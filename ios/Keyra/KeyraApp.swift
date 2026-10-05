@@ -2001,7 +2001,7 @@ struct SettingsView: View {
                     SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.")
 
                     SectionLabel("SIGURNOST I PRIVATNOST")
-                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.1.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.2.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
 
                     Button {
                         store.lock()
