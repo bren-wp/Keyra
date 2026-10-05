@@ -1281,6 +1281,7 @@ struct BottomBar: View {
 
     @ViewBuilder
     private func BottomItem(icon: String, title: String, screen: KeyraScreen) -> some View {
+        let selected = store.screen == screen
         Button {
             store.open(screen)
         } label: {
@@ -1289,11 +1290,22 @@ struct BottomBar: View {
                     .font(.system(size: 19, weight: .semibold))
                 Text(title)
                     .font(.caption2)
+                    .fontWeight(selected ? .bold : .regular)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
+                Capsule()
+                    .fill(cyan)
+                    .frame(width: selected ? 24 : 0, height: 2)
+                    .padding(.top, 1)
             }
-            .foregroundStyle(store.screen == screen ? cyan : muted)
-            .frame(maxWidth: .infinity, minHeight: 42)
+            .foregroundStyle(selected ? cyan : muted)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(selected ? cyan.opacity(0.11) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 17)
+                    .stroke(selected ? cyan.opacity(0.30) : Color.clear, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 17))
         }
         .buttonStyle(.plain)
     }
@@ -2278,6 +2290,7 @@ struct AddEditView: View {
                 .padding(18)
                 .padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 }
