@@ -105,9 +105,14 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        model.onAppForeground()
+    }
+
     override fun onStop() {
+        model.onAppBackground()
         super.onStop()
-        if (model.unlocked) model.lock()
     }
 
     private fun authenticateBiometric() {
@@ -156,7 +161,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var selected by mutableStateOf<VaultItem?>(null)
     var message by mutableStateOf<String?>(null)
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
+    var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     private var sessionPassword: String? = null
+    private var backgroundAt: Long? = null
 
     fun startCreate() { screen = Screen.UNLOCK }
     fun open(screen: Screen) { this.screen = screen }
@@ -260,6 +267,42 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleBiometric(value: Boolean) {
         biometricEnabled = value
         prefs.edit().putBoolean("biometric_enabled", value).apply()
+    }
+
+    fun cycleAutoLock() {
+        autoLockSeconds = when (autoLockSeconds) {
+            0 -> 30
+            30 -> 60
+            60 -> 300
+            else -> 0
+        }
+        prefs.edit().putInt("auto_lock_seconds", autoLockSeconds).apply()
+        message = "Automatsko zaključavanje: " + autoLockLabel()
+    }
+
+    fun autoLockLabel(): String = when (autoLockSeconds) {
+        0 -> "Odmah"
+        30 -> "30 sekundi"
+        60 -> "1 minuta"
+        300 -> "5 minuta"
+        else -> autoLockSeconds.toString() + " s"
+    }
+
+    fun onAppBackground() {
+        if (!unlocked) return
+        if (autoLockSeconds == 0) {
+            lock()
+        } else {
+            backgroundAt = System.currentTimeMillis()
+        }
+    }
+
+    fun onAppForeground() {
+        val started = backgroundAt ?: return
+        backgroundAt = null
+        if (unlocked && System.currentTimeMillis() - started >= autoLockSeconds * 1000L) {
+            lock()
+        }
     }
 
     private fun loadVault() {
@@ -1722,6 +1765,17 @@ private fun SettingsScreen(model: KeyraViewModel) {
             item {
                 SettingRow(Icons.Outlined.Fingerprint, "Biometrijsko otključavanje", "Brz i siguran pristup trezoru.") {
                     Switch(model.biometricEnabled, model::toggleBiometric)
+                }
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Timer,
+                    "Automatsko zaključavanje",
+                    "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
+                ) {
+                    TextButton(onClick = model::cycleAutoLock) {
+                        Text(model.autoLockLabel(), color = Cyan)
+                    }
                 }
             }
             item {
