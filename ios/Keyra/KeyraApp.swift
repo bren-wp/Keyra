@@ -3371,24 +3371,53 @@ struct SettingRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(cyan)
-                .frame(width: 48, height: 48)
-                .background(Color(hex: 0x0B3551))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline).foregroundStyle(muted)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                settingIcon
+                settingText
+                Spacer(minLength: 8)
+                trailing
             }
-            Spacer()
-            trailing
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    settingIcon
+                    settingText
+                }
+                HStack {
+                    Spacer()
+                    trailing
+                }
+            }
         }
         .padding(14)
         .background(slate)
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var settingIcon: some View {
+        Image(systemName: icon)
+            .font(.title2)
+            .foregroundStyle(cyan)
+            .frame(width: 48, height: 48)
+            .background(Color(hex: 0x0B3551))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var settingText: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
