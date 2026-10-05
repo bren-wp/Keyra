@@ -745,7 +745,7 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
 }
 
 @Composable
-private fun BrandHeader(subtitle: String) {
+private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val compact = maxWidth < 370.dp
         Row(
@@ -776,7 +776,7 @@ private fun BrandHeader(subtitle: String) {
                 )
             }
             IconButton(
-                onClick = {},
+                onClick = onNotifications,
                 modifier = Modifier.size(if (compact) 38.dp else 44.dp)
             ) {
                 Icon(Icons.Outlined.Notifications, contentDescription = "Obavijesti", tint = Color.White)
@@ -1183,7 +1183,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR")
+        BrandHeader("MOJ TREZOR") { model.message = "Nema novih sigurnosnih upozorenja." }
 
         OutlinedTextField(
             search, { search = it },
@@ -1459,7 +1459,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR")
+            BrandHeader("MOJ TREZOR") { model.message = "Nema novih sigurnosnih upozorenja." }
             Text(
                 "Kolekcije",
                 Modifier.padding(horizontal = side),
@@ -1629,7 +1629,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki")
+        BrandHeader("Generator lozinki") { model.message = "Nema novih sigurnosnih upozorenja." }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -2298,7 +2298,7 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("POSTAVKE I SIGURNOST")
+        BrandHeader("POSTAVKE I SIGURNOST") { model.message = "Nema novih sigurnosnih upozorenja." }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2362,7 +2362,11 @@ private fun SettingsScreen(
                 }
             }
             item { SectionTitle("PREFERENCIJE") }
-            item { SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") }
+            item {
+                SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") {
+                    Text("Uvijek uključen", color = Cyan, fontSize = 12.sp)
+                }
+            }
             item { SectionTitle("SIGURNOST I PRIVATNOST") }
             item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
             item {
@@ -2426,7 +2430,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST")
+        BrandHeader("SIGURNOST") { model.message = "Nema novih sigurnosnih upozorenja." }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
