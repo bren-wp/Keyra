@@ -1303,6 +1303,7 @@ struct CollectionsView: View {
 }
 
 struct GeneratorView: View {
+    @EnvironmentObject var store: KeyraStore
     @State private var length = 16.0
     @State private var upper = true
     @State private var lower = true
@@ -1353,18 +1354,33 @@ struct GeneratorView: View {
                         GeneratorToggle(title: "Simboli (!@#...)", value: $symbols, refresh: refresh)
                     }
 
-                    Button {
-                        refresh()
-                    } label: {
-                        Label("Generiraj novu", systemImage: "arrow.triangle.2.circlepath")
-                            .fontWeight(.bold)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
+                    HStack(spacing: 10) {
+                        Button {
+                            SecureClipboard.copy(password)
+                            store.message = "Lozinka je kopirana i automatski će se ukloniti."
+                        } label: {
+                            Label("Kopiraj lozinku", systemImage: "doc.on.doc")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .overlay(Capsule().stroke(cyan.opacity(0.7), lineWidth: 1))
+
+                        Button {
+                            refresh()
+                        } label: {
+                            Label("Generiraj novu", systemImage: "arrow.triangle.2.circlepath")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(midnight)
+                        .background(cyan)
+                        .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(midnight)
-                    .background(cyan)
-                    .clipShape(Capsule())
                 }
                 .padding(18)
                 .padding(.bottom, 90)
