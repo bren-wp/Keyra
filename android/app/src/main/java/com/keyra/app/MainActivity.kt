@@ -4163,7 +4163,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudUpload,
                     "Spremi šifriranu kopiju",
-                    "Spremite već šifriranu .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
+                    "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
                 ) {
                     IconButton(onClick = {
                         exportFileLauncher.launch("Keyra-backup.keyra")
@@ -4180,7 +4180,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudDownload,
                     "Uvezi šifriranu datoteku",
-                    "Odaberite šifriranu .keyra kopiju iz Files ili cloud providera i vratite trezor tek nakon izričite potvrde."
+                    "Odaberite šifriranu .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor tek nakon izričite potvrde."
                 ) {
                     IconButton(onClick = {
                         importFileLauncher.launch(
@@ -4196,6 +4196,13 @@ private fun SettingsScreen(
                 }
             }
 
+            if (matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud")) item {
+                SettingRow(
+                    Icons.Outlined.CloudSync,
+                    "Privatni cloud bez Keyra računa",
+                    "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka preko sistemskog odabira lokacije; sinkronizaciju zatim obavlja odabrani provider."
+                )
+            }
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
