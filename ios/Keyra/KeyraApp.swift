@@ -3928,10 +3928,28 @@ struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
     @State private var confirmImport = false
+    @State private var backupDocument = KeyraBackupDocument()
+    @State private var exportBackupFile = false
+    @State private var importBackupFile = false
+    @State private var pendingImportPayload: String?
 
     private func runProtectedImport() {
         store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             store.importBackup()
+        }
+    }
+
+    private func runProtectedFileImport(_ payload: String) {
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+            _ = store.importBackupPayload(payload)
+        }
+    }
+
+    private func prepareBackupExport() {
+        store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+            guard let payload = store.makeBackupPayload() else { return }
+            backupDocument = KeyraBackupDocument(payload: payload)
+            exportBackupFile = true
         }
     }
 
@@ -3949,7 +3967,16 @@ struct SettingsView: View {
     }
 
     private var dataVisible: Bool {
-        matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+        matches(
+            "Kopiraj sigurnosnu kopiju",
+            "Uvezi sigurnosnu kopiju",
+            "Spremi šifriranu kopiju",
+            "Uvezi šifriranu datoteku",
+            "Proton Drive",
+            "privatni cloud",
+            "Files",
+            "sigurnosna kopija"
+        )
     }
 
     private var preferenceVisible: Bool {
@@ -4059,6 +4086,38 @@ struct SettingsView: View {
                         SectionLabel("UPRAVLJANJE PODACIMA")
                     }
 
+                    if matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz") {
+                        SettingRow(
+                            icon: "externaldrive.badge.plus",
+                            title: "Spremi šifriranu kopiju",
+                            subtitle: "Spremite .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
+                        ) {
+                            Button {
+                                prepareBackupExport()
+                            } label: {
+                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Spremi šifriranu kopiju")
+                        }
+                    }
+
+                    if matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz") {
+                        SettingRow(
+                            icon: "externaldrive.badge.checkmark",
+                            title: "Uvezi šifriranu datoteku",
+                            subtitle: "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                        ) {
+                            Button {
+                                importBackupFile = true
+                            } label: {
+                                Image(systemName: "folder").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi šifriranu datoteku")
+                        }
+                    }
+
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
                         SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
                             Button {
@@ -4155,6 +4214,64 @@ struct SettingsView: View {
             Text(
                 "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
                 "Prije nastavka provjerite da je kopija ispravna."
+            )
+        }
+        .fileExporter(
+            isPresented: $exportBackupFile,
+            document: backupDocument,
+            contentType: UTType(filenameExtension: "keyra") ?? .data,
+            defaultFilename: "Keyra-backup"
+        ) { result in
+            switch result {
+            case .success:
+                store.message = "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
+            case .failure:
+                store.message = "Sigurnosnu kopiju nije moguće spremiti na odabrano mjesto."
+            }
+        }
+        .fileImporter(
+            isPresented: $importBackupFile,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                let urls = try result.get()
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed { url.stopAccessingSecurityScopedResource() }
+                }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 2_500_000, let payload = String(data: data, encoding: .utf8) else {
+                    store.message = "Odabrana sigurnosna kopija nije valjana ili je prevelika."
+                    return
+                }
+                pendingImportPayload = payload
+            } catch {
+                store.message = "Odabranu sigurnosnu kopiju nije moguće otvoriti."
+            }
+        }
+        .confirmationDialog(
+            "Uvesti šifriranu datoteku?",
+            isPresented: Binding(
+                get: { pendingImportPayload != nil },
+                set: { if !$0 { pendingImportPayload = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Uvezi i zamijeni", role: .destructive) {
+                if let payload = pendingImportPayload {
+                    pendingImportPayload = nil
+                    runProtectedFileImport(payload)
+                }
+            }
+            Button("Odustani", role: .cancel) {
+                pendingImportPayload = nil
+            }
+        } message: {
+            Text(
+                "Odabrana .keyra kopija zamijenit će trenutačni sadržaj trezora. " +
+                "Datoteka se prvo provjerava i dešifrira prije spremanja."
             )
         }
     }
