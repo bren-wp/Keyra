@@ -931,7 +931,7 @@ private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
 
 
 @Composable
-private fun OnboardingHeroBadge(icon: ImageVector, alignment: Alignment) {
+private fun OnboardingHeroBadge(icon: ImageVector) {
     Box(
         modifier = Modifier
             .size(46.dp)
@@ -980,16 +980,16 @@ private fun OnboardingVaultHero(compact: Boolean) {
         }
 
         Box(Modifier.align(Alignment.TopStart)) {
-            OnboardingHeroBadge(Icons.Outlined.Fingerprint, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Fingerprint)
         }
         Box(Modifier.align(Alignment.TopEnd)) {
-            OnboardingHeroBadge(Icons.Outlined.Security, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Security)
         }
         Box(Modifier.align(Alignment.BottomStart)) {
-            OnboardingHeroBadge(Icons.Outlined.CreditCard, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.CreditCard)
         }
         Box(Modifier.align(Alignment.BottomEnd)) {
-            OnboardingHeroBadge(Icons.Outlined.Cloud, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Cloud)
         }
     }
 }
