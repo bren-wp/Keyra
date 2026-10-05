@@ -1023,6 +1023,73 @@ struct FeatureCard: View {
     }
 }
 
+
+struct OnboardingHeroBadge: View {
+    let icon: String
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(ice)
+            .frame(width: 46, height: 46)
+            .background(slate2.opacity(0.96))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(ice.opacity(0.38), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct OnboardingVaultHero: View {
+    let compact: Bool
+
+    var body: some View {
+        ZStack {
+            RadialGradient(
+                colors: [indigo.opacity(0.30), Color(hex: 0x0A3150).opacity(0.72), midnight],
+                center: .center,
+                startRadius: 6,
+                endRadius: compact ? 130 : 170
+            )
+
+            RoundedRectangle(cornerRadius: compact ? 26 : 32)
+                .fill(slate.opacity(0.92))
+                .frame(width: compact ? 94 : 116, height: compact ? 94 : 116)
+                .overlay(
+                    RoundedRectangle(cornerRadius: compact ? 26 : 32)
+                        .stroke(cyan.opacity(0.62), lineWidth: 1)
+                )
+                .overlay(KeyraMark(size: compact ? 72 : 90))
+
+            VStack {
+                HStack {
+                    OnboardingHeroBadge(icon: "faceid")
+                    Spacer()
+                    OnboardingHeroBadge(icon: "shield")
+                }
+                Spacer()
+                HStack {
+                    OnboardingHeroBadge(icon: "creditcard")
+                    Spacer()
+                    OnboardingHeroBadge(icon: "icloud")
+                }
+            }
+            .padding(compact ? 12 : 16)
+        }
+        .frame(height: compact ? 154 : 190)
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 24 : 30))
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? 24 : 30)
+                .stroke(
+                    LinearGradient(
+                        colors: [cyan.opacity(0.72), indigo.opacity(0.58)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+}
+
 struct OnboardingView: View {
     @EnvironmentObject var store: KeyraStore
 
@@ -1047,6 +1114,9 @@ struct OnboardingView: View {
                             .foregroundStyle(muted)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
+
+                        OnboardingVaultHero(compact: compact)
+                            .padding(.top, compact ? 3 : 7)
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
                             Text("Sigurniji način upravljanja lozinkama")
