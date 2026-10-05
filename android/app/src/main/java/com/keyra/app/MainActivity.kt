@@ -179,7 +179,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Glavna lozinka mora imati najmanje 12 znakova."
             return false
         }
-        auth.create(password)
+
+        val created = runCatching {
+            store.save(emptyList())
+            auth.create(password)
+        }.isSuccess
+
+        if (!created) {
+            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            return false
+        }
+
         prefs.edit()
             .remove("unlock_failed_attempts")
             .remove("unlock_lockout_until")
@@ -188,7 +198,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         sessionPassword = password
         unlocked = true
         items.clear()
-        store.save(items)
         screen = Screen.VAULT
         return true
     }
@@ -228,7 +237,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             .remove("unlock_lockout_until")
             .apply()
         sessionPassword = password
-        loadVault()
+        if (!loadVault()) {
+            sessionPassword = null
+            unlocked = false
+            return false
+        }
         unlocked = true
         screen = Screen.VAULT
         return true
@@ -236,7 +249,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unlockFromBiometric() {
         if (!isSetup) return
-        loadVault()
+        if (!loadVault()) {
+            unlocked = false
+            return
+        }
         unlocked = true
         screen = Screen.VAULT
     }
@@ -250,21 +266,36 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun saveItem(item: VaultItem) {
-        val index = items.indexOfFirst { it.id == item.id }
         val saved = item.copy(updatedAt = System.currentTimeMillis())
-        if (index >= 0) items[index] = saved else items.add(0, saved)
-        store.save(items)
-        selected = saved
-        screen = Screen.VAULT
+        val next = items.toMutableList()
+        val index = next.indexOfFirst { it.id == item.id }
+        if (index >= 0) next[index] = saved else next.add(0, saved)
+
+        runCatching { store.save(next) }
+            .onSuccess {
+                items.clear()
+                items.addAll(next)
+                selected = saved
+                screen = Screen.VAULT
+            }
+            .onFailure {
+                message = "Stavku nije moguće spremiti. Pokušajte ponovno."
+            }
     }
 
     fun deleteSelected() {
-        selected?.let { target ->
-            items.removeAll { it.id == target.id }
-            store.save(items)
-        }
-        selected = null
-        screen = Screen.VAULT
+        val target = selected ?: return
+        val next = items.filterNot { it.id == target.id }
+        runCatching { store.save(next) }
+            .onSuccess {
+                items.clear()
+                items.addAll(next)
+                selected = null
+                screen = Screen.VAULT
+            }
+            .onFailure {
+                message = "Stavku nije moguće izbrisati. Pokušajte ponovno."
+            }
     }
 
     fun exportBackup(context: Context) {
@@ -273,9 +304,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
             return
         }
-        val payload = PortableBackup.encrypt(store.toJson(items), password)
-        copy(context, payload)
-        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+        runCatching { PortableBackup.encrypt(store.toJson(items), password) }
+            .onSuccess { payload ->
+                copy(context, payload)
+                message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+            }
+            .onFailure {
+                message = "Sigurnosnu kopiju nije moguće izraditi."
+            }
     }
 
     fun importBackup(context: Context) {
@@ -285,7 +321,16 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+        val clip = clipboard.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
+        } else {
+            ""
+        }
+        if (text.isBlank()) {
+            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
+            return
+        }
         runCatching {
             val json = PortableBackup.decrypt(text, password)
             val imported = store.fromJson(json)
@@ -349,9 +394,15 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun loadVault() {
+    private fun loadVault(): Boolean {
+        val loaded = store.load()
+        if (loaded == null) {
+            message = "Trezor nije moguće otvoriti. Podaci nisu promijenjeni."
+            return false
+        }
         items.clear()
-        items.addAll(store.load())
+        items.addAll(loaded)
+        return true
     }
 }
 
@@ -373,18 +424,22 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
     }
 
     fun verify(password: String): Boolean {
-        val salt = prefs.getString("master_salt", null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return false
-        val expected = prefs.getString("master_hash", null) ?: return false
-        val iterations = prefs.getInt("master_iterations", LEGACY_ITERATIONS)
-        val actual = derive(password, salt, iterations)
-        val ok = MessageDigest.isEqual(expected.toByteArray(), actual.toByteArray())
-        if (ok && iterations < CURRENT_ITERATIONS) {
-            prefs.edit()
-                .putInt("master_iterations", CURRENT_ITERATIONS)
-                .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
-                .apply()
-        }
-        return ok
+        return runCatching {
+            val encodedSalt = prefs.getString("master_salt", null) ?: return false
+            val salt = Base64.decode(encodedSalt, Base64.NO_WRAP)
+            val expected = prefs.getString("master_hash", null) ?: return false
+            val iterations = prefs.getInt("master_iterations", LEGACY_ITERATIONS)
+                .coerceIn(100_000, 2_000_000)
+            val actual = derive(password, salt, iterations)
+            val ok = MessageDigest.isEqual(expected.toByteArray(), actual.toByteArray())
+            if (ok && iterations < CURRENT_ITERATIONS) {
+                prefs.edit()
+                    .putInt("master_iterations", CURRENT_ITERATIONS)
+                    .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
+                    .apply()
+            }
+            ok
+        }.getOrDefault(false)
     }
 
     private fun derive(password: String, salt: ByteArray, iterations: Int): String {
@@ -448,9 +503,9 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         prefs.edit().putString("vault_blob", crypto.encrypt(toJson(items))).apply()
     }
 
-    fun load(): List<VaultItem> {
+    fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
-        return runCatching { fromJson(crypto.decrypt(blob)) }.getOrDefault(emptyList())
+        return runCatching { fromJson(crypto.decrypt(blob)) }.getOrNull()
     }
 
     fun toJson(items: List<VaultItem>): String {
@@ -2476,7 +2531,12 @@ private fun copy(context: Context, text: String) {
     }
     clipboard.setPrimaryClip(clip)
     Handler(Looper.getMainLooper()).postDelayed({
-        val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        val currentClip = clipboard.primaryClip
+        val current = if (currentClip != null && currentClip.itemCount > 0) {
+            currentClip.getItemAt(0).text?.toString()
+        } else {
+            null
+        }
         if (current == text) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
             else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
