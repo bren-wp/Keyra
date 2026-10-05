@@ -87,6 +87,8 @@ data class VaultItem(
     val notes: String = "",
     val category: String = "Osobno",
     val favorite: Boolean = false,
+    val type: String = "Prijava",
+    val fields: Map<String, String> = emptyMap(),
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -266,12 +268,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun seedItems() = listOf(
-        VaultItem(title="Google", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://accounts.google.com", notes="Primjer prijave", category="Osobno", favorite=true),
-        VaultItem(title="Apple ID", username="primjer@keyra.app", password="Appl3!Keyra#2026", website="https://account.apple.com", category="Osobno"),
-        VaultItem(title="GitHub", username="primjer", password="Git#Keyra!90210", website="https://github.com", category="Posao"),
-        VaultItem(title="Home Wi‑Fi", username="Dnevni boravak", password="Wifi!Keyra#8821", category="Osobno"),
-        VaultItem(title="Netflix", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://netflix.com", category="Zabava"),
-        VaultItem(title="Sigurne bilješke", notes="Ovdje možete spremati važne privatne bilješke.", category="Osobno")
+        VaultItem(title="Google", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://accounts.google.com", notes="Primjer prijave", category="Osobno", favorite=true, type="Prijava"),
+        VaultItem(title="Apple ID", username="primjer@keyra.app", password="Appl3!Keyra#2026", website="https://account.apple.com", category="Osobno", type="Prijava"),
+        VaultItem(title="GitHub", username="primjer", password="Git#Keyra!90210", website="https://github.com", category="Posao", type="Prijava"),
+        VaultItem(title="Kućni Wi‑Fi", username="Dnevni boravak", password="Wifi!Keyra#8821", category="Osobno", type="Wi-Fi", fields=mapOf("Naziv mreže" to "Keyra Home", "Vrsta zaštite" to "WPA3")),
+        VaultItem(title="Netflix", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://netflix.com", category="Zabava", type="Prijava"),
+        VaultItem(title="Sigurne bilješke", notes="Ovdje možete spremati važne privatne bilješke.", category="Osobno", type="Bilješka"),
+        VaultItem(title="Putna kartica", category="Putovanja", type="Kartica", fields=mapOf("Vlasnik kartice" to "Primjer Korisnik", "Broj kartice" to "4111111111111111", "Vrijedi do" to "12/30", "Sigurnosni kod" to "123")),
+        VaultItem(title="Osobni dokument", category="Osobno", type="Identitet", fields=mapOf("Puno ime" to "Primjer Korisnik", "Broj dokumenta" to "ID-KEYRA-2026", "Datum isteka" to "31. 12. 2030."))
     )
 }
 
@@ -385,6 +389,10 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
                 put("notes", item.notes)
                 put("category", item.category)
                 put("favorite", item.favorite)
+                put("type", item.type)
+                put("fields", JSONObject().apply {
+                    item.fields.forEach { (key, value) -> put(key, value) }
+                })
                 put("updatedAt", item.updatedAt)
             })
         }
@@ -396,16 +404,38 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         return buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
+                val username = o.optString("username")
+                val password = o.optString("password")
+                val website = o.optString("website")
+                val notes = o.optString("notes")
+                val storedType = if (o.has("type")) o.optString("type", "Prijava") else ""
+                val inferredType = when {
+                    storedType.isNotBlank() -> storedType
+                    password.isBlank() && website.isBlank() && username.isBlank() && notes.isNotBlank() -> "Bilješka"
+                    else -> "Prijava"
+                }
+                val fieldsObject = o.optJSONObject("fields")
+                val fields = buildMap {
+                    if (fieldsObject != null) {
+                        val keys = fieldsObject.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            put(key, fieldsObject.optString(key))
+                        }
+                    }
+                }
                 add(
                     VaultItem(
                         id = o.optString("id", UUID.randomUUID().toString()),
                         title = o.optString("title"),
-                        username = o.optString("username"),
-                        password = o.optString("password"),
-                        website = o.optString("website"),
-                        notes = o.optString("notes"),
+                        username = username,
+                        password = password,
+                        website = website,
+                        notes = notes,
                         category = o.optString("category", "Osobno"),
                         favorite = o.optBoolean("favorite", false),
+                        type = inferredType,
+                        fields = fields,
                         updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
                     )
                 )
@@ -766,33 +796,79 @@ private fun RowScope.NavItem(icon: ImageVector, label: String, selected: Boolean
 private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("Sve") }
-    val displayed = model.items.filter {
-        (filter == "Sve" || it.category == filter || (filter == "Favoriti" && it.favorite)) &&
-            (search.isBlank() || it.title.contains(search, true) || it.username.contains(search, true))
-    }
-    val weak = model.items.count { it.password.isNotBlank() && it.password.length < 12 }
-    val duplicated = model.items.groupBy { it.password }
+
+    val displayed = model.items
+        .filter {
+            val typeMatch = when (filter) {
+                "Sve" -> true
+                "Favoriti" -> it.favorite
+                else -> it.type == filter
+            }
+            val haystack = buildString {
+                append(it.title); append(' ')
+                append(it.username); append(' ')
+                append(it.website); append(' ')
+                append(it.notes); append(' ')
+                append(it.category); append(' ')
+                append(it.fields.values.joinToString(" "))
+            }
+            typeMatch && (search.isBlank() || haystack.contains(search, true))
+        }
+        .sortedByDescending { it.updatedAt }
+
+    val passwordItems = model.items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
+    val weak = passwordItems.count { it.password.isNotBlank() && it.password.length < 12 }
+    val duplicated = passwordItems.groupBy { it.password }
         .filter { it.key.isNotBlank() && it.value.size > 1 }
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
         BrandHeader("MOJ TREZOR")
+
         OutlinedTextField(
             search, { search = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
             colors = keyraFieldColors(),
             shape = RoundedCornerShape(24.dp)
         )
+
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Sve","Osobno","Posao","Zabava","Favoriti").forEach {
-                FilterChip(selected = filter == it, onClick = { filter = it }, label = { Text(it) })
+            listOf("Sve", "Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+                val label = when (value) {
+                    "Prijava" -> "Prijave"
+                    "Bilješka" -> "Bilješke"
+                    "Kartica" -> "Kartice"
+                    else -> value
+                }
+                FilterChip(
+                    selected = filter == value,
+                    onClick = { filter = value },
+                    label = { Text(label) },
+                    leadingIcon = {
+                        Icon(
+                            when (value) {
+                                "Prijava" -> Icons.Outlined.Lock
+                                "Bilješka" -> Icons.Outlined.Description
+                                "Kartica" -> Icons.Outlined.CreditCard
+                                "Identitet" -> Icons.Outlined.Badge
+                                "Wi-Fi" -> Icons.Outlined.Wifi
+                                "Favoriti" -> Icons.Outlined.Star
+                                else -> Icons.Outlined.GridView
+                            },
+                            null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
             }
         }
+
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -801,16 +877,19 @@ private fun VaultScreen(model: KeyraViewModel) {
             SummaryCard(weak.toString(), "Slabe", Danger, Modifier.weight(1f))
             SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.weight(1f))
         }
+
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Vaše stavke", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            Text("Poredaj po nedavnim", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(end = 10.dp))
             FilledIconButton(
                 onClick = model::addNew,
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Cyan, contentColor = Midnight)
             ) { Icon(Icons.Outlined.Add, null) }
         }
+
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp),
@@ -842,16 +921,42 @@ private fun SummaryCard(value: String, label: String, accent: Color, modifier: M
 
 @Composable
 private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) {
+    val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
     val stateColor = when {
         duplicated -> Danger
-        item.password.isNotBlank() && item.password.length < 12 -> Warn
+        isPasswordItem && item.password.isNotBlank() && item.password.length < 12 -> Warn
         else -> Good
     }
     val state = when {
         duplicated -> "Ponovno korištena"
-        item.password.isNotBlank() && item.password.length < 12 -> "Ažurirajte"
+        isPasswordItem && item.password.isNotBlank() && item.password.length < 12 -> "Potrebno ažuriranje"
+        item.type == "Bilješka" -> "Zaštićena"
+        item.type == "Kartica" -> "Zaštićena"
+        item.type == "Identitet" -> "Zaštićen"
         else -> "Snažna"
     }
+    val icon = when (item.type) {
+        "Bilješka" -> Icons.Outlined.Description
+        "Kartica" -> Icons.Outlined.CreditCard
+        "Identitet" -> Icons.Outlined.Badge
+        "Wi-Fi" -> Icons.Outlined.Wifi
+        else -> Icons.Outlined.Lock
+    }
+    val accent = when (item.type) {
+        "Bilješka" -> Indigo
+        "Kartica" -> Color(0xFFFFC247)
+        "Identitet" -> Color(0xFFB48CFF)
+        "Wi-Fi" -> Color(0xFF22BDF7)
+        else -> Cyan
+    }
+    val subtitle = when (item.type) {
+        "Kartica" -> item.fields["Broj kartice"]?.let { "•••• " + it.takeLast(4) } ?: item.category
+        "Identitet" -> item.fields["Puno ime"].orEmpty().ifBlank { item.category }
+        "Wi-Fi" -> item.fields["Naziv mreže"].orEmpty().ifBlank { item.username.ifBlank { item.category } }
+        "Bilješka" -> item.category
+        else -> item.username.ifBlank { item.website.ifBlank { item.category } }
+    }
+
     Surface(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -860,15 +965,15 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0B3551)),
+                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha=.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(item.title.take(1).uppercase(), color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Icon(icon, null, tint = accent)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(item.username.ifBlank { item.category }, color = Muted, fontSize = 13.sp)
+                Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
             }
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -893,11 +998,52 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         "Zdravlje" to Color(0xFF9C6CFF),
         "Ostalo" to Muted
     )
+    var search by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("Prijava") }
+
+    val recentNotes = model.items
+        .filter { it.type == "Bilješka" && (search.isBlank() || it.title.contains(search, true) || it.notes.contains(search, true)) }
+        .sortedByDescending { it.updatedAt }
+        .take(3)
+
     Column(Modifier.fillMaxSize()) {
         BrandHeader("MOJ TREZOR")
         Text("Kolekcije", Modifier.padding(horizontal = 18.dp), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold)
         Text("Organizirajte podatke. Pronađite ih odmah.", Modifier.padding(horizontal = 18.dp), color = Muted, fontSize = 16.sp)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            search, { search = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+            placeholder = { Text("Pretražite lozinke, bilješke, kartice...") },
+            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
+            colors = keyraFieldColors(),
+            shape = RoundedCornerShape(24.dp)
+        )
+
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti").forEach { value ->
+                FilterChip(
+                    selected = type == value,
+                    onClick = { type = value },
+                    label = {
+                        Text(
+                            when (value) {
+                                "Prijava" -> "Lozinke"
+                                "Bilješka" -> "Bilješke"
+                                "Kartica" -> "Kartice"
+                                else -> value
+                            }
+                        )
+                    }
+                )
+            }
+        }
+
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -913,9 +1059,31 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                             color = accent.copy(alpha=.13f),
                             border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha=.8f))
                         ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                Text("$count stavki", color = Muted)
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent.copy(alpha=.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        when (name) {
+                                            "Posao" -> Icons.Outlined.Work
+                                            "Financije" -> Icons.Outlined.CreditCard
+                                            "Društvene mreže" -> Icons.Outlined.Groups
+                                            "Kupovina" -> Icons.Outlined.ShoppingCart
+                                            "Putovanja" -> Icons.Outlined.Flight
+                                            "Zdravlje" -> Icons.Outlined.Favorite
+                                            "Ostalo" -> Icons.Outlined.GridView
+                                            else -> Icons.Outlined.Person
+                                        },
+                                        null,
+                                        tint = accent
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(count.toString() + " stavki", color = Muted, fontSize = 13.sp)
+                                }
                             }
                         }
                     }
@@ -926,13 +1094,25 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 Text("Nedavne bilješke", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
                 Text("Vaše najnovije bilješke i sigurne informacije.", color = Muted)
             }
-            items(model.items.filter { it.notes.isNotBlank() }.take(3)) { noteItem ->
-                Surface(shape = RoundedCornerShape(18.dp), color = Slate) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                        Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text(noteItem.notes, color = Muted, maxLines = 1)
+            items(recentNotes) { noteItem ->
+                Surface(
+                    Modifier.fillMaxWidth().clickable { model.select(noteItem) },
+                    shape = RoundedCornerShape(18.dp),
+                    color = Slate
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Description, null, tint = Indigo)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(noteItem.notes, color = Muted, maxLines = 1)
+                        }
+                        Icon(Icons.Outlined.MoreVert, null, tint = Muted)
                     }
                 }
+            }
+            if (recentNotes.isEmpty()) {
+                item { Text("Još nema sigurnih bilješki.", color = Muted, modifier = Modifier.padding(vertical = 18.dp)) }
             }
         }
     }
@@ -1041,66 +1221,202 @@ private fun AddScreen(model: KeyraViewModel) {
     var notes by remember(original?.id) { mutableStateOf(original?.notes.orEmpty()) }
     var category by remember(original?.id) { mutableStateOf(original?.category ?: "Osobno") }
     var favorite by remember(original?.id) { mutableStateOf(original?.favorite ?: false) }
+    var type by remember(original?.id) { mutableStateOf(original?.type ?: "Prijava") }
     var show by remember { mutableStateOf(false) }
+    var field1 by remember(original?.id) {
+        mutableStateOf(
+            when (original?.type) {
+                "Kartica" -> original.fields["Vlasnik kartice"].orEmpty()
+                "Identitet" -> original.fields["Puno ime"].orEmpty()
+                "Wi-Fi" -> original.fields["Naziv mreže"].orEmpty()
+                else -> ""
+            }
+        )
+    }
+    var field2 by remember(original?.id) {
+        mutableStateOf(
+            when (original?.type) {
+                "Kartica" -> original.fields["Broj kartice"].orEmpty()
+                "Identitet" -> original.fields["Broj dokumenta"].orEmpty()
+                "Wi-Fi" -> original.fields["Vrsta zaštite"].orEmpty()
+                else -> ""
+            }
+        )
+    }
+    var field3 by remember(original?.id) {
+        mutableStateOf(
+            when (original?.type) {
+                "Kartica" -> original.fields["Vrijedi do"].orEmpty()
+                "Identitet" -> original.fields["Datum isteka"].orEmpty()
+                else -> ""
+            }
+        )
+    }
+    var field4 by remember(original?.id) {
+        mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) }) {
                 Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
             }
+            KeyraMark(38.dp)
+            Spacer(Modifier.width(10.dp))
             Text("Keyra", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         }
+
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 20.dp)
+            contentPadding = PaddingValues(bottom = 26.dp)
         ) {
             item {
-                Text(if (original == null) "Dodaj prijavu" else "Uredi stavku", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Sigurno spremite svoje vjerodajnice", color = Muted)
+                Text(if (original == null) "Dodaj stavku" else "Uredi stavku", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Sigurno spremite osjetljive podatke", color = Muted)
             }
-            item { KeyraTextField(title, { title = it }, "Naslov", Icons.Outlined.Title) }
-            item { KeyraTextField(website, { website = it }, "Web-stranica", Icons.Outlined.Link) }
-            item { KeyraTextField(username, { username = it }, "Korisničko ime / e-pošta", Icons.Outlined.Person) }
+
             item {
-                KeyraPasswordField(password, { password = it }, show, { show = !show }, "Lozinka")
-                TextButton(onClick = { password = generatePassword(18, true, true, true, true) }) {
-                    Icon(Icons.Outlined.Refresh, null); Spacer(Modifier.width(5.dp)); Text("Generiraj")
+                Text("Vrsta stavke", color = Ice, fontSize = 12.sp, letterSpacing = 2.sp)
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi").forEach { value ->
+                        FilterChip(
+                            selected = type == value,
+                            onClick = {
+                                if (original == null) {
+                                    type = value
+                                    field1 = ""; field2 = ""; field3 = ""; field4 = ""
+                                }
+                            },
+                            enabled = original == null || type == value,
+                            label = { Text(value) },
+                            leadingIcon = {
+                                Icon(
+                                    when (value) {
+                                        "Bilješka" -> Icons.Outlined.Description
+                                        "Kartica" -> Icons.Outlined.CreditCard
+                                        "Identitet" -> Icons.Outlined.Badge
+                                        "Wi-Fi" -> Icons.Outlined.Wifi
+                                        else -> Icons.Outlined.Lock
+                                    },
+                                    null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+                    }
                 }
             }
-            item { KeyraTextField(notes, { notes = it }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false) }
+
+            item { KeyraTextField(title, { title = it }, "Naslov", Icons.Outlined.Title) }
+
+            if (type == "Prijava") {
+                item { KeyraTextField(website, { website = it }, "Web-stranica", Icons.Outlined.Link) }
+                item { KeyraTextField(username, { username = it }, "Korisničko ime / e-pošta", Icons.Outlined.Person) }
+                item {
+                    KeyraPasswordField(password, { password = it }, show, { show = !show }, "Lozinka")
+                    TextButton(onClick = { password = generatePassword(18, true, true, true, true) }) {
+                        Icon(Icons.Outlined.Refresh, null); Spacer(Modifier.width(5.dp)); Text("Generiraj")
+                    }
+                }
+            }
+
+            if (type == "Wi-Fi") {
+                item { KeyraTextField(field1, { field1 = it }, "Naziv mreže", Icons.Outlined.Wifi) }
+                item { KeyraTextField(username, { username = it }, "Korisničko ime (nije obavezno)", Icons.Outlined.Person) }
+                item {
+                    KeyraPasswordField(password, { password = it }, show, { show = !show }, "Lozinka mreže")
+                    TextButton(onClick = { password = generatePassword(20, true, true, true, true) }) {
+                        Icon(Icons.Outlined.Refresh, null); Spacer(Modifier.width(5.dp)); Text("Generiraj")
+                    }
+                }
+                item { KeyraTextField(field2, { field2 = it }, "Vrsta zaštite, npr. WPA3", Icons.Outlined.Security) }
+            }
+
+            if (type == "Kartica") {
+                item { KeyraTextField(field1, { field1 = it }, "Vlasnik kartice", Icons.Outlined.Person) }
+                item { KeyraTextField(field2, { field2 = it.filter(Char::isDigit).take(19) }, "Broj kartice", Icons.Outlined.CreditCard) }
+                item { KeyraTextField(field3, { field3 = it.take(7) }, "Vrijedi do", Icons.Outlined.DateRange) }
+                item { KeyraTextField(field4, { field4 = it.filter(Char::isDigit).take(4) }, "Sigurnosni kod", Icons.Outlined.Lock) }
+            }
+
+            if (type == "Identitet") {
+                item { KeyraTextField(field1, { field1 = it }, "Puno ime", Icons.Outlined.Person) }
+                item { KeyraTextField(field2, { field2 = it }, "Broj dokumenta", Icons.Outlined.Badge) }
+                item { KeyraTextField(field3, { field3 = it }, "Datum isteka", Icons.Outlined.DateRange) }
+            }
+
+            item { KeyraTextField(notes, { notes = it.take(1000) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false) }
+
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Favorit", color = Color.White, modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.StarBorder, null, tint = Ice)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Dodaj u favorite", color = Color.White, modifier = Modifier.weight(1f))
                     Switch(favorite, { favorite = it })
                 }
             }
+
             item {
+                Text("Mapa / kategorija", color = Ice, fontSize = 12.sp, letterSpacing = 2.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Osobno","Posao","Financije","Zabava","Putovanja","Ostalo").forEach {
+                    listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo").forEach {
                         FilterChip(selected = category == it, onClick = { category = it }, label = { Text(it) })
                     }
                 }
             }
+
             item {
                 Button(
                     onClick = {
-                        if (title.isBlank()) model.message = "Unesite naslov stavke."
-                        else model.saveItem(
-                            VaultItem(
-                                id = original?.id ?: UUID.randomUUID().toString(),
-                                title=title, website=website, username=username, password=password,
-                                notes=notes, category=category, favorite=favorite
+                        if (title.isBlank()) {
+                            model.message = "Unesite naslov stavke."
+                        } else {
+                            val extra = when (type) {
+                                "Kartica" -> mapOf(
+                                    "Vlasnik kartice" to field1,
+                                    "Broj kartice" to field2,
+                                    "Vrijedi do" to field3,
+                                    "Sigurnosni kod" to field4
+                                ).filterValues { it.isNotBlank() }
+                                "Identitet" -> mapOf(
+                                    "Puno ime" to field1,
+                                    "Broj dokumenta" to field2,
+                                    "Datum isteka" to field3
+                                ).filterValues { it.isNotBlank() }
+                                "Wi-Fi" -> mapOf(
+                                    "Naziv mreže" to field1,
+                                    "Vrsta zaštite" to field2
+                                ).filterValues { it.isNotBlank() }
+                                else -> emptyMap()
+                            }
+
+                            model.saveItem(
+                                VaultItem(
+                                    id = original?.id ?: UUID.randomUUID().toString(),
+                                    title = title.trim(),
+                                    website = if (type == "Prijava") website.trim() else "",
+                                    username = if (type == "Prijava" || type == "Wi-Fi") username.trim() else "",
+                                    password = if (type == "Prijava" || type == "Wi-Fi") password else "",
+                                    notes = notes.trim(),
+                                    category = category,
+                                    favorite = favorite,
+                                    type = type,
+                                    fields = extra
+                                )
                             )
-                        )
+                        }
                     },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = RoundedCornerShape(29.dp)
                 ) {
-                    Icon(Icons.Outlined.Save, null)
+                    Icon(Icons.Outlined.Lock, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Spremi", fontWeight = FontWeight.Bold)
+                    Text(if (type == "Prijava") "Spremi prijavu" else "Spremi stavku", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
             }
         }
@@ -1125,30 +1441,70 @@ private fun KeyraTextField(value: String, onValue: (String) -> Unit, label: Stri
 @Composable
 private fun DetailScreen(model: KeyraViewModel) {
     val current = model.selected ?: return
-    var reveal by remember { mutableStateOf(false) }
+    var reveal by remember(current.id) { mutableStateOf(false) }
+    var revealCard by remember(current.id) { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val titleIcon = when (current.type) {
+        "Bilješka" -> Icons.Outlined.Description
+        "Kartica" -> Icons.Outlined.CreditCard
+        "Identitet" -> Icons.Outlined.Badge
+        "Wi-Fi" -> Icons.Outlined.Wifi
+        else -> Icons.Outlined.Lock
+    }
+
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { model.open(Screen.VAULT) }) { Icon(Icons.Outlined.ArrowBack, null, tint = Color.White) }
-            Spacer(Modifier.width(8.dp))
+            IconButton(onClick = { model.open(Screen.VAULT) }) {
+                Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
+            }
+            Box(
+                Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Cyan.copy(alpha=.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(titleIcon, null, tint = Cyan)
+            }
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(current.title, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Prijava • ${current.category}", color = Muted)
+                Text(current.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                Text(current.type + " • " + current.category, color = Muted)
             }
             if (current.favorite) Icon(Icons.Outlined.Star, null, tint = Warn)
         }
+
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 20.dp)
+            contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            if (current.website.isNotBlank()) item { DetailRow(Icons.Outlined.Link, "Web-stranica", current.website) }
-            if (current.username.isNotBlank()) item {
-                DetailRow(Icons.Outlined.Person, "Korisničko ime / e-pošta", current.username) {
-                    copy(context, current.username); model.message = "Korisničko ime kopirano je."
+            if (current.type == "Prijava") {
+                if (current.website.isNotBlank()) item {
+                    DetailRow(Icons.Outlined.Link, "Web-stranica", current.website)
+                }
+                if (current.username.isNotBlank()) item {
+                    DetailRow(Icons.Outlined.Person, "Korisničko ime / e-pošta", current.username) {
+                        copy(context, current.username)
+                        model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                    }
                 }
             }
-            if (current.password.isNotBlank()) item {
+
+            if (current.type == "Wi-Fi") {
+                current.fields["Naziv mreže"]?.takeIf { it.isNotBlank() }?.let { network ->
+                    item { DetailRow(Icons.Outlined.Wifi, "Naziv mreže", network) }
+                }
+                if (current.username.isNotBlank()) item {
+                    DetailRow(Icons.Outlined.Person, "Korisničko ime", current.username) {
+                        copy(context, current.username)
+                        model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                    }
+                }
+                current.fields["Vrsta zaštite"]?.takeIf { it.isNotBlank() }?.let { security ->
+                    item { DetailRow(Icons.Outlined.Security, "Vrsta zaštite", security) }
+                }
+            }
+
+            if ((current.type == "Prijava" || current.type == "Wi-Fi") && current.password.isNotBlank()) item {
                 PasswordDetailRow(
                     password = current.password,
                     reveal = reveal,
@@ -1159,14 +1515,97 @@ private fun DetailScreen(model: KeyraViewModel) {
                     }
                 )
             }
-            if (current.notes.isNotBlank()) item { DetailRow(Icons.Outlined.Description, "Bilješke", current.notes) }
+
+            if (current.type == "Kartica") {
+                current.fields["Vlasnik kartice"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item { DetailRow(Icons.Outlined.Person, "Vlasnik kartice", value) }
+                }
+                current.fields["Broj kartice"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item {
+                        SensitiveDetailRow(
+                            icon = Icons.Outlined.CreditCard,
+                            label = "Broj kartice",
+                            value = value,
+                            reveal = revealCard,
+                            hidden = "•••• •••• •••• " + value.takeLast(4),
+                            onReveal = { revealCard = !revealCard },
+                            onCopy = {
+                                copy(context, value)
+                                model.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                            }
+                        )
+                    }
+                }
+                current.fields["Vrijedi do"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item { DetailRow(Icons.Outlined.DateRange, "Vrijedi do", value) }
+                }
+                current.fields["Sigurnosni kod"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item {
+                        SensitiveDetailRow(
+                            icon = Icons.Outlined.Lock,
+                            label = "Sigurnosni kod",
+                            value = value,
+                            reveal = revealCard,
+                            hidden = "•••",
+                            onReveal = { revealCard = !revealCard },
+                            onCopy = {
+                                copy(context, value)
+                                model.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (current.type == "Identitet") {
+                current.fields["Puno ime"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item { DetailRow(Icons.Outlined.Person, "Puno ime", value) }
+                }
+                current.fields["Broj dokumenta"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item {
+                        SensitiveDetailRow(
+                            icon = Icons.Outlined.Badge,
+                            label = "Broj dokumenta",
+                            value = value,
+                            reveal = revealCard,
+                            hidden = "••••" + value.takeLast(4),
+                            onReveal = { revealCard = !revealCard },
+                            onCopy = {
+                                copy(context, value)
+                                model.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                            }
+                        )
+                    }
+                }
+                current.fields["Datum isteka"]?.takeIf { it.isNotBlank() }?.let { value ->
+                    item { DetailRow(Icons.Outlined.DateRange, "Datum isteka", value) }
+                }
+            }
+
+            if (current.notes.isNotBlank()) item {
+                DetailRow(Icons.Outlined.Description, "Bilješke", current.notes)
+            }
+
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = model::editSelected, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.Edit, null); Spacer(Modifier.width(5.dp)); Text("Uredi stavku")
+                    OutlinedButton(
+                        onClick = model::editSelected,
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f))
+                    ) {
+                        Icon(Icons.Outlined.Edit, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Uredi stavku")
                     }
-                    OutlinedButton(onClick = model::deleteSelected, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Outlined.Delete, null, tint = Danger); Spacer(Modifier.width(5.dp)); Text("Izbriši", color = Danger)
+                    OutlinedButton(
+                        onClick = model::deleteSelected,
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
+                    ) {
+                        Icon(Icons.Outlined.Delete, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Izbriši")
                     }
                 }
             }
@@ -1174,22 +1613,42 @@ private fun DetailScreen(model: KeyraViewModel) {
     }
 }
 
-private fun copy(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("Keyra", text)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        clip.description.extras = PersistableBundle().apply {
-            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+@Composable
+private fun SensitiveDetailRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    reveal: Boolean,
+    hidden: String,
+    onReveal: () -> Unit,
+    onCopy: () -> Unit
+) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF063A3A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = Cyan)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, color = Muted, fontSize = 13.sp)
+                Text(if (reveal) value else hidden, color = Color.White, fontSize = 16.sp)
+            }
+            IconButton(onClick = onReveal) {
+                Icon(if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Ice)
+            }
+            IconButton(onClick = onCopy) {
+                Icon(Icons.Outlined.ContentCopy, null, tint = Cyan)
+            }
         }
     }
-    clipboard.setPrimaryClip(clip)
-    Handler(Looper.getMainLooper()).postDelayed({
-        val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
-        if (current == text) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-        }
-    }, 30_000)
 }
 
 @Composable
@@ -1337,18 +1796,15 @@ private fun SettingRow(
 
 @Composable
 private fun SecurityScreen(model: KeyraViewModel) {
-    val duplicatedGroups = model.items
-        .filter { it.password.isNotBlank() }
+    val passwordItems = model.items.filter { (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank() }
+    val duplicatedGroups = passwordItems
         .groupBy { it.password }
         .filterValues { it.size > 1 }
     val duplicatedIds = duplicatedGroups.values.flatten().map { it.id }.toSet()
-    val weak = model.items.filter { it.password.isNotBlank() && it.password.length < 12 }
-    val strong = model.items.filter {
-        it.password.length >= 12 && it.id !in duplicatedIds
-    }
-    val score = if (model.items.none { it.password.isNotBlank() }) 100 else {
-        val passwordItems = model.items.count { it.password.isNotBlank() }
-        ((strong.size.toFloat() / passwordItems.coerceAtLeast(1)) * 100).toInt()
+    val weak = passwordItems.filter { it.password.length < 12 }
+    val strong = passwordItems.filter { it.password.length >= 12 && it.id !in duplicatedIds }
+    val score = if (passwordItems.isEmpty()) 100 else {
+        ((strong.size.toFloat() / passwordItems.size.coerceAtLeast(1)) * 100).toInt()
     }
 
     Column(Modifier.fillMaxSize()) {
