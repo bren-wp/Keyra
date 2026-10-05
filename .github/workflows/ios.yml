@@ -17,4 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Provjeri iOS aplikaciju
-        run: xcodebuild -project ios/Keyra.xcodeproj -scheme Keyra -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+        run: |
+          set -euo pipefail
+          rm -rf build/ci-ios
+          xcodebuild             -project ios/Keyra.xcodeproj             -scheme Keyra             -sdk iphonesimulator             -configuration Debug             -derivedDataPath build/ci-ios             CODE_SIGNING_ALLOWED=NO             build
+
+          xcodebuild             -project ios/Keyra.xcodeproj             -scheme Keyra             -sdk iphonesimulator             -configuration Debug             -derivedDataPath build/ci-ios-analyze             CODE_SIGNING_ALLOWED=NO             analyze
