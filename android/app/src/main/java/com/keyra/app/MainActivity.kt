@@ -5,6 +5,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ClipDescription
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Build
 import android.os.Handler
@@ -2030,7 +2032,11 @@ private fun DetailScreen(
         ) {
             if (current.type == "Prijava") {
                 if (current.website.isNotBlank()) item {
-                    DetailRow(Icons.Outlined.Link, "Web-stranica", current.website)
+                    DetailRow(Icons.Outlined.Link, "Web-stranica", current.website) {
+                        if (!openWebsite(context, current.website)) {
+                            model.message = "Web-stranicu nije moguće otvoriti. Provjerite adresu."
+                        }
+                    }
                 }
                 if (current.username.isNotBlank()) item {
                     DetailRow(Icons.Outlined.Person, "Korisničko ime / e-pošta", current.username) {
@@ -2527,6 +2533,32 @@ private fun keyraFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = Cyan
 )
 
+
+private fun openWebsite(context: Context, raw: String): Boolean {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return false
+
+    val normalized = if (
+        trimmed.startsWith("https://", ignoreCase = true) ||
+        trimmed.startsWith("http://", ignoreCase = true)
+    ) {
+        trimmed
+    } else {
+        "https://$trimmed"
+    }
+
+    val uri = runCatching { Uri.parse(normalized) }.getOrNull() ?: return false
+    if (uri.scheme !in listOf("https", "http") || uri.host.isNullOrBlank()) return false
+
+    return runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
+}
 
 private fun copy(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
