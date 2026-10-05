@@ -4,6 +4,7 @@ import CommonCrypto
 import LocalAuthentication
 import Security
 import UIKit
+import UniformTypeIdentifiers
 
 private let midnight = Color(hex: 0x06111F)
 private let slate = Color(hex: 0x0B2034)
@@ -24,6 +25,18 @@ extension Color {
             green: Double((hex >> 8) & 0xff) / 255,
             blue: Double(hex & 0xff) / 255,
             opacity: 1
+        )
+    }
+}
+
+enum SecureClipboard {
+    static func copy(_ text: String) {
+        UIPasteboard.general.setItems(
+            [[UTType.plainText.identifier: text]],
+            options: [
+                .localOnly: true,
+                .expirationDate: Date().addingTimeInterval(30)
+            ]
         )
     }
 }
@@ -87,7 +100,7 @@ enum PasswordTools {
         let pool = Array(sets.joined())
         var rng = SystemRandomNumberGenerator()
         var result = sets.compactMap { Array($0).randomElement(using: &rng) }
-        while result.count < max(length, result.count) {
+        while result.count < length {
             if let next = pool.randomElement(using: &rng) { result.append(next) }
         }
         result.shuffle(using: &rng)
@@ -347,8 +360,8 @@ final class KeyraStore: ObservableObject {
             return
         }
         do {
-            UIPasteboard.general.string = try PortableBackup.encrypt(items, password: password)
-            message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik."
+            SecureClipboard.copy(try PortableBackup.encrypt(items, password: password))
+            message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
         } catch {
             message = "Sigurnosnu kopiju nije moguće izraditi."
         }
@@ -1278,14 +1291,19 @@ struct DetailView: View {
                         }
                         if !item.username.isEmpty {
                             DetailRow(icon: "person", title: "Korisničko ime / e-pošta", value: item.username) {
-                                UIPasteboard.general.string = item.username
-                                store.message = "Korisničko ime kopirano je."
+                                SecureClipboard.copy(item.username)
+                                store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
                             }
                         }
                         if !item.password.isEmpty {
-                            DetailRow(icon: "lock", title: "Lozinka", value: reveal ? item.password : "••••••••••••••") {
-                                reveal.toggle()
-                            }
+                            PasswordDetailRow(
+                                password: item.password,
+                                reveal: $reveal,
+                                onCopy: {
+                                    SecureClipboard.copy(item.password)
+                                    store.message = "Lozinka je kopirana i automatski će se ukloniti."
+                                }
+                            )
                         }
                         if !item.notes.isEmpty {
                             DetailRow(icon: "doc.text", title: "Bilješke", value: item.notes)
@@ -1319,6 +1337,46 @@ struct DetailView: View {
                 }
             }
         }
+    }
+}
+
+struct PasswordDetailRow: View {
+    let password: String
+    @Binding var reveal: Bool
+    let onCopy: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(cyan)
+                .frame(width: 48, height: 48)
+                .background(Color(hex: 0x063A3A))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Lozinka").font(.caption).foregroundStyle(muted)
+                Text(reveal ? password : "••••••••••••••")
+                    .foregroundStyle(.white)
+            }
+
+            Spacer()
+
+            Button { reveal.toggle() } label: {
+                Image(systemName: reveal ? "eye.slash" : "eye")
+                    .foregroundStyle(ice)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onCopy) {
+                Image(systemName: "doc.on.doc")
+                    .foregroundStyle(cyan)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(slate)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
