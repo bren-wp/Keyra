@@ -4151,7 +4151,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "externaldrive.badge.plus",
                             title: "Spremi šifriranu kopiju",
-                            subtitle: "Spremite već šifriranu .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
+                            subtitle: "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
                         ) {
                             Button {
                                 prepareBackupExport()
@@ -4167,7 +4167,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "externaldrive.badge.checkmark",
                             title: "Uvezi šifriranu datoteku",
-                            subtitle: "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                            subtitle: "Odaberite .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor nakon potvrde."
                         ) {
                             Button {
                                 importBackupFile = true
@@ -4177,6 +4177,14 @@ struct SettingsView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Uvezi šifriranu datoteku")
                         }
+                    }
+
+                    if matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud") {
+                        SettingRow(
+                            icon: "icloud.and.arrow.up",
+                            title: "Privatni cloud bez Keyra računa",
+                            subtitle: "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka kroz sistemski odabir lokacije; sinkronizaciju zatim obavlja odabrani provider."
+                        )
                     }
 
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
