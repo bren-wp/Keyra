@@ -879,61 +879,96 @@ private fun UnlockScreen(
     var confirm by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
     val creating = !model.isSetup
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(26.dp))
-        KeyraMark(90.dp)
-        Text("Keyra", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
-        Text("SIGURNI UPRAVITELJ LOZINKI", color = Muted, fontSize = 12.sp, letterSpacing = 2.sp)
-        Spacer(Modifier.height(38.dp))
-        GlassCard {
-            Text(if (creating) "Izradite trezor" else "Otključajte trezor", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-            Text(
-                if (creating) "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
-                else "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.",
-                color = Muted, fontSize = 16.sp
-            )
-            Spacer(Modifier.height(18.dp))
-            KeyraPasswordField(password, { password = it }, show, { show = !show }, "Glavna lozinka")
-            if (creating) {
-                Spacer(Modifier.height(12.dp))
-                KeyraPasswordField(confirm, { confirm = it }, show, { show = !show }, "Ponovite glavnu lozinku")
-            }
-            Spacer(Modifier.height(18.dp))
-            Button(
-                onClick = {
-                    if (creating) {
-                        if (password != confirm) model.message = "Lozinke se ne podudaraju."
-                        else model.createVault(password)
-                    } else model.unlock(password)
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-                shape = RoundedCornerShape(28.dp)
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxHeight < 700.dp || maxWidth < 360.dp
+        Box(
+            Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                Modifier
+                    .fillMaxHeight()
+                    .widthIn(max = 620.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = if (compact) 16.dp else 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(Icons.Outlined.Lock, null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (creating) "Izradi trezor" else "Otključaj", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            if (!creating && model.biometricEnabled) {
-                Spacer(Modifier.height(18.dp))
-                HorizontalDivider(color = Muted.copy(alpha=.25f))
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        requestBiometric("Potvrdite identitet za pristup trezoru.") {
-                            model.unlockFromBiometric()
+                Spacer(Modifier.height(if (compact) 10.dp else 22.dp))
+                KeyraMark(if (compact) 66.dp else 84.dp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Keyra",
+                    color = Color.White,
+                    fontSize = if (compact) 36.sp else 44.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
+                )
+                Text(
+                    "SIGURNI UPRAVITELJ LOZINKI",
+                    color = Muted,
+                    fontSize = if (compact) 9.sp else 11.sp,
+                    letterSpacing = if (compact) 1.4.sp else 2.sp,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(if (compact) 18.dp else 30.dp))
+
+                GlassCard {
+                    Text(
+                        if (creating) "Izradite trezor" else "Otključajte trezor",
+                        color = Color.White,
+                        fontSize = if (compact) 26.sp else 31.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        if (creating) "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
+                        else "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.",
+                        color = Muted,
+                        fontSize = if (compact) 14.sp else 16.sp
+                    )
+                    Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
+                    KeyraPasswordField(password, { password = it }, show, { show = !show }, "Glavna lozinka")
+                    if (creating) {
+                        Spacer(Modifier.height(10.dp))
+                        KeyraPasswordField(confirm, { confirm = it }, show, { show = !show }, "Ponovite glavnu lozinku")
+                    }
+                    Spacer(Modifier.height(if (compact) 12.dp else 16.dp))
+                    Button(
+                        onClick = {
+                            if (creating) {
+                                if (password != confirm) model.message = "Lozinke se ne podudaraju."
+                                else model.createVault(password)
+                            } else model.unlock(password)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                        shape = RoundedCornerShape(28.dp)
+                    ) {
+                        Icon(Icons.Outlined.Lock, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (creating) "Izradi trezor" else "Otključaj", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (!creating && model.biometricEnabled) {
+                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider(color = Muted.copy(alpha=.25f))
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                requestBiometric("Potvrdite identitet za pristup trezoru.") {
+                                    model.unlockFromBiometric()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.6f))
+                        ) {
+                            Icon(Icons.Outlined.Fingerprint, null, tint = Cyan)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Biometrijsko otključavanje", color = Color.White, maxLines = 1)
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.6f))
-                ) {
-                    Icon(Icons.Outlined.Fingerprint, null, tint = Cyan)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Biometrijsko otključavanje", color = Color.White)
+                    }
                 }
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -1651,8 +1686,11 @@ private fun AddScreen(model: KeyraViewModel) {
         mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxWidth < 360.dp
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
+        Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) }) {
                 Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
             }
@@ -1667,7 +1705,12 @@ private fun AddScreen(model: KeyraViewModel) {
             contentPadding = PaddingValues(bottom = 26.dp)
         ) {
             item {
-                Text(if (original == null) "Dodaj stavku" else "Uredi stavku", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    if (original == null) "Dodaj stavku" else "Uredi stavku",
+                    color = Color.White,
+                    fontSize = if (compact) 32.sp else 38.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
                 Text("Sigurno spremite osjetljive podatke", color = Muted)
             }
 
@@ -1815,6 +1858,8 @@ private fun AddScreen(model: KeyraViewModel) {
                 }
             }
         }
+        }
+        }
     }
 }
 
@@ -1859,8 +1904,11 @@ private fun DetailScreen(
         else -> Icons.Outlined.Lock
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxWidth < 360.dp
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
+        Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(Screen.VAULT) }) {
                 Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
             }
@@ -1872,7 +1920,7 @@ private fun DetailScreen(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(current.title, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                Text(current.title, color = Color.White, fontSize = if (compact) 23.sp else 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
                 Text(current.type + " • " + current.category, color = Muted)
             }
             if (current.favorite) Icon(Icons.Outlined.Star, null, tint = Warn)
@@ -2039,6 +2087,8 @@ private fun DetailScreen(
                     }
                 }
             }
+        }
+        }
         }
     }
 }
@@ -2300,10 +2350,23 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 }
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.weight(1f))
-                    SummaryCard(weak.size.toString(), "Slabe", Warn, Modifier.weight(1f))
-                    SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.weight(1f))
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth < 350.dp) {
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.width(110.dp))
+                            SummaryCard(weak.size.toString(), "Slabe", Warn, Modifier.width(110.dp))
+                            SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.width(122.dp))
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.weight(1f))
+                            SummaryCard(weak.size.toString(), "Slabe", Warn, Modifier.weight(1f))
+                            SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.weight(1f))
+                        }
+                    }
                 }
             }
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
