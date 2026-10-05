@@ -2,6 +2,8 @@
 
 Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. Konzole trgovina i njihova pravila mogu se mijenjati, pa prije svakog izdanja treba ponovno provjeriti aktualne obrasce i zahtjeve.
 
+**Posljednja provjera javnih store pravila: 6. listopada 2026.**
+
 ## Zajednički release gate
 
 - [ ] Android i iOS CI su zeleni na točnom release commitu.
