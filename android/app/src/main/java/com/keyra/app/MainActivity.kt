@@ -381,6 +381,30 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.UNLOCK
     }
 
+    fun eraseAllLocalData(): Boolean {
+        val vaultDestroyed = store.destroy()
+        val preferencesCleared = prefs.edit().clear().commit()
+        if (!vaultDestroyed || !preferencesCleared) {
+            message = "Sve lokalne podatke nije moguće sigurno izbrisati. Pokušajte ponovno."
+            return false
+        }
+
+        items.clear()
+        selected = null
+        sessionPassword = null
+        vaultCategoryFilter = null
+        vaultTypeFilter = null
+        isSetup = false
+        unlocked = false
+        importingNewVault = false
+        biometricEnabled = false
+        sensitiveReauthEnabled = false
+        autoLockSeconds = 0
+        screen = Screen.ONBOARDING
+        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        return true
+    }
+
     fun saveItem(item: VaultItem) {
         val saved = item.copy(updatedAt = System.currentTimeMillis())
         val next = items.toMutableList()
@@ -709,6 +733,14 @@ private class CryptoStore {
         )
         return cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)).toString(Charsets.UTF_8)
     }
+
+    fun clearKey(): Boolean = runCatching {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (keyStore.containsAlias(alias)) {
+            keyStore.deleteEntry(alias)
+        }
+        true
+    }.getOrDefault(false)
 }
 
 internal fun normalizePortableUpdatedAt(
@@ -737,6 +769,12 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     }
 
     fun clear(): Boolean = prefs.edit().remove("vault_blob").commit()
+
+    fun destroy(): Boolean {
+        val blobCleared = clear()
+        val keyCleared = crypto.clearKey()
+        return blobCleared && keyCleared
+    }
 
     fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
