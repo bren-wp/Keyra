@@ -351,6 +351,50 @@ enum PortableBackup {
     private static let legacyIOSIterations = 120_000
     private static let legacyAndroidIterations = 180_000
 
+    private struct PortableVaultItem: Codable {
+        let id: String
+        let title: String
+        let username: String
+        let password: String
+        let website: String
+        let notes: String
+        let category: String
+        let favorite: Bool
+        let type: String
+        let fields: [String: String]
+        let updatedAt: Int64
+
+        init(_ item: VaultItem) {
+            id = item.id.uuidString
+            title = item.title
+            username = item.username
+            password = item.password
+            website = item.website
+            notes = item.notes
+            category = item.category
+            favorite = item.favorite
+            type = item.kind
+            fields = item.extraFields
+            updatedAt = Int64((item.updatedAt.timeIntervalSince1970 * 1000.0).rounded())
+        }
+
+        func vaultItem() -> VaultItem {
+            VaultItem(
+                id: UUID(uuidString: id) ?? UUID(),
+                title: title,
+                username: username,
+                password: password,
+                website: website,
+                notes: notes,
+                category: category,
+                favorite: favorite,
+                type: type,
+                fields: fields,
+                updatedAt: Date(timeIntervalSince1970: Double(updatedAt) / 1000.0)
+            )
+        }
+    }
+
     static func encrypt(_ items: [VaultItem], password: String) throws -> String {
         var salt = [UInt8](repeating: 0, count: saltBytes)
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
@@ -358,7 +402,8 @@ enum PortableBackup {
         }
         let saltData = Data(salt)
         let key = SymmetricKey(data: try PasswordTools.derive(password, salt: saltData))
-        let clear = try JSONEncoder().encode(items)
+        let portableItems = items.map(PortableVaultItem.init)
+        let clear = try JSONEncoder().encode(portableItems)
         let sealed = try AES.GCM.seal(clear, using: key)
         guard let combined = sealed.combined else { throw KeyraError.invalidBackup }
 
@@ -497,7 +542,15 @@ enum PortableBackup {
                 )
                 let box = try AES.GCM.SealedBox(combined: combined)
                 let clear = try AES.GCM.open(box, using: key)
-                let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+
+                let decoded: [VaultItem]
+                if let portable = try? JSONDecoder().decode([PortableVaultItem].self, from: clear) {
+                    decoded = portable.map { $0.vaultItem() }
+                } else {
+                    // Backward compatibility with legacy iOS backups that encoded VaultItem directly.
+                    decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+                }
+
                 guard decoded.count <= maxVaultItems else {
                     throw KeyraError.invalidBackup
                 }
