@@ -3882,6 +3882,27 @@ private fun SettingsScreen(
     val context = LocalContext.current
     var search by remember { mutableStateOf("") }
     var confirmImport by remember { mutableStateOf(false) }
+    var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
+
+    val exportFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
+                    model.exportBackupToUri(context, uri)
+                }
+            } else {
+                model.exportBackupToUri(context, uri)
+            }
+        }
+    }
+
+    val importFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) pendingFileImport = uri
+    }
 
     fun runProtectedImport() {
         if (model.sensitiveReauthEnabled && model.biometricEnabled) {
@@ -3902,11 +3923,61 @@ private fun SettingsScreen(
         "Automatsko zaključavanje",
         "Provjera sigurnosti"
     )
-    val dataVisible = matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+    val dataVisible = matches(
+        "Kopiraj sigurnosnu kopiju",
+        "Uvezi sigurnosnu kopiju",
+        "Spremi šifriranu kopiju",
+        "Privatni cloud",
+        "Proton Drive",
+        "Files",
+        "sigurnosna kopija"
+    )
     val preferenceVisible = matches("Tamni način", "tamni izgled")
     val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
 
     Column(Modifier.fillMaxSize()) {
+        pendingFileImport?.let { uri ->
+            AlertDialog(
+                onDismissRequest = { pendingFileImport = null },
+                icon = {
+                    Icon(
+                        Icons.Outlined.CloudDownload,
+                        contentDescription = null,
+                        tint = Warn
+                    )
+                },
+                title = { Text("Uvesti šifriranu datoteku?") },
+                text = {
+                    Text(
+                        "Odabrana .keyra sigurnosna kopija zamijenit će trenutačni sadržaj trezora. " +
+                            "Datoteka se prvo provjerava i dešifrira prije spremanja."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingFileImport = null
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
+                                    model.importBackupFromUri(context, uri)
+                                }
+                            } else {
+                                model.importBackupFromUri(context, uri)
+                            }
+                        }
+                    ) {
+                        Text("Uvezi i zamijeni", color = Warn)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingFileImport = null }) {
+                        Text("Odustani")
+                    }
+                },
+                containerColor = Slate
+            )
+        }
+
         if (confirmImport) {
             AlertDialog(
                 onDismissRequest = { confirmImport = false },
@@ -4008,6 +4079,43 @@ private fun SettingsScreen(
             }
 
             if (dataVisible) item { SectionTitle("UPRAVLJANJE PODACIMA") }
+            if (matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz")) item {
+                SettingRow(
+                    Icons.Outlined.CloudUpload,
+                    "Spremi šifriranu kopiju",
+                    "Spremite .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
+                ) {
+                    IconButton(onClick = {
+                        exportFileLauncher.launch("Keyra-backup.keyra")
+                    }) {
+                        Icon(
+                            Icons.Outlined.SaveAlt,
+                            contentDescription = "Spremi šifriranu kopiju",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+            if (matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz")) item {
+                SettingRow(
+                    Icons.Outlined.CloudDownload,
+                    "Uvezi šifriranu datoteku",
+                    "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                ) {
+                    IconButton(onClick = {
+                        importFileLauncher.launch(
+                            arrayOf("application/octet-stream", "text/plain", "application/*")
+                        )
+                    }) {
+                        Icon(
+                            Icons.Outlined.FolderOpen,
+                            contentDescription = "Uvezi šifriranu datoteku",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
