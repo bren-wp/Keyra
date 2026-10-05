@@ -20,3 +20,8 @@ Keyra ne umeće probne vjerodajnice u novi trezor.
 U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za mrežni pristup na Androidu, ne koristi oglašavanje, analitiku, identifikatore za praćenje, lokaciju, kontakte, mikrofon ni fotografije. Sadržaj trezora, glavna lozinka i TOTP tajne ne šalju se razvojnom programeru.
 
 Ako se u budućnosti uvede opcionalna mrežna sinkronizacija koju pruža Keyra, ova pravila privatnosti i deklaracije u Google Playu/App Storeu moraju se ažurirati prije objave te funkcije.
+
+
+## Brisanje lokalnih podataka
+
+U postavkama postoji radnja **Izbriši sve lokalne podatke**. Ona uklanja lokalni trezor, podatke za provjeru glavne lozinke, lokalne sigurnosne postavke i uređajni ključ šifriranja te vraća aplikaciju na početni onboarding. Vanjske `.keyra` kopije koje je korisnik prethodno spremio u Files ili cloud provider nisu pod kontrolom Keyre i ne brišu se tom radnjom.
