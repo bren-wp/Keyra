@@ -93,7 +93,7 @@ Keyra ne traži korisničko ime ni lozinku za Proton Drive, iCloud Drive, Nextcl
 
 Na iOS-u se koristi standardni Files dokumentni tok. Na Androidu se koristi Storage Access Framework, bez široke dozvole za pristup pohrani. Dostupnost pojedinog providera ovisi o tome je li njegov servis registriran u sistemskom Files/Document sučelju na uređaju.
 
-Izravna automatska Proton Drive sinkronizacija nije ugrađena dok Protonov SDK za komercijalne/produkcijske third-party aplikacije ne bude službeno spreman. To izbjegava neslužbeno rukovanje Proton vjerodajnicama i nestabilne privatne API-je.
+Izravna automatska Proton Drive sinkronizacija trenutačno nije ugrađena. Protonovi službeni materijali opisuju njihov Drive SDK kao zajedničku osnovu vlastitih Drive aplikacija i navode buduće lakše integracije za vanjske alate, ali ne dokumentiraju stabilan third-party produkcijski login/storage API koji bi Keyra trebala ugraditi. Zato Keyra koristi službene sistemske file-provider tokove umjesto privatnih ili nedokumentiranih Proton API-ja.
 
 ## Postavke i sigurnost
 
