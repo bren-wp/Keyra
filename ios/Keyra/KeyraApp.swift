@@ -880,7 +880,7 @@ struct SecretField: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
 
-            Button(action: onReveal) {
+            Button { reveal.toggle() } label: {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
             }
