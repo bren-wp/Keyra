@@ -465,6 +465,17 @@ enum KeychainVault {
         }
         throw KeyraError.keyUnavailable
     }
+
+    static func clear() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
 }
 
 final class AuthStore {
@@ -491,6 +502,12 @@ final class AuthStore {
         } catch {
             return false
         }
+    }
+
+    func clear() {
+        defaults.removeObject(forKey: "master_hash")
+        defaults.removeObject(forKey: "master_salt")
+        defaults.removeObject(forKey: "master_iterations")
     }
 
     func verify(password: String) -> Bool {
@@ -1072,6 +1089,41 @@ final class KeyraStore: ObservableObject {
         vaultCategoryFilter = nil
         vaultTypeFilter = nil
         screen = .unlock
+    }
+
+    @discardableResult
+    func eraseAllLocalData() -> Bool {
+        vault.clear()
+        auth.clear()
+        let keyCleared = KeychainVault.clear()
+
+        let keys = [
+            "biometric_enabled",
+            "sensitive_reauth_enabled",
+            "auto_lock_seconds",
+            "unlock_failed_attempts",
+            "unlock_lockout_until"
+        ]
+        keys.forEach { defaults.removeObject(forKey: $0) }
+
+        guard keyCleared else {
+            message = "Uređajni ključ nije moguće sigurno izbrisati. Pokušajte ponovno."
+            return false
+        }
+
+        items = []
+        selected = nil
+        sessionPassword = nil
+        vaultCategoryFilter = nil
+        vaultTypeFilter = nil
+        isSetup = false
+        importingNewVault = false
+        biometricEnabled = false
+        sensitiveReauthEnabled = false
+        autoLockSeconds = 0
+        screen = .onboarding
+        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        return true
     }
 
     func save(_ item: VaultItem) {
