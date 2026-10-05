@@ -29,7 +29,7 @@ extension Color {
 }
 
 enum KeyraScreen: Equatable {
-    case onboarding, unlock, vault, collections, generator, add, detail, settings
+    case onboarding, unlock, vault, collections, generator, add, detail, settings, security
 }
 
 struct VaultItem: Identifiable, Codable, Equatable {
@@ -423,9 +423,10 @@ struct RootView: View {
                 case .add: AddEditView(store: store)
                 case .detail: DetailView()
                 case .settings: SettingsView()
+                case .security: SecurityCenterView()
                 }
 
-                if [.vault, .collections, .generator, .settings].contains(store.screen) {
+                if [.vault, .collections, .generator, .settings, .security].contains(store.screen) {
                     BottomBar()
                 }
             }
@@ -1368,7 +1369,18 @@ struct SettingsView: View {
                             .labelsHidden()
                             .tint(cyan)
                     }
-                    SettingRow(icon: "shield.checkered", title: "Provjera sigurnosti", subtitle: "Pronađite slabe i ponovljene lozinke.")
+                    Button {
+                        store.open(.security)
+                    } label: {
+                        SettingRow(
+                            icon: "shield.checkered",
+                            title: "Provjera sigurnosti",
+                            subtitle: "Pronađite slabe i ponovljene lozinke."
+                        ) {
+                            Image(systemName: "chevron.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
 
                     SectionLabel("UPRAVLJANJE PODACIMA")
                     SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
@@ -1398,6 +1410,117 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
                     .overlay(Capsule().stroke(ice.opacity(0.4), lineWidth: 1))
+                }
+                .padding(18)
+                .padding(.bottom, 100)
+            }
+        }
+    }
+}
+
+struct SecurityCenterView: View {
+    @EnvironmentObject var store: KeyraStore
+
+    private var duplicateIDs: Set<UUID> {
+        let groups = Dictionary(grouping: store.items.filter { !$0.password.isEmpty }, by: { $0.password })
+        return Set(groups.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
+    }
+
+    private var weakItems: [VaultItem] {
+        store.items.filter { !$0.password.isEmpty && $0.password.count < 12 }
+    }
+
+    private var strongItems: [VaultItem] {
+        store.items.filter { $0.password.count >= 12 && !duplicateIDs.contains($0.id) }
+    }
+
+    private var score: Int {
+        let passwordItems = store.items.filter { !$0.password.isEmpty }
+        guard !passwordItems.isEmpty else { return 100 }
+        return Int((Double(strongItems.count) / Double(passwordItems.count)) * 100)
+    }
+
+    private var issues: [VaultItem] {
+        Array(Dictionary(uniqueKeysWithValues:
+            (weakItems + store.items.filter { duplicateIDs.contains($0.id) }).map { ($0.id, $0) }
+        ).values)
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            BrandHeader(subtitle: "SIGURNOST")
+            ScrollView {
+                VStack(spacing: 12) {
+                    GlassCard {
+                        Text("Ocjena sigurnosti")
+                            .foregroundStyle(muted)
+                        HStack(alignment: .lastTextBaseline, spacing: 2) {
+                            Text("\(score)")
+                                .font(.system(size: 54, weight: .black))
+                                .foregroundStyle(score >= 80 ? good : warn)
+                            Text("/100")
+                                .font(.headline)
+                                .foregroundStyle(muted)
+                        }
+                        ProgressView(value: Double(score), total: 100)
+                            .tint(score >= 80 ? good : warn)
+                        Text(score >= 80 ? "Vaš trezor izgleda dobro zaštićen." : "Pregledajte stavke koje zahtijevaju pažnju.")
+                            .foregroundStyle(muted)
+                    }
+
+                    HStack(spacing: 10) {
+                        Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
+                        Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                        Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel("STAVKE KOJE ZAHTIJEVAJU PAŽNJU")
+                        ForEach(issues) { item in
+                            Button {
+                                store.select(item)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: duplicateIDs.contains(item.id) ? "doc.on.doc" : "exclamationmark.triangle")
+                                        .foregroundStyle(duplicateIDs.contains(item.id) ? danger : warn)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.title).fontWeight(.bold).foregroundStyle(.white)
+                                        Text(
+                                            duplicateIDs.contains(item.id)
+                                            ? "Lozinka se koristi na više mjesta."
+                                            : "Lozinka je prekratka i preporučuje se zamjena."
+                                        )
+                                        .font(.subheadline)
+                                        .foregroundStyle(muted)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").foregroundStyle(ice)
+                                }
+                                .padding(14)
+                                .background(slate)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke((duplicateIDs.contains(item.id) ? danger : warn).opacity(0.55), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if issues.isEmpty {
+                            HStack(spacing: 12) {
+                                Image(systemName: "checkmark.shield.fill").foregroundStyle(good)
+                                Text("Nisu pronađene slabe ili ponovljene lozinke.")
+                                    .foregroundStyle(.white)
+                                Spacer()
+                            }
+                            .padding(18)
+                            .background(good.opacity(0.10))
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(good.opacity(0.55), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                        }
+                    }
                 }
                 .padding(18)
                 .padding(.bottom, 100)
