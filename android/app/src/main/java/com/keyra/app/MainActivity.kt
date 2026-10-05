@@ -75,6 +75,8 @@ private val Muted = Color(0xFFAABBD5)
 private val Good = Color(0xFF22E3B0)
 private val Warn = Color(0xFFFFC247)
 private val Danger = Color(0xFFFF5B6E)
+private const val MAX_BACKUP_CHARS = 2_500_000
+private const val MAX_VAULT_ITEMS = 10_000
 
 enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
@@ -331,6 +333,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Međuspremnik ne sadrži sigurnosnu kopiju."
             return
         }
+        if (text.length > MAX_BACKUP_CHARS) {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
+            return
+        }
         runCatching {
             val json = PortableBackup.decrypt(text, password)
             val imported = store.fromJson(json)
@@ -532,6 +538,7 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
 
     fun fromJson(json: String): List<VaultItem> {
         val array = JSONArray(json)
+        require(array.length() <= MAX_VAULT_ITEMS) { "Previše stavki u trezoru." }
         return buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
