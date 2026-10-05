@@ -130,7 +130,7 @@ Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogu�
 - osjetljive vrijednosti ne zapisuju se u aplikacijske logove
 - novi trezor ne sadrži unaprijed umetnute račune ni lozinke
 
-Više pojedinosti nalazi se u [SECURITY.md](SECURITY.md) i [PRIVACY.md](PRIVACY.md).
+Više pojedinosti nalazi se u [SECURITY.md](SECURITY.md), [PRIVACY.md](PRIVACY.md) i [STORE_SUBMISSION.md](STORE_SUBMISSION.md).
 
 ## Vizualni identitet
 
