@@ -1967,6 +1967,7 @@ struct VaultView: View {
                                     case "Kartica": return "creditcard"
                                     case "Identitet": return "person.text.rectangle"
                                     case "Wi-Fi": return "wifi"
+                                    case "Autentifikator": return "shield.lefthalf.filled"
                                     case "Favoriti": return "star"
                                     default: return "square.grid.2x2"
                                     }
@@ -1976,6 +1977,7 @@ struct VaultView: View {
                                     case "Prijava": return "Prijave"
                                     case "Bilješka": return "Bilješke"
                                     case "Kartica": return "Kartice"
+                                    case "Autentifikator": return "2FA"
                                     default: return value
                                     }
                                 }())
@@ -2085,7 +2087,7 @@ struct VaultView: View {
                                 .foregroundStyle(.white)
                             Text(
                                 store.items.isEmpty
-                                ? "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                                ? "Dodajte prvu prijavu, bilješku, karticu, identitet, Wi‑Fi ili 2FA autentifikator."
                                 : "Promijenite pretragu ili odaberite drugi filtar."
                             )
                             .foregroundStyle(muted)
@@ -2150,6 +2152,7 @@ struct VaultRow: View {
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
         case "Identitet": return ("Zaštićen", good)
+        case "Autentifikator": return ("2FA aktivan", good)
         default: return ("Snažna", good)
         }
     }
@@ -2160,6 +2163,7 @@ struct VaultRow: View {
         case "Kartica": return "creditcard.fill"
         case "Identitet": return "person.text.rectangle.fill"
         case "Wi-Fi": return "wifi"
+        case "Autentifikator": return "shield.lefthalf.filled"
         default: return "lock.fill"
         }
     }
@@ -2170,6 +2174,7 @@ struct VaultRow: View {
         case "Kartica": return warn
         case "Identitet": return Color(hex: 0xB48CFF)
         case "Wi-Fi": return Color(hex: 0x22BDF7)
+        case "Autentifikator": return good
         default: return cyan
         }
     }
@@ -2186,6 +2191,10 @@ struct VaultRow: View {
         case "Wi-Fi":
             if let network = item.extraFields["Naziv mreže"], !network.isEmpty { return network }
             return item.username.isEmpty ? item.category : item.username
+        case "Autentifikator":
+            if let account = item.extraFields["Račun"], !account.isEmpty { return account }
+            if let issuer = item.extraFields["Izdavatelj"], !issuer.isEmpty { return issuer }
+            return item.category
         case "Bilješka":
             return item.category
         default:
@@ -2325,12 +2334,13 @@ struct CollectionsView: View {
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
                 Menu {
-                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti"], id: \.self) { value in
+                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti"], id: \.self) { value in
                         Button({
                             switch value {
                             case "Prijava": return "Lozinke"
                             case "Bilješka": return "Bilješke"
                             case "Kartica": return "Kartice"
+                            case "Autentifikator": return "2FA"
                             default: return value
                             }
                         }()) {
@@ -2354,7 +2364,7 @@ struct CollectionsView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             selectedType = value
                         } label: {
