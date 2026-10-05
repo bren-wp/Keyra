@@ -1,4 +1,4 @@
-name: Izdanje 0.1.0
+name: Izdanje 0.2.0
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: "0.1.0"
+  VERSION: "0.2.0"
 
 jobs:
   android:
@@ -113,26 +113,37 @@ jobs:
       - name: Pripremi bilješke izdanja
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          # Keyra 0.1.0
+          # Keyra 0.2.0
 
-          Prvo izdanje Keyre donosi šifrirani trezor za vjerodajnice, generator snažnih lozinki, kolekcije, sigurnosni pregled, biometrijsko otključavanje i šifrirane sigurnosne kopije.
+          Keyra 0.2.0 proširuje trezor i dodatno pojačava svakodnevnu sigurnost i preglednost.
+
+          ## Novo
+          - zasebne vrste stavki: prijave, sigurne bilješke, kartice, identiteti i Wi‑Fi
+          - prilagođena polja i prikazi za svaku vrstu stavke
+          - filteri trezora prema vrsti sadržaja i proširena pretraga
+          - sigurnije prikazivanje brojeva kartica, sigurnosnih kodova i brojeva dokumenata
+          - sigurno kopiranje iz generatora lozinki
+          - podesivo automatsko zaključavanje: odmah, 30 sekundi, 1 minuta ili 5 minuta
+          - privremeno zaključavanje unosa nakon više uzastopnih pogrešnih pokušaja
+          - glavna lozinka za nove trezore mora imati najmanje 12 znakova
+          - poboljšan prikaz na manjim ekranima
+          - osvježene Kolekcije, detalji stavki i marketinški prikaz projekta
 
           ## Sigurnost
           - AES-256-GCM zaštita sadržaja trezora
           - ključevi zaštićeni sigurnosnim spremnikom uređaja
           - PBKDF2-HMAC-SHA-256 s 600.000 iteracija za glavnu lozinku i prijenosne sigurnosne kopije
           - biometrijsko otključavanje i provjera identiteta uređaja
-          - automatsko zaključavanje pri napuštanju aplikacije
-          - zaštita prikaza osjetljivog sadržaja
           - osjetljivi sadržaj međuspremnika automatski istječe
           - provjera slabih i ponovno korištenih lozinki
+          - zaštita prikaza osjetljivog sadržaja
 
           ## Paketi
-          - `Keyra-0.1.0-Android.apk` — instalacijski Android paket za testiranje
-          - `Keyra-0.1.0-Android.aab` — Android App Bundle
-          - `Keyra-0.1.0-Android-unsigned.apk` — nepotpisani Android release paket
-          - `Keyra-0.1.0-iOS-unsigned.ipa` — iOS paket bez distribucijskog potpisa
-          - `Keyra-0.1.0-iOS-Simulator.zip` — iOS Simulator paket
+          - `Keyra-0.2.0-Android.apk` — instalacijski Android paket za testiranje
+          - `Keyra-0.2.0-Android.aab` — Android App Bundle
+          - `Keyra-0.2.0-Android-unsigned.apk` — nepotpisani Android release paket
+          - `Keyra-0.2.0-iOS-unsigned.ipa` — iOS paket bez distribucijskog potpisa
+          - `Keyra-0.2.0-iOS-Simulator.zip` — iOS Simulator paket
 
           iOS paket bez distribucijskog potpisa potrebno je potpisati odgovarajućim Apple certifikatom i profilom prije instalacije na fizički uređaj ili objave.
           EOF
