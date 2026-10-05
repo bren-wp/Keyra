@@ -1,5 +1,9 @@
 name: iOS
 
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -41,6 +45,7 @@ jobs:
             analyze
 
       - name: Provjeri pokretanje iOS aplikacije
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           APP_PATH="build/ci-ios/Build/Products/Debug-iphonesimulator/Keyra.app"
@@ -58,8 +63,35 @@ jobs:
           raise SystemExit(1)
           ')
 
+          export UDID
           xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
-          xcrun simctl bootstatus "$UDID" -b
+
+          READY=0
+          for _ in $(seq 1 60); do
+            STATE=$(xcrun simctl list devices -j | python3 -c '
+          import json, sys, os
+          target = os.environ["UDID"]
+          data = json.load(sys.stdin).get("devices", {})
+          for runtime_devices in data.values():
+              for device in runtime_devices:
+                  if device.get("udid") == target:
+                      print(device.get("state", ""))
+                      raise SystemExit(0)
+          print("")
+          ')
+            if [ "$STATE" = "Booted" ]; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$READY" != "1" ]; then
+            echo "iOS simulator nije dosegnuo stanje Booted unutar 60 sekundi."
+            xcrun simctl shutdown "$UDID" || true
+            exit 1
+          fi
+
           xcrun simctl install "$UDID" "$APP_PATH"
           xcrun simctl launch "$UDID" "$BUNDLE_ID"
           sleep 3
