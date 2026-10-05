@@ -2276,6 +2276,29 @@ private fun AddScreen(model: KeyraViewModel) {
         mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
     }
 
+    val itemLabel = when (type) {
+        "Bilješka" -> "bilješku"
+        "Kartica" -> "karticu"
+        "Identitet" -> "identitet"
+        "Wi-Fi" -> "Wi-Fi"
+        else -> "prijavu"
+    }
+    val screenTitle = if (original == null) "Dodaj $itemLabel" else "Uredi $itemLabel"
+    val screenSubtitle = when (type) {
+        "Bilješka" -> "Sigurno spremite privatne bilješke i osjetljive informacije"
+        "Kartica" -> "Zaštitite podatke kartice i držite ih na jednom mjestu"
+        "Identitet" -> "Sigurno spremite podatke identiteta i dokumenata"
+        "Wi-Fi" -> "Spremite naziv mreže, zaštitu i pristupne podatke"
+        else -> "Sigurno spremite svoje vjerodajnice"
+    }
+    val saveLabel = when (type) {
+        "Bilješka" -> "Spremi bilješku"
+        "Kartica" -> "Spremi karticu"
+        "Identitet" -> "Spremi identitet"
+        "Wi-Fi" -> "Spremi Wi-Fi"
+        else -> "Spremi prijavu"
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxWidth < 360.dp
 
@@ -2300,12 +2323,12 @@ private fun AddScreen(model: KeyraViewModel) {
         ) {
             item {
                 Text(
-                    if (original == null) "Dodaj stavku" else "Uredi stavku",
+                    screenTitle,
                     color = Color.White,
                     fontSize = if (compact) 32.sp else 38.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-                Text("Sigurno spremite osjetljive podatke", color = Muted)
+                Text(screenSubtitle, color = Muted)
             }
 
             item {
@@ -2381,7 +2404,12 @@ private fun AddScreen(model: KeyraViewModel) {
                 item { KeyraTextField(field3, { field3 = it }, "Datum isteka", Icons.Outlined.DateRange) }
             }
 
-            item { KeyraTextField(notes, { notes = it.take(1000) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false) }
+            item {
+                KeyraTextField(notes, { notes = it.take(500) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Text(notes.length.toString() + "/500", color = Muted, fontSize = 11.sp)
+                }
+            }
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2415,6 +2443,8 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
                                 "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            type == "Kartica" && field3.isNotBlank() && !Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matches(field3.trim()) ->
+                                "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
                             type == "Identitet" && field1.isBlank() && field2.isBlank() ->
                                 "Unesite puno ime ili broj dokumenta."
                             else -> null
@@ -2463,7 +2493,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Lock, null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (type == "Prijava") "Spremi prijavu" else "Spremi stavku", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(saveLabel, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
             }
         }
