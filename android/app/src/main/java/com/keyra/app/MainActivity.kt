@@ -879,8 +879,32 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     }
 }
 
+private fun securityIssueIds(items: List<VaultItem>): Set<String> {
+    val passwordItems = items.filter {
+        (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank()
+    }
+    val duplicatedIds = passwordItems
+        .groupBy { it.password }
+        .filterValues { it.size > 1 }
+        .values
+        .flatten()
+        .map { it.id }
+        .toSet()
+    val weakIds = passwordItems
+        .filter { !isStrongPassword(it.password) }
+        .map { it.id }
+        .toSet()
+    return duplicatedIds + weakIds
+}
+
+private fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
+
 @Composable
-private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
+private fun BrandHeader(
+    subtitle: String,
+    notificationCount: Int = 0,
+    onNotifications: () -> Unit = {}
+) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val compact = maxWidth < 370.dp
         Row(
@@ -910,11 +934,37 @@ private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
                     maxLines = 1
                 )
             }
-            IconButton(
-                onClick = onNotifications,
-                modifier = Modifier.size(if (compact) 38.dp else 44.dp)
-            ) {
-                Icon(Icons.Outlined.Notifications, contentDescription = "Obavijesti", tint = Color.White)
+            Box {
+                IconButton(
+                    onClick = onNotifications,
+                    modifier = Modifier.size(if (compact) 38.dp else 44.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Notifications,
+                        contentDescription = if (notificationCount > 0)
+                            "Sigurnosna upozorenja: $notificationCount"
+                        else
+                            "Nema sigurnosnih upozorenja",
+                        tint = Color.White
+                    )
+                }
+                if (notificationCount > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 2.dp, y = (-2).dp),
+                        shape = CircleShape,
+                        color = Danger
+                    ) {
+                        Text(
+                            if (notificationCount > 9) "9+" else notificationCount.toString(),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
             }
             Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
             Box(
@@ -1479,7 +1529,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
+        BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
 
         OutlinedTextField(
             search, { search = it },
@@ -1859,7 +1909,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
+            BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
             Text(
                 "Kolekcije",
                 Modifier.padding(horizontal = side),
@@ -2099,7 +2149,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki") { model.open(Screen.SECURITY) }
+        BrandHeader("Generator lozinki", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -3046,7 +3096,7 @@ private fun SettingsScreen(
     val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("POSTAVKE I SIGURNOST") { model.open(Screen.SECURITY) }
+        BrandHeader("POSTAVKE I SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
@@ -3253,19 +3303,25 @@ private fun SettingRow(
 
 @Composable
 private fun SecurityScreen(model: KeyraViewModel) {
-    val passwordItems = model.items.filter { (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank() }
-    val duplicatedGroups = passwordItems
+    val passwordItems = model.items.filter {
+        (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank()
+    }
+    val duplicatedIds = passwordItems
         .groupBy { it.password }
         .filterValues { it.size > 1 }
-    val duplicatedIds = duplicatedGroups.values.flatten().map { it.id }.toSet()
+        .values
+        .flatten()
+        .map { it.id }
+        .toSet()
     val weak = passwordItems.filter { !isStrongPassword(it.password) }
     val strong = passwordItems.filter { isStrongPassword(it.password) && it.id !in duplicatedIds }
-    val score = if (passwordItems.isEmpty()) 100 else {
-        ((strong.size.toFloat() / passwordItems.size.coerceAtLeast(1)) * 100).toInt()
+    val issueIds = securityIssueIds(model.items)
+    val score = if (passwordItems.isEmpty()) null else {
+        ((strong.size.toFloat() / passwordItems.size) * 100).toInt()
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST") { model.open(Screen.SECURITY) }
+        BrandHeader("SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3275,18 +3331,26 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 GlassCard {
                     Text("Ocjena sigurnosti", color = Muted, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("$score", color = if (score >= 80) Good else Warn, fontSize = 54.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            score?.toString() ?: "—",
+                            color = if (score == null) Muted else if (score >= 80) Good else Warn,
+                            fontSize = 54.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
                         Text("/100", color = Muted, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
                     }
                     LinearProgressIndicator(
-                        progress = { score / 100f },
+                        progress = { (score ?: 0) / 100f },
                         modifier = Modifier.fillMaxWidth(),
-                        color = if (score >= 80) Good else Warn,
+                        color = if (score == null) Muted else if (score >= 80) Good else Warn,
                         trackColor = Color(0xFF203449)
                     )
                     Text(
-                        if (score >= 80) "Vaš trezor izgleda dobro zaštićen."
-                        else "Pregledajte stavke koje zahtijevaju pažnju.",
+                        when {
+                            score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
+                            score >= 80 -> "Vaš trezor izgleda dobro zaštićen."
+                            else -> "Pregledajte stavke koje zahtijevaju pažnju."
+                        },
                         color = Muted
                     )
                 }
@@ -3314,6 +3378,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
             items((weak + model.items.filter { it.id in duplicatedIds }).distinctBy { it.id }) { issue ->
                 val duplicate = issue.id in duplicatedIds
+                val weakPassword = !isStrongPassword(issue.password)
                 Surface(
                     Modifier.fillMaxWidth().clickable { model.select(issue) },
                     shape = RoundedCornerShape(20.dp),
@@ -3330,8 +3395,11 @@ private fun SecurityScreen(model: KeyraViewModel) {
                         Column(Modifier.weight(1f)) {
                             Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
-                                if (duplicate) "Lozinka se koristi na više mjesta."
-                                else "Lozinka nije dovoljno snažna i preporučuje se zamjena.",
+                                when {
+                                    duplicate && weakPassword -> "Lozinka je slaba i koristi se na više mjesta."
+                                    duplicate -> "Lozinka se koristi na više mjesta."
+                                    else -> "Lozinka nije dovoljno snažna i preporučuje se zamjena."
+                                },
                                 color = Muted,
                                 fontSize = 13.sp
                             )
@@ -3340,7 +3408,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     }
                 }
             }
-            if (weak.isEmpty() && duplicatedIds.isEmpty()) {
+            if (issueIds.isEmpty()) {
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
