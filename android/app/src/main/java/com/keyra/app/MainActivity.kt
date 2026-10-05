@@ -353,8 +353,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         items.clear()
         items.addAll(store.load())
     }
-
-
+}
 
 private class AuthStore(private val prefs: android.content.SharedPreferences) {
     companion object {
