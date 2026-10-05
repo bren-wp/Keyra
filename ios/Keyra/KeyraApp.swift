@@ -486,6 +486,8 @@ final class KeyraStore: ObservableObject {
         items = []
         selected = nil
         sessionPassword = nil
+        vaultCategoryFilter = nil
+        vaultTypeFilter = nil
         screen = .unlock
     }
 
