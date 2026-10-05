@@ -1,4 +1,8 @@
-# Privatnost
+# Pravila privatnosti — Keyra
+
+**Razvojni programer / publisher:** Brendigo  
+**Kontakt za privatnost:** info@brendigo.com  
+**Posljednje ažuriranje:** 6. listopada 2026.
 
 Keyra je osmišljena tako da se osjetljivi podaci čuvaju šifrirani na uređaju.
 
@@ -21,6 +25,14 @@ U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za m
 
 Ako se u budućnosti uvede opcionalna mrežna sinkronizacija koju pruža Keyra, ova pravila privatnosti i deklaracije u Google Playu/App Storeu moraju se ažurirati prije objave te funkcije.
 
+
+## Zadržavanje podataka
+
+Lokalni sadržaj trezora ostaje na uređaju dok ga korisnik ne izbriše pojedinačno, ne pokrene potpuno lokalno brisanje ili ne ukloni aplikaciju uz ponašanje pohrane koje određuje operacijski sustav. Keyra ne održava serversku kopiju trezora. Vanjske šifrirane `.keyra` kopije zadržava lokacija ili cloud provider koji je korisnik sam odabrao, prema pravilima tog providera i korisnikovim postavkama.
+
+## Razvojni programer i kontakt
+
+Za pitanja o privatnosti, sigurnosti ili načinu obrade podataka korisnik se može javiti na **info@brendigo.com**. Ova pravila odnose se na aplikaciju **Keyra** koju objavljuje **Brendigo**.
 
 ## Brisanje lokalnih podataka
 
