@@ -3114,14 +3114,30 @@ private fun DetailScreen(
     var revealCardNumber by remember(current.id) { mutableStateOf(false) }
     var revealSecurityCode by remember(current.id) { mutableStateOf(false) }
     var revealDocumentNumber by remember(current.id) { mutableStateOf(false) }
+    var revealTotpSecret by remember(current.id) { mutableStateOf(false) }
     var confirmDelete by remember(current.id) { mutableStateOf(false) }
     var selectedTab by remember(current.id) { mutableStateOf("Detalji") }
+    var totpNow by remember(current.id) { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
+    val totpConfig = remember(current.id, current.fields) {
+        if (current.type == "Autentifikator") totpConfigFromFields(current.fields) else null
+    }
+
+    LaunchedEffect(current.id, current.type, totpConfig?.period) {
+        if (current.type == "Autentifikator" && totpConfig != null) {
+            while (true) {
+                totpNow = System.currentTimeMillis()
+                delay(1_000)
+            }
+        }
+    }
     val isPasswordItem = current.type == "Prijava" || current.type == "Wi-Fi"
     val duplicatedPassword = isPasswordItem &&
         current.password.isNotBlank() &&
         model.items.any { it.id != current.id && it.password == current.password }
     val securityLabel = when {
+        current.type == "Autentifikator" && totpConfig != null -> "TOTP aktivan"
+        current.type == "Autentifikator" -> "TOTP greška"
         isPasswordItem && current.password.isBlank() -> "Bez lozinke"
         duplicatedPassword -> "Ponovno korištena"
         isPasswordItem && isStrongPassword(current.password) -> "Snažna"
@@ -3129,8 +3145,8 @@ private fun DetailScreen(
         else -> "Zaštićena"
     }
     val securityColor = when (securityLabel) {
-        "Snažna", "Zaštićena" -> Good
-        "Ponovno korištena" -> Danger
+        "Snažna", "Zaštićena", "TOTP aktivan" -> Good
+        "Ponovno korištena", "TOTP greška" -> Danger
         "Potrebno ažuriranje" -> Warn
         else -> Muted
     }
@@ -3151,6 +3167,7 @@ private fun DetailScreen(
         "Kartica" -> Icons.Outlined.CreditCard
         "Identitet" -> Icons.Outlined.Badge
         "Wi-Fi" -> Icons.Outlined.Wifi
+        "Autentifikator" -> Icons.Outlined.Security
         else -> Icons.Outlined.Lock
     }
 
@@ -3349,6 +3366,77 @@ private fun DetailScreen(
                 }
             }
 
+            if (selectedTab == "Detalji" && current.type == "Autentifikator") {
+                val config = totpConfig
+                if (config != null) {
+                    item {
+                        TotpCodeCard(
+                            config = config,
+                            nowMillis = totpNow,
+                            onCopy = {
+                                val code = generateTotp(config, totpNow)
+                                if (code != null) {
+                                    guarded("Potvrdite identitet za kopiranje 2FA koda.") {
+                                        copy(context, code)
+                                        model.message = "2FA kod kopiran je i automatski će se ukloniti."
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    if (config.issuer.isNotBlank()) item {
+                        DetailRow(Icons.Outlined.Business, "Izdavatelj", config.issuer)
+                    }
+                    if (config.account.isNotBlank()) item {
+                        DetailRow(Icons.Outlined.Person, "Račun", config.account)
+                    }
+                    item {
+                        SensitiveDetailRow(
+                            icon = Icons.Outlined.Key,
+                            label = "TOTP tajna",
+                            value = config.secret,
+                            reveal = revealTotpSecret,
+                            hidden = "••••••••" + config.secret.takeLast(4),
+                            onReveal = {
+                                if (revealTotpSecret) revealTotpSecret = false
+                                else guarded("Potvrdite identitet za prikaz TOTP tajne.") {
+                                    revealTotpSecret = true
+                                }
+                            },
+                            onCopy = {
+                                guarded("Potvrdite identitet za kopiranje TOTP tajne.") {
+                                    copy(context, config.secret)
+                                    model.message = "TOTP tajna kopirana je i automatski će se ukloniti."
+                                }
+                            }
+                        )
+                    }
+                    item {
+                        DetailMetaCard(
+                            icon = Icons.Outlined.Schedule,
+                            label = "TOTP postavke",
+                            value = "${config.algorithm} • ${config.digits} znamenki • ${config.period} s",
+                            accent = Good,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    item {
+                        GlassCard {
+                            Icon(Icons.Outlined.Warning, contentDescription = null, tint = Danger)
+                            Text("TOTP konfiguracija nije valjana.", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Uredite stavku i ponovno unesite Base32 tajnu ili otpauth URI.", color = Muted)
+                            Button(
+                                onClick = model::editSelected,
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight)
+                            ) {
+                                Text("Uredi autentifikator", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             if (selectedTab == "Detalji" && current.notes.isNotBlank()) item {
                 DetailRow(Icons.Outlined.Description, "Bilješke", current.notes)
             }
@@ -3374,6 +3462,10 @@ private fun DetailScreen(
                                     "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
                                 isPasswordItem ->
                                     "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                current.type == "Autentifikator" && totpConfig != null ->
+                                    "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                current.type == "Autentifikator" ->
+                                    "TOTP konfiguracija nije valjana i treba je urediti."
                                 else ->
                                     "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
                             },
@@ -3487,6 +3579,72 @@ private fun DetailScreen(
             }
         }
         }
+        }
+    }
+}
+
+@Composable
+private fun TotpCodeCard(
+    config: TotpConfig,
+    nowMillis: Long,
+    onCopy: () -> Unit
+) {
+    val code = generateTotp(config, nowMillis) ?: "—".repeat(config.digits)
+    val remaining = totpRemainingSeconds(config, nowMillis)
+    val progress = (remaining.toFloat() / config.period.toFloat()).coerceIn(0f, 1f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha = .65f))
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Good.copy(alpha = .14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Security, contentDescription = null, tint = Good)
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Vremenski 2FA kod", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Automatski se mijenja svakih ${config.period} s", color = Muted, fontSize = 12.sp)
+                }
+                IconButton(onClick = onCopy) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Kopiraj 2FA kod", tint = Ice)
+                }
+            }
+
+            Text(
+                formatTotpCode(code),
+                color = Cyan,
+                fontSize = 38.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.size(34.dp),
+                    color = Good,
+                    trackColor = Color(0xFF203449),
+                    strokeWidth = 4.dp
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("$remaining s do novog koda", color = Muted, fontSize = 13.sp)
+            }
+
+            Text(
+                "Kod ovisi o točnom vremenu uređaja i generira se lokalno bez slanja TOTP tajne.",
+                color = Muted,
+                fontSize = 12.sp
+            )
         }
     }
 }
