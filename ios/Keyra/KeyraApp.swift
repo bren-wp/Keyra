@@ -265,6 +265,9 @@ final class EncryptedVault {
 }
 
 enum PortableBackup {
+    private static let maxPayloadBytes = 2_500_000
+    private static let maxVaultItems = 10_000
+
     static func encrypt(_ items: [VaultItem], password: String) throws -> String {
         var salt = [UInt8](repeating: 0, count: 16)
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
@@ -284,6 +287,9 @@ enum PortableBackup {
     }
 
     static func decrypt(_ text: String, password: String) throws -> [VaultItem] {
+        guard text.utf8.count <= maxPayloadBytes else {
+            throw KeyraError.invalidBackup
+        }
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
 
         let iterations: Int
@@ -309,7 +315,11 @@ enum PortableBackup {
         let key = SymmetricKey(data: try PasswordTools.derive(password, salt: salt, iterations: iterations))
         let box = try AES.GCM.SealedBox(combined: combined)
         let clear = try AES.GCM.open(box, using: key)
-        return try JSONDecoder().decode([VaultItem].self, from: clear)
+        let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+        guard decoded.count <= maxVaultItems else {
+            throw KeyraError.invalidBackup
+        }
+        return decoded
     }
 }
 
@@ -544,6 +554,10 @@ final class KeyraStore: ObservableObject {
         }
         guard let text = UIPasteboard.general.string else {
             message = "Međuspremnik ne sadrži sigurnosnu kopiju."
+            return
+        }
+        guard text.utf8.count <= 2_500_000 else {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
             return
         }
         do {
