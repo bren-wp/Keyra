@@ -34,4 +34,5 @@ jobs:
             :app:lintDebug \
             :app:testDebugUnitTest \
             :app:assembleDebug \
-            :app:assembleRelease
+            :app:assembleRelease \
+            :app:bundleRelease
