@@ -2439,6 +2439,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
 internal fun isValidCardNumber(raw: String): Boolean {
     val digits = raw.filter(Char::isDigit)
     if (digits.length !in 12..19) return false
+    if (digits.toSet().size < 2) return false
 
     var sum = 0
     var doubleDigit = false
