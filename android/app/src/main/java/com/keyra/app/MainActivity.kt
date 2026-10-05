@@ -161,6 +161,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("keyra", Context.MODE_PRIVATE)
     private val auth = AuthStore(prefs)
     private val store = VaultStore(prefs)
+    private val deviceAuthenticationAvailable =
+        BiometricManager.from(app).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        ) == BiometricManager.BIOMETRIC_SUCCESS
     val items: SnapshotStateList<VaultItem> = mutableStateListOf()
 
     var isSetup by mutableStateOf(auth.isSetup())
@@ -170,8 +175,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var message by mutableStateOf<String?>(null)
     var vaultCategoryFilter by mutableStateOf<String?>(null)
     var vaultTypeFilter by mutableStateOf<String?>(null)
-    var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
-    var sensitiveReauthEnabled by mutableStateOf(prefs.getBoolean("sensitive_reauth_enabled", true))
+    var biometricEnabled by mutableStateOf(
+        prefs.getBoolean("biometric_enabled", true) && deviceAuthenticationAvailable
+    )
+    var sensitiveReauthEnabled by mutableStateOf(
+        prefs.getBoolean("sensitive_reauth_enabled", true) &&
+            prefs.getBoolean("biometric_enabled", true) &&
+            deviceAuthenticationAvailable
+    )
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     var importingNewVault by mutableStateOf(false)
     private var sessionPassword: String? = null
@@ -447,6 +458,13 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleBiometric(value: Boolean) {
+        if (value && !deviceAuthenticationAvailable) {
+            biometricEnabled = false
+            sensitiveReauthEnabled = false
+            message = "Biometrija ili zaključavanje uređaja nisu dostupni. Najprije zaštitite uređaj."
+            return
+        }
+
         val nextSensitive = if (value) sensitiveReauthEnabled else false
         val persisted = prefs.edit()
             .putBoolean("biometric_enabled", value)
