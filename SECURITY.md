@@ -15,9 +15,13 @@ Stvarne lozinke, pristupne ključeve i privatne sigurnosne kopije nemojte prilag
 - novi trezor zahtijeva glavnu lozinku od najmanje 12 znakova
 - uzastopni pogrešni pokušaji otključavanja uvode privremeno zaključavanje
 - osjetljivi prikaz i kopiranje mogu zahtijevati dodatnu potvrdu identiteta
+- biometrijska / uređajna potvrda može se uključiti samo kada je podržana i konfigurirana na uređaju
 - spremanje trezora mora uspjeti prije nego što aplikacija prikaže novo stanje kao spremljeno
 - Android onemogućuje snimanje osjetljivog prozora, a iOS skriva sadržaj tijekom aktivnog snimanja zaslona
 - sigurnosne kopije imaju ograničenje veličine i broja stavki prije prihvaćanja uvoza
+- KEYRA2 sigurnosne kopije koriste zajednički Android/iOS AES-256-GCM format i prijenosni model podataka
+- podržano je čitanje postojećih KEYRA1 i starijih KEYRA2 formata s obje platforme
+- zamjena postojećeg trezora uvozom traži izričitu korisničku potvrdu
 - oštećena sigurnosna kopija ne zamjenjuje postojeći trezor
 - trezor se zaključava prema odabranoj politici automatskog zaključavanja
 
