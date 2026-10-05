@@ -716,7 +716,11 @@ final class KeyraStore: ObservableObject {
             let imported = try PortableBackup.decrypt(text, password: password)
             try vault.save(imported)
             items = imported
-            message = "Sigurnosna kopija uspješno je uvezena."
+            selected = nil
+            if UIPasteboard.general.string == text {
+                UIPasteboard.general.items = []
+            }
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         } catch {
             message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
         }
