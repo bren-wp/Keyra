@@ -1701,34 +1701,67 @@ struct VaultRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3.bold())
-                .foregroundStyle(accent)
-                .frame(width: 48, height: 48)
-                .background(accent.opacity(0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title).font(.headline).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline).foregroundStyle(muted).lineLimit(1)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                vaultIcon
+                vaultIdentity
+                Spacer(minLength: 8)
+                statusChip
             }
 
-            Spacer()
-
-            Text(state.0)
-                .font(.caption)
-                .foregroundStyle(state.1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(state.1.opacity(0.12))
-                .overlay(Capsule().stroke(state.1.opacity(0.8), lineWidth: 1))
-                .clipShape(Capsule())
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    vaultIcon
+                    vaultIdentity
+                }
+                HStack {
+                    Spacer()
+                    statusChip
+                }
+            }
         }
         .padding(14)
         .background(slate)
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var vaultIcon: some View {
+        Image(systemName: icon)
+            .font(.title3.bold())
+            .foregroundStyle(accent)
+            .frame(width: 48, height: 48)
+            .background(accent.opacity(0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var vaultIdentity: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusChip: some View {
+        Text(state.0)
+            .font(.caption)
+            .foregroundStyle(state.1)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(state.1.opacity(0.12))
+            .overlay(Capsule().stroke(state.1.opacity(0.8), lineWidth: 1))
+            .clipShape(Capsule())
     }
 }
 
