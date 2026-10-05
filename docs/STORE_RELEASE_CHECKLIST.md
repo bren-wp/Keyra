@@ -34,7 +34,7 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 
 ### Play Console
 
-- [ ] Privacy Policy URL: javno dostupna verzija `PRIVACY.md` (preporuka: stabilna branded HTTPS stranica prije produkcijske objave).
+- [ ] Privacy Policy URL: javno dostupna verzija `PRIVACY.md`; Google zahtijeva da privacy policy bude dostupan u Play Consoleu i unutar aplikacije te da odgovara stvarnoj obradi podataka. Za produkciju je poželjna stabilna branded HTTPS stranica.
 - [ ] Data safety obrazac uskladiti s `docs/PLAY_DATA_SAFETY.md`.
 - [ ] Ads: označiti da aplikacija ne sadrži oglase.
 - [ ] App access: opisati da aplikacija ne traži Keyra račun; reviewer može izraditi lokalni trezor.
@@ -63,7 +63,7 @@ Google od 31. kolovoza 2026. za nove aplikacije i ažuriranja mobilnih aplikacij
 ### App Store Connect
 
 - [ ] Privacy Policy URL postaviti na javnu, stabilnu HTTPS stranicu.
-- [ ] App Privacy: prema trenutačnom buildu Keyra ne prikuplja podatke za developera i ne prati korisnika; prije predaje potvrditi da nisu dodani novi SDK-ovi ili mrežne funkcije.
+- [ ] App Privacy: prema trenutačnom buildu Keyra ne prikuplja podatke za developera i ne prati korisnika; prije predaje potvrditi da nisu dodani novi SDK-ovi ili mrežne funkcije te da App Store Connect deklaracija ostaje potpuno usklađena s privacy policyjem.
 - [ ] User Privacy Choices URL nije obavezan bez Keyra računa/backenda, ali ga se može dodati uz javnu privacy stranicu.
 - [ ] Account deletion nije primjenjiv dok Keyra nema account creation.
 - [ ] Export Compliance pitanja odgovoriti točno prema stvarnom buildu i državama distribucije.
