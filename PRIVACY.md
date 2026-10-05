@@ -37,3 +37,14 @@ Za pitanja o privatnosti, sigurnosti ili načinu obrade podataka korisnik se mo�
 ## Brisanje lokalnih podataka
 
 U postavkama postoji radnja **Izbriši sve lokalne podatke**. Ona uklanja lokalni trezor, podatke za provjeru glavne lozinke, lokalne sigurnosne postavke i uređajni ključ šifriranja te vraća aplikaciju na početni onboarding. Vanjske `.keyra` kopije koje je korisnik prethodno spremio u Files ili cloud provider nisu pod kontrolom Keyre i ne brišu se tom radnjom.
+
+
+## Privatni cloud i vanjski pružatelji pohrane
+
+Keyra nema vlastiti cloud račun niti od korisnika traži vjerodajnice za Proton Drive, iCloud Drive ili druge pružatelje pohrane. Kada korisnik odabere spremanje ili uvoz šifrirane sigurnosne kopije, Keyra koristi sistemski odabir datoteka. Odabrani pružatelj pohrane može zatim prenijeti ili sinkronizirati datoteku prema svojim pravilima privatnosti.
+
+U cloud lokaciju predaje se Keyra sigurnosna kopija koja je već šifrirana glavnom lozinkom. Korisnik sam bira želi li datoteku spremiti lokalno ili kod vanjskog pružatelja. Keyra razvojni programer ne prima sadržaj trezora niti vjerodajnice odabranog cloud računa kroz ovaj tok.
+
+## Trgovine aplikacija i transparentnost
+
+Trenutačna aplikacija ne koristi oglašivačke ni analitičke SDK-ove i nema korisnički račun na Keyra poslužitelju. Ako se u budućnosti uvede udaljena usluga, telemetrija, račun ili izravna integracija treće strane, ova pravila privatnosti i odgovarajuće Google Play Data safety / Apple App Privacy prijave moraju se ažurirati prije objave takve verzije.
