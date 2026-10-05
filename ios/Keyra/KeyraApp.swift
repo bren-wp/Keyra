@@ -2707,6 +2707,9 @@ struct AddEditView: View {
     @State private var field2: String
     @State private var field3: String
     @State private var field4: String
+    @State private var totpAlgorithm: String
+    @State private var totpDigits: Int
+    @State private var totpPeriod: Int
     @State private var reveal = false
 
     private let original: VaultItem?
@@ -2717,6 +2720,7 @@ struct AddEditView: View {
         case "Kartica": return "karticu"
         case "Identitet": return "identitet"
         case "Wi-Fi": return "Wi-Fi"
+        case "Autentifikator": return "autentifikator"
         default: return "prijavu"
         }
     }
@@ -2731,6 +2735,7 @@ struct AddEditView: View {
         case "Kartica": return "Zaštitite podatke kartice i držite ih na jednom mjestu"
         case "Identitet": return "Sigurno spremite podatke identiteta i dokumenata"
         case "Wi-Fi": return "Spremite naziv mreže, zaštitu i pristupne podatke"
+        case "Autentifikator": return "Generirajte vremenski 2FA kod koji se automatski mijenja"
         default: return "Sigurno spremite svoje vjerodajnice"
         }
     }
@@ -2741,8 +2746,21 @@ struct AddEditView: View {
         case "Kartica": return "Spremi karticu"
         case "Identitet": return "Spremi identitet"
         case "Wi-Fi": return "Spremi Wi-Fi"
+        case "Autentifikator": return "Spremi autentifikator"
         default: return "Spremi prijavu"
         }
+    }
+
+    private var totpPreview: TotpConfig? {
+        guard type == "Autentifikator" else { return nil }
+        return parseTotpInput(
+            field3,
+            fallbackIssuer: field1,
+            fallbackAccount: field2,
+            fallbackAlgorithm: totpAlgorithm,
+            fallbackDigits: totpDigits,
+            fallbackPeriod: totpPeriod
+        )
     }
 
     init(store: KeyraStore) {
@@ -2759,6 +2777,10 @@ struct AddEditView: View {
         _type = State(initialValue: item?.kind ?? "Prijava")
 
         let extra = item?.extraFields ?? [:]
+        _totpAlgorithm = State(initialValue: extra["Algoritam"] ?? "SHA1")
+        _totpDigits = State(initialValue: Int(extra["Znamenke"] ?? "") ?? 6)
+        _totpPeriod = State(initialValue: Int(extra["Period"] ?? "") ?? 30)
+
         switch item?.kind {
         case "Kartica":
             _field1 = State(initialValue: extra["Vlasnik kartice"] ?? "")
@@ -2774,6 +2796,11 @@ struct AddEditView: View {
             _field1 = State(initialValue: extra["Naziv mreže"] ?? "")
             _field2 = State(initialValue: extra["Vrsta zaštite"] ?? "")
             _field3 = State(initialValue: "")
+            _field4 = State(initialValue: "")
+        case "Autentifikator":
+            _field1 = State(initialValue: extra["Izdavatelj"] ?? "")
+            _field2 = State(initialValue: extra["Račun"] ?? "")
+            _field3 = State(initialValue: extra["TOTP tajna"] ?? "")
             _field4 = State(initialValue: "")
         default:
             _field1 = State(initialValue: "")
@@ -2822,6 +2849,9 @@ struct AddEditView: View {
                                         field2 = ""
                                         field3 = ""
                                         field4 = ""
+                                        totpAlgorithm = "SHA1"
+                                        totpDigits = 6
+                                        totpPeriod = 30
                                     }
                                 } label: {
                                     HStack(spacing: 6) {
@@ -2831,6 +2861,7 @@ struct AddEditView: View {
                                             case "Kartica": return "creditcard"
                                             case "Identitet": return "person.text.rectangle"
                                             case "Wi-Fi": return "wifi"
+                                            case "Autentifikator": return "shield.lefthalf.filled"
                                             default: return "lock"
                                             }
                                         }())
@@ -2907,6 +2938,42 @@ struct AddEditView: View {
                         KeyraField(title: "Datum isteka", text: $field3)
                     }
 
+                    if type == "Autentifikator" {
+                        KeyraField(title: "Izdavatelj / servis", text: $field1)
+                        KeyraField(title: "Račun / e-pošta", text: $field2)
+                        SecretField(title: "TOTP tajna ili otpauth:// URI", text: $field3, reveal: $reveal)
+
+                        if let config = totpPreview {
+                            Text("TOTP • \(config.algorithm) • \(config.digits) znamenki • \(config.period) s")
+                                .font(.caption)
+                                .foregroundStyle(good)
+                        } else if !field3.isEmpty {
+                            Text("Tajna mora biti Base32 ili valjani otpauth://totp URI.")
+                                .font(.caption)
+                                .foregroundStyle(warn)
+                        }
+
+                        if field3.lowercased().hasPrefix("otpauth://"), let config = totpPreview {
+                            Button {
+                                field1 = config.issuer
+                                field2 = config.account
+                                field3 = config.secret
+                                totpAlgorithm = config.algorithm
+                                totpDigits = config.digits
+                                totpPeriod = config.period
+                                store.message = "Podaci autentifikatora učitani su iz otpauth URI-ja."
+                            } label: {
+                                Label("Učitaj podatke iz URI-ja", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(cyan)
+                        }
+
+                        Text("Kompatibilno s RFC 6238 TOTP aplikacijama. Kod se obnavlja prema vremenu uređaja.")
+                            .font(.caption)
+                            .foregroundStyle(muted)
+                    }
+
                     KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
                         .onChange(of: notes) { _, value in
                             if value.count > 500 {
@@ -2979,6 +3046,9 @@ struct AddEditView: View {
                                field2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 return "Unesite puno ime ili broj dokumenta."
                             }
+                            if type == "Autentifikator", totpPreview == nil {
+                                return "Unesite valjanu Base32 TOTP tajnu ili otpauth:// URI."
+                            }
                             return nil
                         }()
                         if let validationMessage {
@@ -3005,6 +3075,19 @@ struct AddEditView: View {
                             extra = [
                                 "Naziv mreže": field1,
                                 "Vrsta zaštite": field2
+                            ].filter { !$0.value.isEmpty }
+                        case "Autentifikator":
+                            guard let config = totpPreview else {
+                                store.message = "TOTP konfiguracija nije valjana."
+                                return
+                            }
+                            extra = [
+                                "Izdavatelj": config.issuer,
+                                "Račun": config.account,
+                                "TOTP tajna": config.secret,
+                                "Algoritam": config.algorithm,
+                                "Znamenke": String(config.digits),
+                                "Period": String(config.period)
                             ].filter { !$0.value.isEmpty }
                         default:
                             extra = [:]
