@@ -1717,11 +1717,12 @@ private fun VaultScreen(model: KeyraViewModel) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Sve", "Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+            listOf("Sve", "Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
                 val label = when (value) {
                     "Prijava" -> "Prijave"
                     "Bilješka" -> "Bilješke"
                     "Kartica" -> "Kartice"
+                    "Autentifikator" -> "2FA"
                     else -> value
                 }
                 FilterChip(
@@ -1736,6 +1737,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                                 "Kartica" -> Icons.Outlined.CreditCard
                                 "Identitet" -> Icons.Outlined.Badge
                                 "Wi-Fi" -> Icons.Outlined.Wifi
+                                "Autentifikator" -> Icons.Outlined.Security
                                 "Favoriti" -> Icons.Outlined.Star
                                 else -> Icons.Outlined.GridView
                             },
@@ -1852,7 +1854,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                         )
                         Text(
                             if (model.items.isEmpty())
-                                "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                                "Dodajte prvu prijavu, bilješku, karticu, identitet, Wi‑Fi ili 2FA autentifikator."
                             else
                                 "Promijenite pretragu ili odaberite drugi filtar.",
                             color = Muted
@@ -1899,6 +1901,7 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         item.type == "Bilješka" -> "Zaštićena"
         item.type == "Kartica" -> "Zaštićena"
         item.type == "Identitet" -> "Zaštićen"
+        item.type == "Autentifikator" -> "2FA aktivan"
         else -> "Snažna"
     }
     val icon = when (item.type) {
@@ -1906,6 +1909,7 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         "Kartica" -> Icons.Outlined.CreditCard
         "Identitet" -> Icons.Outlined.Badge
         "Wi-Fi" -> Icons.Outlined.Wifi
+        "Autentifikator" -> Icons.Outlined.Security
         else -> Icons.Outlined.Lock
     }
     val accent = when (item.type) {
@@ -1913,12 +1917,16 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         "Kartica" -> Color(0xFFFFC247)
         "Identitet" -> Color(0xFFB48CFF)
         "Wi-Fi" -> Color(0xFF22BDF7)
+        "Autentifikator" -> Good
         else -> Cyan
     }
     val subtitle = when (item.type) {
         "Kartica" -> item.fields["Broj kartice"]?.let { "•••• " + it.takeLast(4) } ?: item.category
         "Identitet" -> item.fields["Puno ime"].orEmpty().ifBlank { item.category }
         "Wi-Fi" -> item.fields["Naziv mreže"].orEmpty().ifBlank { item.username.ifBlank { item.category } }
+        "Autentifikator" -> item.fields["Račun"].orEmpty().ifBlank {
+            item.fields["Izdavatelj"].orEmpty().ifBlank { item.category }
+        }
         "Bilješka" -> item.category
         else -> item.username.ifBlank { item.website.ifBlank { item.category } }
     }
@@ -2085,7 +2093,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                             expanded = filterMenuExpanded,
                             onDismissRequest = { filterMenuExpanded = false }
                         ) {
-                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -2093,6 +2101,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                                                 "Prijava" -> "Lozinke"
                                                 "Bilješka" -> "Bilješke"
                                                 "Kartica" -> "Kartice"
+                                                "Autentifikator" -> "2FA"
                                                 else -> value
                                             }
                                         )
@@ -2125,7 +2134,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     .padding(horizontal = side, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti").forEach { value ->
+                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
                     FilterChip(
                         selected = type == value,
                         onClick = { type = value },
@@ -2135,6 +2144,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                                     "Prijava" -> "Lozinke"
                                     "Bilješka" -> "Bilješke"
                                     "Kartica" -> "Kartice"
+                                    "Autentifikator" -> "2FA"
                                     else -> value
                                 }
                             )
