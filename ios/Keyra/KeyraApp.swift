@@ -118,6 +118,15 @@ enum PasswordTools {
     }
 }
 
+func isStrongPassword(_ password: String) -> Bool {
+    guard password.count >= 14 else { return false }
+    let hasUpper = password.contains { $0.isUppercase }
+    let hasLower = password.contains { $0.isLowercase }
+    let hasDigit = password.contains { $0.isNumber }
+    let hasSymbol = password.contains { !$0.isLetter && !$0.isNumber }
+    return [hasUpper, hasLower, hasDigit, hasSymbol].filter { $0 }.count >= 3
+}
+
 enum KeychainVault {
     private static let service = "com.keyra.app.vault"
     private static let account = "encryption-key"
@@ -270,6 +279,7 @@ final class KeyraStore: ObservableObject {
     @Published var selected: VaultItem?
     @Published var message: String?
     @Published var biometricEnabled: Bool
+    @Published var sensitiveReauthEnabled: Bool
     @Published var autoLockSeconds: Int
     @Published var isSetup: Bool
 
@@ -280,6 +290,7 @@ final class KeyraStore: ObservableObject {
         self.isSetup = setup
         self.screen = setup ? .unlock : .onboarding
         self.biometricEnabled = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
+        self.sensitiveReauthEnabled = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
@@ -299,7 +310,7 @@ final class KeyraStore: ObservableObject {
         defaults.removeObject(forKey: "unlock_lockout_until")
         isSetup = true
         sessionPassword = password
-        items = seedItems()
+        items = []
         try? vault.save(items)
         screen = .vault
         return true
@@ -388,7 +399,38 @@ final class KeyraStore: ObservableObject {
 
     func toggleBiometric(_ enabled: Bool) {
         biometricEnabled = enabled
+        if !enabled { sensitiveReauthEnabled = false }
         defaults.set(enabled, forKey: "biometric_enabled")
+        defaults.set(sensitiveReauthEnabled, forKey: "sensitive_reauth_enabled")
+    }
+
+    func toggleSensitiveReauth(_ enabled: Bool) {
+        sensitiveReauthEnabled = enabled && biometricEnabled
+        defaults.set(sensitiveReauthEnabled, forKey: "sensitive_reauth_enabled")
+    }
+
+    func authorizeSensitive(reason: String, completion: @escaping () -> Void) {
+        guard sensitiveReauthEnabled && biometricEnabled else {
+            completion()
+            return
+        }
+
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            message = "Potvrda identiteta nije dostupna na ovom uređaju."
+            return
+        }
+
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    completion()
+                } else if let error {
+                    self.message = error.localizedDescription
+                }
+            }
+        }
     }
 
     func cycleAutoLock() {
@@ -448,18 +490,6 @@ final class KeyraStore: ObservableObject {
         items = (try? vault.load()) ?? []
     }
 
-    private func seedItems() -> [VaultItem] {
-        [
-            VaultItem(title: "Google", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://accounts.google.com", notes: "Primjer prijave", category: "Osobno", favorite: true, type: "Prijava"),
-            VaultItem(title: "Apple ID", username: "primjer@keyra.app", password: "Appl3!Keyra#2026", website: "https://account.apple.com", category: "Osobno", type: "Prijava"),
-            VaultItem(title: "GitHub", username: "primjer", password: "Git#Keyra!90210", website: "https://github.com", category: "Posao", type: "Prijava"),
-            VaultItem(title: "Kućni Wi‑Fi", username: "Dnevni boravak", password: "Wifi!Keyra#8821", category: "Osobno", type: "Wi-Fi", fields: ["Naziv mreže": "Keyra Home", "Vrsta zaštite": "WPA3"]),
-            VaultItem(title: "Netflix", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://netflix.com", category: "Zabava", type: "Prijava"),
-            VaultItem(title: "Sigurne bilješke", notes: "Ovdje možete spremati važne privatne bilješke.", category: "Osobno", type: "Bilješka"),
-            VaultItem(title: "Putna kartica", category: "Putovanja", type: "Kartica", fields: ["Vlasnik kartice": "Primjer Korisnik", "Broj kartice": "4111111111111111", "Vrijedi do": "12/30", "Sigurnosni kod": "123"]),
-            VaultItem(title: "Osobni dokument", category: "Osobno", type: "Identitet", fields: ["Puno ime": "Primjer Korisnik", "Broj dokumenta": "ID-KEYRA-2026", "Datum isteka": "31. 12. 2030."])
-        ]
-    }
 }
 
 @main
@@ -850,7 +880,7 @@ struct SecretField: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
 
-            Button { reveal.toggle() } label: {
+            Button(action: onReveal) {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
             }
@@ -996,7 +1026,7 @@ struct VaultView: View {
 
             HStack(spacing: 10) {
                 Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
-                Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && $0.password.count < 12 }.count)", label: "Slabe", accent: danger)
+                Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger)
                 Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
             }
             .padding(.horizontal, 18)
@@ -1028,9 +1058,36 @@ struct VaultView: View {
                             .onTapGesture { store.select(item) }
                     }
                     if filtered.isEmpty {
-                        Text("Nema stavki za prikaz.")
+                        GlassCard {
+                            Image(systemName: store.items.isEmpty ? "plus.circle" : "magnifyingglass")
+                                .font(.title2)
+                                .foregroundStyle(cyan)
+                            Text(store.items.isEmpty ? "Vaš trezor je spreman" : "Nema rezultata")
+                                .font(.title3.bold())
+                                .foregroundStyle(.white)
+                            Text(
+                                store.items.isEmpty
+                                ? "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                                : "Promijenite pretragu ili odaberite drugi filtar."
+                            )
                             .foregroundStyle(muted)
-                            .padding(40)
+
+                            if store.items.isEmpty {
+                                Button {
+                                    store.addNew()
+                                } label: {
+                                    Label("Dodaj prvu stavku", systemImage: "plus")
+                                        .fontWeight(.bold)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 11)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(midnight)
+                                .background(cyan)
+                                .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.top, 20)
                     }
                 }
                 .padding(.horizontal, 18)
@@ -1066,7 +1123,7 @@ struct VaultRow: View {
 
     private var state: (String, Color) {
         if duplicated { return ("Ponovno korištena", danger) }
-        if isPasswordItem && !item.password.isEmpty && item.password.count < 12 { return ("Potrebno ažuriranje", warn) }
+        if isPasswordItem && !item.password.isEmpty && !isStrongPassword(item.password) { return ("Potrebno ažuriranje", warn) }
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
         case "Identitet": return ("Zaštićen", good)
@@ -1315,6 +1372,29 @@ struct GeneratorView: View {
         password = PasswordTools.generate(length: Int(length), upper: upper, lower: lower, numbers: numbers, symbols: symbols)
     }
 
+    private var entropyBits: Int {
+        let pool = (upper ? 26 : 0) + (lower ? 26 : 0) + (numbers ? 10 : 0) + (symbols ? 15 : 0)
+        guard pool > 1 else { return 0 }
+        return Int(Double(length) * log2(Double(pool)))
+    }
+
+    private var strengthProgress: Double {
+        min(max(Double(entropyBits) / 128.0, 0.08), 1.0)
+    }
+
+    private var strengthLabel: String {
+        switch entropyBits {
+        case 100...: return "Vrlo snažna"
+        case 75...: return "Snažna"
+        case 50...: return "Srednja"
+        default: return "Slaba"
+        }
+    }
+
+    private var strengthColor: Color {
+        entropyBits >= 75 ? good : (entropyBits >= 50 ? warn : danger)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             BrandHeader(subtitle: "Generator lozinki")
@@ -1331,9 +1411,15 @@ struct GeneratorView: View {
                             .foregroundStyle(.white)
                             .minimumScaleFactor(0.65)
                             .lineLimit(1)
-                        ProgressView(value: 0.9)
-                            .tint(cyan)
-                        Text("Vrlo snažna").fontWeight(.bold).foregroundStyle(good)
+                        ProgressView(value: strengthProgress)
+                            .tint(strengthColor)
+                        HStack {
+                            Text(strengthLabel).fontWeight(.bold).foregroundStyle(strengthColor)
+                            Spacer()
+                            Text("~\(entropyBits) bita entropije")
+                                .font(.caption)
+                                .foregroundStyle(muted)
+                        }
                     }
 
                     GlassCard {
@@ -1722,8 +1808,10 @@ struct DetailView: View {
                             }
                             if !item.username.isEmpty {
                                 DetailRow(icon: "person", title: "Korisničko ime / e-pošta", value: item.username) {
-                                    SecureClipboard.copy(item.username)
-                                    store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                    store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje korisničkog imena.") {
+                                        SecureClipboard.copy(item.username)
+                                        store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                    }
                                 }
                             }
                         }
@@ -1734,8 +1822,10 @@ struct DetailView: View {
                             }
                             if !item.username.isEmpty {
                                 DetailRow(icon: "person", title: "Korisničko ime", value: item.username) {
-                                    SecureClipboard.copy(item.username)
-                                    store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                    store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje korisničkog imena.") {
+                                        SecureClipboard.copy(item.username)
+                                        store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                    }
                                 }
                             }
                             if let security = item.extraFields["Vrsta zaštite"], !security.isEmpty {
@@ -1746,10 +1836,21 @@ struct DetailView: View {
                         if (item.kind == "Prijava" || item.kind == "Wi-Fi") && !item.password.isEmpty {
                             PasswordDetailRow(
                                 password: item.password,
-                                reveal: $reveal,
+                                reveal: reveal,
+                                onReveal: {
+                                    if reveal {
+                                        reveal = false
+                                    } else {
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za prikaz lozinke.") {
+                                            reveal = true
+                                        }
+                                    }
+                                },
                                 onCopy: {
-                                    SecureClipboard.copy(item.password)
-                                    store.message = "Lozinka je kopirana i automatski će se ukloniti."
+                                    store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje lozinke.") {
+                                        SecureClipboard.copy(item.password)
+                                        store.message = "Lozinka je kopirana i automatski će se ukloniti."
+                                    }
                                 }
                             )
                         }
@@ -1764,10 +1865,21 @@ struct DetailView: View {
                                     title: "Broj kartice",
                                     value: number,
                                     hidden: "•••• •••• •••• " + String(number.suffix(4)),
-                                    reveal: $revealSensitive,
+                                    reveal: revealSensitive,
+                                    onReveal: {
+                                        if revealSensitive {
+                                            revealSensitive = false
+                                        } else {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
+                                                revealSensitive = true
+                                            }
+                                        }
+                                    },
                                     onCopy: {
-                                        SecureClipboard.copy(number)
-                                        store.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje broja kartice.") {
+                                            SecureClipboard.copy(number)
+                                            store.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                                        }
                                     }
                                 )
                             }
@@ -1780,10 +1892,21 @@ struct DetailView: View {
                                     title: "Sigurnosni kod",
                                     value: code,
                                     hidden: "•••",
-                                    reveal: $revealSensitive,
+                                    reveal: revealSensitive,
+                                    onReveal: {
+                                        if revealSensitive {
+                                            revealSensitive = false
+                                        } else {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
+                                                revealSensitive = true
+                                            }
+                                        }
+                                    },
                                     onCopy: {
-                                        SecureClipboard.copy(code)
-                                        store.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje sigurnosnog koda.") {
+                                            SecureClipboard.copy(code)
+                                            store.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                                        }
                                     }
                                 )
                             }
@@ -1799,10 +1922,21 @@ struct DetailView: View {
                                     title: "Broj dokumenta",
                                     value: number,
                                     hidden: "••••" + String(number.suffix(4)),
-                                    reveal: $revealSensitive,
+                                    reveal: revealSensitive,
+                                    onReveal: {
+                                        if revealSensitive {
+                                            revealSensitive = false
+                                        } else {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
+                                                revealSensitive = true
+                                            }
+                                        }
+                                    },
                                     onCopy: {
-                                        SecureClipboard.copy(number)
-                                        store.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje broja dokumenta.") {
+                                            SecureClipboard.copy(number)
+                                            store.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                                        }
                                     }
                                 )
                             }
@@ -1851,7 +1985,8 @@ struct SensitiveDetailView: View {
     let title: String
     let value: String
     let hidden: String
-    @Binding var reveal: Bool
+    let reveal: Bool
+    let onReveal: () -> Void
     let onCopy: () -> Void
 
     var body: some View {
@@ -1888,7 +2023,8 @@ struct SensitiveDetailView: View {
 
 struct PasswordDetailRow: View {
     let password: String
-    @Binding var reveal: Bool
+    let reveal: Bool
+    let onReveal: () -> Void
     let onCopy: () -> Void
 
     var body: some View {
@@ -1907,7 +2043,7 @@ struct PasswordDetailRow: View {
 
             Spacer()
 
-            Button { reveal.toggle() } label: {
+            Button(action: onReveal) {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
             }
@@ -1974,6 +2110,23 @@ struct SettingsView: View {
                             .tint(cyan)
                     }
                     SettingRow(
+                        icon: "eye",
+                        title: "Potvrda prije prikaza tajni",
+                        subtitle: "Tražite biometriju ili šifru uređaja prije prikaza i kopiranja osjetljivih podataka."
+                    ) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { store.sensitiveReauthEnabled },
+                                set: { store.toggleSensitiveReauth($0) }
+                            )
+                        )
+                        .labelsHidden()
+                        .tint(cyan)
+                        .disabled(!store.biometricEnabled)
+                    }
+
+                    SettingRow(
                         icon: "timer",
                         title: "Automatsko zaključavanje",
                         subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
@@ -2003,7 +2156,11 @@ struct SettingsView: View {
 
                     SectionLabel("UPRAVLJANJE PODACIMA")
                     SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
-                        Button { store.copyBackup() } label: {
+                        Button {
+                            store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+                                store.copyBackup()
+                            }
+                        } label: {
                             Image(systemName: "doc.on.doc").foregroundStyle(cyan)
                         }.buttonStyle(.plain)
                     }
@@ -2017,7 +2174,7 @@ struct SettingsView: View {
                     SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.")
 
                     SectionLabel("SIGURNOST I PRIVATNOST")
-                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.2.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.3.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
 
                     Button {
                         store.lock()
@@ -2047,11 +2204,11 @@ struct SecurityCenterView: View {
     }
 
     private var weakItems: [VaultItem] {
-        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty && $0.password.count < 12 }
+        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty && !isStrongPassword($0.password) }
     }
 
     private var strongItems: [VaultItem] {
-        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && $0.password.count >= 12 && !duplicateIDs.contains($0.id) }
+        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && isStrongPassword($0.password) && !duplicateIDs.contains($0.id) }
     }
 
     private var score: Int {
