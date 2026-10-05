@@ -1,4 +1,4 @@
-name: Izdanje 0.3.0
+name: Izdanje 0.4.0
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: "0.3.0"
+  VERSION: "0.4.0"
 
 jobs:
   android:
@@ -113,35 +113,39 @@ jobs:
       - name: Pripremi bilješke izdanja
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          # Keyra 0.3.0
+          # Keyra 0.4.0
 
-          Keyra 0.3.0 dodatno pojačava privatnost, sigurnosne kontrole i produkcijsku čistoću Android i iOS aplikacije.
+          Keyra 0.4.0 donosi veliko poliranje sučelja i prilagodbu svim veličinama zaslona na Androidu i iOS-u.
 
           ## Novo i poboljšano
-          - novi trezor počinje potpuno prazan, bez probnih vjerodajnica ili demo podataka
-          - opcionalna dodatna potvrda identiteta prije prikaza i kopiranja lozinki, kartica i dokumenata
-          - potvrda identiteta prije izrade šifrirane sigurnosne kopije
-          - generator lozinki prikazuje procijenjenu entropiju i realniju razinu jačine
-          - provjera sigurnosti sada uz duljinu provjerava i raznolikost znakova
-          - poboljšano prazno stanje trezora s jasnim pozivom za dodavanje prve stavke
-          - dodatno usklađene poruke, sigurnosne postavke i dokumentacija
+          - početni ekran više ne zahtijeva pomicanje kako bi se došlo do glavnog gumba
+          - glavni gumb Kreni ostaje stalno dostupan, dok se sadržaj iznad njega po potrebi pomiče
+          - pojednostavljen splash ekran s fokusom na Keyra identitet i brže čitanje
+          - prilagodljivi rasporedi za manje telefone, veće uređaje, tablete i vodoravni prikaz
+          - sužena i centrirana radna površina na velikim ekranima kako sadržaj ne bi bio nepotrebno rastegnut
+          - prilagođeni zaglavlja, donja navigacija, kartice sažetka, kolekcije, otključavanje, dodavanje i detalji stavki
+          - kolekcije prelaze u jednu kolonu na užim zaslonima i prilagodljivu mrežu na većim ekranima
+          - generator pravilno prikazuje i vrlo duge lozinke bez rezanja sadržaja
+          - sortiranje trezora sada stvarno radi: Najnovije ili A–Ž
+          - filtri u Kolekcijama sada stvarno utječu na prikazane brojeve stavki
+          - poboljšane poruke za slabe lozinke i sigurnosne preporuke
+          - dodatno poliranje razmaka, veličina teksta i dodirnih područja
 
           ## Sigurnost
           - AES-256-GCM zaštita sadržaja trezora
           - ključevi zaštićeni Android Keystoreom ili Apple Keychainom
-          - PBKDF2-HMAC-SHA-256 s 600.000 iteracija za glavnu lozinku i prijenosne sigurnosne kopije
-          - najmanje 12 znakova za novu glavnu lozinku
-          - privremeno zaključavanje nakon više uzastopnih pogrešnih pokušaja
+          - PBKDF2-HMAC-SHA-256 s 600.000 iteracija
+          - dodatna potvrda identiteta prije prikaza i kopiranja osjetljivih podataka
           - podesivo automatsko zaključavanje
+          - privremeno zaključavanje nakon više uzastopnih pogrešnih pokušaja
           - osjetljivi sadržaj međuspremnika automatski istječe
-          - Android FLAG_SECURE zaštita prikaza osjetljivog sadržaja
 
           ## Paketi
-          - `Keyra-0.3.0-Android.apk` — instalacijski Android paket za testiranje
-          - `Keyra-0.3.0-Android.aab` — Android App Bundle
-          - `Keyra-0.3.0-Android-unsigned.apk` — nepotpisani Android release paket
-          - `Keyra-0.3.0-iOS-unsigned.ipa` — iOS paket bez distribucijskog potpisa
-          - `Keyra-0.3.0-iOS-Simulator.zip` — iOS Simulator paket
+          - `Keyra-0.4.0-Android.apk`
+          - `Keyra-0.4.0-Android.aab`
+          - `Keyra-0.4.0-Android-unsigned.apk`
+          - `Keyra-0.4.0-iOS-unsigned.ipa`
+          - `Keyra-0.4.0-iOS-Simulator.zip`
 
           iOS paket bez distribucijskog potpisa potrebno je potpisati odgovarajućim Apple certifikatom i profilom prije instalacije na fizički uređaj ili objave.
           EOF
