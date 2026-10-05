@@ -1410,7 +1410,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR") { model.message = "Nema novih sigurnosnih upozorenja." }
+        BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
 
         OutlinedTextField(
             search, { search = it },
@@ -1717,7 +1717,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR") { model.message = "Nema novih sigurnosnih upozorenja." }
+            BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
             Text(
                 "Kolekcije",
                 Modifier.padding(horizontal = side),
@@ -1910,7 +1910,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki") { model.message = "Nema novih sigurnosnih upozorenja." }
+        BrandHeader("Generator lozinki") { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -2736,7 +2736,7 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("POSTAVKE I SIGURNOST") { model.message = "Nema novih sigurnosnih upozorenja." }
+        BrandHeader("POSTAVKE I SIGURNOST") { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -2868,7 +2868,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST") { model.message = "Nema novih sigurnosnih upozorenja." }
+        BrandHeader("SIGURNOST") { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
