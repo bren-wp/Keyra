@@ -3933,7 +3933,13 @@ private fun SettingsScreen(
         "sigurnosna kopija"
     )
     val preferenceVisible = matches("Tamni način", "tamni izgled")
-    val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+    val privacyVisible = matches(
+        "O aplikaciji Keyra",
+        "Pravila privatnosti",
+        "Privatnost",
+        "Zaključaj trezor",
+        "sigurnost privatnost"
+    )
 
     Column(Modifier.fillMaxSize()) {
         pendingFileImport?.let { uri ->
@@ -4155,6 +4161,18 @@ private fun SettingsScreen(
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
                 SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+            }
+            if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
+                SettingRow(
+                    Icons.Outlined.PrivacyTip,
+                    "Pravila privatnosti",
+                    "Pročitajte kako Keyra obrađuje podatke i što se nikada ne šalje razvojnom programeru.",
+                    onClick = {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
+                            model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
+                        }
+                    }
+                )
             }
             if (matches("Zaključaj trezor", "zaključavanje")) item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
