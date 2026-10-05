@@ -2004,7 +2004,7 @@ struct SensitiveDetailView: View {
 
             Spacer()
 
-            Button { reveal.toggle() } label: {
+            Button(action: onReveal) {
                 Image(systemName: reveal ? "eye.slash" : "eye").foregroundStyle(ice)
             }
             .buttonStyle(.plain)
