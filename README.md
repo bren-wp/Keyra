@@ -53,7 +53,7 @@ Pretraga, tipovi stavki, favoriti, kategorije, sortiranje i sigurnosni sažetak 
 
 Podržane su prijave, bilješke, kartice, identiteti i Wi‑Fi podaci. Svaki tip prikazuje samo odgovarajuća polja. Osjetljive vrijednosti ostaju skrivene dok ih korisnik ne odluči prikazati ili kopirati.
 
-Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu.
+Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu. Broj kartice dodatno prolazi Luhn provjeru, a datum isteka ne može biti u prošlosti.
 
 <div align="center">
 <img src="assets/screens/add-login.svg" alt="Dodavanje prijave" width="280">
