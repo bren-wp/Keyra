@@ -36,6 +36,206 @@ extension Color {
     }
 }
 
+struct TotpConfig {
+    let secret: String
+    let issuer: String
+    let account: String
+    let algorithm: String
+    let digits: Int
+    let period: Int
+}
+
+private let base32Alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+
+func normalizedBase32Secret(_ raw: String) -> String? {
+    let clean = raw
+        .uppercased()
+        .filter { $0 != " " && $0 != "-" }
+        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+
+    guard !clean.isEmpty else { return nil }
+    let allowed = Set(base32Alphabet)
+    guard clean.allSatisfy({ allowed.contains($0) }) else { return nil }
+    guard let decoded = decodeBase32(clean), !decoded.isEmpty else { return nil }
+    return clean
+}
+
+func decodeBase32(_ raw: String) -> Data? {
+    let clean = raw
+        .uppercased()
+        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+    guard !clean.isEmpty else { return nil }
+
+    let table = Dictionary(uniqueKeysWithValues: base32Alphabet.enumerated().map { ($0.element, $0.offset) })
+    var output = [UInt8]()
+    var buffer = 0
+    var bits = 0
+
+    for char in clean {
+        guard let value = table[char] else { return nil }
+        buffer = (buffer << 5) | value
+        bits += 5
+
+        while bits >= 8 {
+            bits -= 8
+            output.append(UInt8((buffer >> bits) & 0xFF))
+            buffer = bits == 0 ? 0 : buffer & ((1 << bits) - 1)
+        }
+    }
+
+    return Data(output)
+}
+
+private func normalizedTotpAlgorithm(_ raw: String) -> String? {
+    switch raw.uppercased().replacingOccurrences(of: "-", with: "") {
+    case "SHA1": return "SHA1"
+    case "SHA256": return "SHA256"
+    case "SHA512": return "SHA512"
+    default: return nil
+    }
+}
+
+func parseTotpInput(
+    _ raw: String,
+    fallbackIssuer: String = "",
+    fallbackAccount: String = "",
+    fallbackAlgorithm: String = "SHA1",
+    fallbackDigits: Int = 6,
+    fallbackPeriod: Int = 30
+) -> TotpConfig? {
+    let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !input.isEmpty else { return nil }
+
+    if !input.lowercased().hasPrefix("otpauth://") {
+        guard let secret = normalizedBase32Secret(input) else { return nil }
+        let algorithm = normalizedTotpAlgorithm(fallbackAlgorithm) ?? "SHA1"
+        let digits = (6...8).contains(fallbackDigits) ? fallbackDigits : 6
+        let period = (15...120).contains(fallbackPeriod) ? fallbackPeriod : 30
+        return TotpConfig(
+            secret: secret,
+            issuer: fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines),
+            account: fallbackAccount.trimmingCharacters(in: .whitespacesAndNewlines),
+            algorithm: algorithm,
+            digits: digits,
+            period: period
+        )
+    }
+
+    guard
+        let components = URLComponents(string: input),
+        components.scheme?.lowercased() == "otpauth",
+        components.host?.lowercased() == "totp"
+    else {
+        return nil
+    }
+
+    let params = Dictionary(
+        uniqueKeysWithValues: (components.queryItems ?? []).map {
+            ($0.name.lowercased(), $0.value ?? "")
+        }
+    )
+    guard let secret = normalizedBase32Secret(params["secret"] ?? "") else { return nil }
+
+    let rawLabel = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let label = rawLabel.removingPercentEncoding ?? rawLabel
+    let labelParts = label.split(separator: ":", maxSplits: 1).map(String.init)
+    let labelIssuer = labelParts.count == 2 ? labelParts[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    let labelAccount = labelParts.count == 2
+        ? labelParts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        : label.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let issuer = (params["issuer"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedIssuer = issuer.isEmpty
+        ? (fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? labelIssuer
+            : fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines))
+        : issuer
+    let fallbackAccountValue = fallbackAccount.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedAccount = fallbackAccountValue.isEmpty ? labelAccount : fallbackAccountValue
+
+    guard let algorithm = normalizedTotpAlgorithm(params["algorithm"] ?? fallbackAlgorithm) else {
+        return nil
+    }
+    let digits = Int(params["digits"] ?? "") ?? fallbackDigits
+    let period = Int(params["period"] ?? "") ?? fallbackPeriod
+    guard (6...8).contains(digits), (15...120).contains(period) else { return nil }
+
+    return TotpConfig(
+        secret: secret,
+        issuer: resolvedIssuer,
+        account: resolvedAccount,
+        algorithm: algorithm,
+        digits: digits,
+        period: period
+    )
+}
+
+func generateTotp(
+    _ config: TotpConfig,
+    at date: Date = Date()
+) -> String? {
+    guard let secret = decodeBase32(config.secret), !secret.isEmpty else { return nil }
+
+    let counter = UInt64(date.timeIntervalSince1970) / UInt64(config.period)
+    var bigEndianCounter = counter.bigEndian
+    let counterData = withUnsafeBytes(of: &bigEndianCounter) { Data($0) }
+    let key = SymmetricKey(data: secret)
+
+    let hash: [UInt8]
+    switch config.algorithm {
+    case "SHA256":
+        hash = Array(HMAC<SHA256>.authenticationCode(for: counterData, using: key))
+    case "SHA512":
+        hash = Array(HMAC<SHA512>.authenticationCode(for: counterData, using: key))
+    default:
+        hash = Array(HMAC<Insecure.SHA1>.authenticationCode(for: counterData, using: key))
+    }
+
+    guard let last = hash.last else { return nil }
+    let offset = Int(last & 0x0F)
+    guard offset + 3 < hash.count else { return nil }
+
+    let binary =
+        (Int(hash[offset] & 0x7F) << 24) |
+        (Int(hash[offset + 1]) << 16) |
+        (Int(hash[offset + 2]) << 8) |
+        Int(hash[offset + 3])
+
+    var modulo = 1
+    for _ in 0..<config.digits { modulo *= 10 }
+    return String(format: "%0*d", config.digits, binary % modulo)
+}
+
+func totpRemainingSeconds(
+    _ config: TotpConfig,
+    at date: Date = Date()
+) -> Int {
+    let seconds = Int(date.timeIntervalSince1970)
+    return config.period - (seconds % config.period)
+}
+
+func totpConfigFromFields(_ fields: [String: String]) -> TotpConfig? {
+    guard let secret = fields["TOTP tajna"] else { return nil }
+    return parseTotpInput(
+        secret,
+        fallbackIssuer: fields["Izdavatelj"] ?? "",
+        fallbackAccount: fields["Račun"] ?? "",
+        fallbackAlgorithm: fields["Algoritam"] ?? "SHA1",
+        fallbackDigits: Int(fields["Znamenke"] ?? "") ?? 6,
+        fallbackPeriod: Int(fields["Period"] ?? "") ?? 30
+    )
+}
+
+func formatTotpCode(_ code: String) -> String {
+    if code.count == 6 {
+        return String(code.prefix(3)) + " " + String(code.suffix(3))
+    }
+    if code.count == 8 {
+        return String(code.prefix(4)) + " " + String(code.suffix(4))
+    }
+    return code
+}
+
 func isValidCardNumber(_ raw: String) -> Bool {
     let digits = raw.compactMap { $0.wholeNumberValue }
     guard (12...19).contains(digits.count) else { return false }
