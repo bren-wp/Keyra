@@ -4180,7 +4180,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudDownload,
                     "Uvezi šifriranu datoteku",
-                    "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                    "Odaberite šifriranu .keyra kopiju iz Files ili cloud providera i vratite trezor tek nakon izričite potvrde."
                 ) {
                     IconButton(onClick = {
                         importFileLauncher.launch(
