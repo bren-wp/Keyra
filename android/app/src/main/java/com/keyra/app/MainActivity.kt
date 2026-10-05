@@ -1833,7 +1833,7 @@ private fun SettingsScreen(model: KeyraViewModel) {
             item { SectionTitle("PREFERENCIJE") }
             item { SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") }
             item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.1.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
+            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.2.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
             item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Logout, null)
