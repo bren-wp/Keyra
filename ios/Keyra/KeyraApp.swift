@@ -83,7 +83,16 @@ enum KeyraError: Error {
 enum PasswordTools {
     static let currentIterations = 600_000
 
-    static func derive(_ password: String, salt: Data, iterations: Int = currentIterations, keyLength: Int = 32) -> Data {
+    static func derive(
+        _ password: String,
+        salt: Data,
+        iterations: Int = currentIterations,
+        keyLength: Int = 32
+    ) throws -> Data {
+        guard keyLength > 0, (100_000...2_000_000).contains(iterations) else {
+            throw KeyraError.invalidData
+        }
+
         let passwordBytes = Array(password.utf8)
         var output = [UInt8](repeating: 0, count: keyLength)
         let status = passwordBytes.withUnsafeBytes { passwordBuffer in
@@ -101,7 +110,9 @@ enum PasswordTools {
                 )
             }
         }
-        precondition(status == kCCSuccess, "Key derivation failed")
+        guard status == kCCSuccess else {
+            throw KeyraError.keyUnavailable
+        }
         return Data(output)
     }
 
@@ -138,8 +149,8 @@ enum KeychainVault {
     private static let service = "com.keyra.app.vault"
     private static let account = "encryption-key"
 
-    static func key() throws -> SymmetricKey {
-        let read: [String: Any] = [
+    private static func existingKeyData() -> Data? {
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
@@ -148,9 +159,15 @@ enum KeychainVault {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var output: CFTypeRef?
-        let status = SecItemCopyMatching(read as CFDictionary, &output)
-        if status == errSecSuccess, let data = output as? Data {
-            return SymmetricKey(data: data)
+        guard SecItemCopyMatching(query as CFDictionary, &output) == errSecSuccess else {
+            return nil
+        }
+        return output as? Data
+    }
+
+    static func key() throws -> SymmetricKey {
+        if let existing = existingKeyData() {
+            return SymmetricKey(data: existing)
         }
 
         var bytes = [UInt8](repeating: 0, count: 32)
@@ -166,11 +183,15 @@ enum KeychainVault {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
             kSecValueData as String: data
         ]
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        guard addStatus == errSecSuccess || addStatus == errSecDuplicateItem else {
-            throw KeyraError.keyUnavailable
+
+        let status = SecItemAdd(add as CFDictionary, nil)
+        if status == errSecSuccess {
+            return SymmetricKey(data: data)
         }
-        return SymmetricKey(data: data)
+        if status == errSecDuplicateItem, let existing = existingKeyData() {
+            return SymmetricKey(data: existing)
+        }
+        throw KeyraError.keyUnavailable
     }
 }
 
@@ -182,14 +203,22 @@ final class AuthStore {
         defaults.data(forKey: "master_hash") != nil && defaults.data(forKey: "master_salt") != nil
     }
 
-    func create(password: String) {
+    func create(password: String) -> Bool {
         var salt = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt)
-        let saltData = Data(salt)
-        let hash = PasswordTools.derive(password, salt: saltData)
-        defaults.set(saltData, forKey: "master_salt")
-        defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
-        defaults.set(hash, forKey: "master_hash")
+        guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
+            return false
+        }
+
+        do {
+            let saltData = Data(salt)
+            let hash = try PasswordTools.derive(password, salt: saltData)
+            defaults.set(saltData, forKey: "master_salt")
+            defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
+            defaults.set(hash, forKey: "master_hash")
+            return true
+        } catch {
+            return false
+        }
     }
 
     func verify(password: String) -> Bool {
@@ -199,13 +228,19 @@ final class AuthStore {
         else { return false }
 
         let storedIterations = defaults.integer(forKey: "master_iterations")
-        let iterations = storedIterations > 0 ? storedIterations : legacyIterations
-        let actual = PasswordTools.derive(password, salt: salt, iterations: iterations)
+        let iterations = (100_000...2_000_000).contains(storedIterations)
+            ? storedIterations
+            : legacyIterations
+
+        guard let actual = try? PasswordTools.derive(password, salt: salt, iterations: iterations) else {
+            return false
+        }
         let ok = actual == expected
 
-        if ok && iterations < PasswordTools.currentIterations {
+        if ok && iterations < PasswordTools.currentIterations,
+           let upgraded = try? PasswordTools.derive(password, salt: salt) {
             defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
-            defaults.set(PasswordTools.derive(password, salt: salt), forKey: "master_hash")
+            defaults.set(upgraded, forKey: "master_hash")
         }
         return ok
     }
@@ -232,9 +267,11 @@ final class EncryptedVault {
 enum PortableBackup {
     static func encrypt(_ items: [VaultItem], password: String) throws -> String {
         var salt = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt)
+        guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
         let saltData = Data(salt)
-        let key = SymmetricKey(data: PasswordTools.derive(password, salt: saltData))
+        let key = SymmetricKey(data: try PasswordTools.derive(password, salt: saltData))
         let clear = try JSONEncoder().encode(items)
         let sealed = try AES.GCM.seal(clear, using: key)
         guard let combined = sealed.combined else { throw KeyraError.invalidBackup }
@@ -269,7 +306,7 @@ enum PortableBackup {
             let combined = Data(base64Encoded: String(payloadPart))
         else { throw KeyraError.invalidBackup }
 
-        let key = SymmetricKey(data: PasswordTools.derive(password, salt: salt, iterations: iterations))
+        let key = SymmetricKey(data: try PasswordTools.derive(password, salt: salt, iterations: iterations))
         let box = try AES.GCM.SealedBox(combined: combined)
         let clear = try AES.GCM.open(box, using: key)
         return try JSONDecoder().decode([VaultItem].self, from: clear)
@@ -312,13 +349,23 @@ final class KeyraStore: ObservableObject {
             message = "Glavna lozinka mora imati najmanje 12 znakova."
             return false
         }
-        auth.create(password: password)
+        do {
+            try vault.save([])
+        } catch {
+            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            return false
+        }
+
+        guard auth.create(password: password) else {
+            message = "Zaštitu glavne lozinke nije moguće postaviti. Pokušajte ponovno."
+            return false
+        }
+
         defaults.removeObject(forKey: "unlock_failed_attempts")
         defaults.removeObject(forKey: "unlock_lockout_until")
         isSetup = true
         sessionPassword = password
         items = []
-        try? vault.save(items)
         screen = .vault
         return true
     }
@@ -352,7 +399,10 @@ final class KeyraStore: ObservableObject {
         defaults.removeObject(forKey: "unlock_failed_attempts")
         defaults.removeObject(forKey: "unlock_lockout_until")
         sessionPassword = password
-        load()
+        guard load() else {
+            sessionPassword = nil
+            return false
+        }
         screen = .vault
         return true
     }
@@ -367,8 +417,9 @@ final class KeyraStore: ObservableObject {
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Otključajte svoj Keyra trezor.") { success, error in
             DispatchQueue.main.async {
                 if success {
-                    self.load()
-                    self.screen = .vault
+                    if self.load() {
+                        self.screen = .vault
+                    }
                 } else if let error {
                     self.message = error.localizedDescription
                 }
@@ -384,24 +435,36 @@ final class KeyraStore: ObservableObject {
     }
 
     func save(_ item: VaultItem) {
-        var next = item
-        next.updatedAt = Date()
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            items[index] = next
+        var saved = item
+        saved.updatedAt = Date()
+        var next = items
+        if let index = next.firstIndex(where: { $0.id == item.id }) {
+            next[index] = saved
         } else {
-            items.insert(next, at: 0)
+            next.insert(saved, at: 0)
         }
-        try? vault.save(items)
-        selected = next
-        screen = .vault
+
+        do {
+            try vault.save(next)
+            items = next
+            selected = saved
+            screen = .vault
+        } catch {
+            message = "Stavku nije moguće spremiti. Pokušajte ponovno."
+        }
     }
 
     func deleteSelected() {
         guard let selected else { return }
-        items.removeAll { $0.id == selected.id }
-        try? vault.save(items)
-        self.selected = nil
-        screen = .vault
+        let next = items.filter { $0.id != selected.id }
+        do {
+            try vault.save(next)
+            items = next
+            self.selected = nil
+            screen = .vault
+        } catch {
+            message = "Stavku nije moguće izbrisati. Pokušajte ponovno."
+        }
     }
 
     func toggleBiometric(_ enabled: Bool) {
@@ -485,16 +548,23 @@ final class KeyraStore: ObservableObject {
         }
         do {
             let imported = try PortableBackup.decrypt(text, password: password)
+            try vault.save(imported)
             items = imported
-            try vault.save(items)
             message = "Sigurnosna kopija uspješno je uvezena."
         } catch {
             message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
         }
     }
 
-    private func load() {
-        items = (try? vault.load()) ?? []
+    @discardableResult
+    private func load() -> Bool {
+        do {
+            items = try vault.load()
+            return true
+        } catch {
+            message = "Trezor nije moguće otvoriti. Podaci nisu promijenjeni."
+            return false
+        }
     }
 
 }
