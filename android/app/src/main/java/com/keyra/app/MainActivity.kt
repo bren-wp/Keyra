@@ -17,6 +17,8 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -63,6 +65,7 @@ import java.security.SecureRandom
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.io.ByteArrayOutputStream
 import java.text.DateFormat
 import java.util.Date
 import java.util.Calendar
@@ -434,28 +437,68 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
-    fun exportBackup(context: Context) {
+    fun makeBackupPayload(): String? {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return
+            return null
         }
-        runCatching { PortableBackup.encrypt(store.toJson(items), password) }
-            .onSuccess { payload ->
-                copy(context, payload)
-                message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
-            }
-            .onFailure {
-                message = "Sigurnosnu kopiju nije moguće izraditi."
-            }
+        return runCatching { PortableBackup.encrypt(store.toJson(items), password) }
+            .onFailure { message = "Sigurnosnu kopiju nije moguće izraditi." }
+            .getOrNull()
     }
 
-    fun importBackup(context: Context) {
+    fun exportBackup(context: Context) {
+        val payload = makeBackupPayload() ?: return
+        copy(context, payload)
+        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    fun exportBackupToUri(context: Context, uri: Uri) {
+        val payload = makeBackupPayload() ?: return
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(payload.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
+        }.onSuccess {
+            message = "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
+        }.onFailure {
+            message = "Sigurnosnu kopiju nije moguće spremiti u odabranu datoteku."
+        }
+    }
+
+    fun importBackupPayload(payload: String): Boolean {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return
+            return false
         }
+        if (payload.isBlank()) {
+            message = "Odabrana sigurnosna kopija je prazna."
+            return false
+        }
+        if (payload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS) {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
+            return false
+        }
+
+        return runCatching {
+            val json = PortableBackup.decrypt(payload, password)
+            val imported = store.fromJson(json)
+            store.save(imported)
+            imported
+        }.onSuccess { imported ->
+            items.clear()
+            items.addAll(imported)
+            selected = null
+            message = "Sigurnosna kopija uspješno je uvezena."
+        }.onFailure {
+            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
+        }.isSuccess
+    }
+
+    fun importBackup(context: Context) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = clipboard.primaryClip
         val text = if (clip != null && clip.itemCount > 0) {
@@ -467,23 +510,23 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Međuspremnik ne sadrži sigurnosnu kopiju."
             return
         }
-        if (text.length > MAX_BACKUP_CHARS) {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return
-        }
-        runCatching {
-            val json = PortableBackup.decrypt(text, password)
-            val imported = store.fromJson(json)
-            store.save(imported)
-            imported
-        }.onSuccess { imported ->
-            items.clear()
-            items.addAll(imported)
-            selected = null
+
+        if (importBackupPayload(text)) {
             clearClipboardIfMatches(context, text)
             message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
+        }
+    }
+
+    fun importBackupFromUri(context: Context, uri: Uri) {
+        runCatching {
+            val payload = readUtf8Limited(context, uri, MAX_BACKUP_CHARS)
+            if (!importBackupPayload(payload)) {
+                error("Uvoz sigurnosne kopije nije uspio.")
+            }
         }.onFailure {
-            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
+            if (message.isNullOrBlank() || message == "Sigurnosna kopija uspješno je uvezena.") {
+                message = "Odabranu sigurnosnu kopiju nije moguće uvesti."
+            }
         }
     }
 
@@ -772,6 +815,22 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
             }
         }
     }
+}
+
+internal fun readUtf8Limited(context: Context, uri: Uri, maxBytes: Int): String {
+    val output = ByteArrayOutputStream()
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= maxBytes) { "Sigurnosna kopija je prevelika." }
+            output.write(buffer, 0, read)
+        }
+    } ?: error("Odabranu datoteku nije moguće otvoriti.")
+    return output.toString(Charsets.UTF_8.name())
 }
 
 internal object PortableBackup {
