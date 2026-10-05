@@ -817,6 +817,28 @@ final class KeyraStore: ObservableObject {
         }
     }
 
+    func toggleSelectedFavorite() {
+        guard let selected else { return }
+        var updated = selected
+        updated.favorite.toggle()
+        updated.updatedAt = Date()
+
+        var next = items
+        guard let index = next.firstIndex(where: { $0.id == selected.id }) else { return }
+        next[index] = updated
+
+        do {
+            try vault.save(next)
+            items = next
+            self.selected = updated
+            message = updated.favorite
+                ? "Stavka je dodana u favorite."
+                : "Stavka je uklonjena iz favorita."
+        } catch {
+            message = "Promjenu favorita nije moguće spremiti."
+        }
+    }
+
     func deleteSelected() {
         guard let selected else { return }
         let next = items.filter { $0.id != selected.id }
