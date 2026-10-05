@@ -1,5 +1,9 @@
 name: Android
 
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
