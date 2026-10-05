@@ -929,6 +929,71 @@ private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
     }
 }
 
+
+@Composable
+private fun OnboardingHeroBadge(icon: ImageVector, alignment: Alignment) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Slate2.copy(alpha = .96f))
+            .border(1.dp, Ice.copy(alpha = .38f), RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = Ice, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun OnboardingVaultHero(compact: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (compact) 154.dp else 190.dp)
+            .clip(RoundedCornerShape(if (compact) 24.dp else 30.dp))
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        Indigo.copy(alpha = .30f),
+                        Color(0xFF0A3150).copy(alpha = .72f),
+                        Midnight
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.linearGradient(listOf(Cyan.copy(alpha = .72f), Indigo.copy(alpha = .58f))),
+                RoundedCornerShape(if (compact) 24.dp else 30.dp)
+            )
+            .padding(if (compact) 12.dp else 16.dp)
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .size(if (compact) 94.dp else 116.dp)
+                .clip(RoundedCornerShape(if (compact) 26.dp else 32.dp))
+                .background(Slate.copy(alpha = .92f))
+                .border(1.dp, Cyan.copy(alpha = .62f), RoundedCornerShape(if (compact) 26.dp else 32.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            KeyraMark(if (compact) 72.dp else 90.dp)
+        }
+
+        Box(Modifier.align(Alignment.TopStart)) {
+            OnboardingHeroBadge(Icons.Outlined.Fingerprint, Alignment.Center)
+        }
+        Box(Modifier.align(Alignment.TopEnd)) {
+            OnboardingHeroBadge(Icons.Outlined.Security, Alignment.Center)
+        }
+        Box(Modifier.align(Alignment.BottomStart)) {
+            OnboardingHeroBadge(Icons.Outlined.CreditCard, Alignment.Center)
+        }
+        Box(Modifier.align(Alignment.BottomEnd)) {
+            OnboardingHeroBadge(Icons.Outlined.Cloud, Alignment.Center)
+        }
+    }
+}
+
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -967,6 +1032,8 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     maxLines = 1
                 )
 
+                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+                OnboardingVaultHero(compact)
                 Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
                 Text(
                     "Sigurniji način upravljanja lozinkama",
