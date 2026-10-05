@@ -2817,16 +2817,25 @@ struct DetailView: View {
     @State private var revealSecurityCode = false
     @State private var revealDocumentNumber = false
     @State private var confirmDelete = false
+    @State private var selectedTab = "Detalji"
 
     var body: some View {
         if let item = store.selected {
             let isPasswordItem = item.kind == "Prijava" || item.kind == "Wi-Fi"
-            let securityLabel = isPasswordItem
-                ? (item.password.isEmpty ? "Bez lozinke" : (isStrongPassword(item.password) ? "Snažna" : "Potrebno ažuriranje"))
-                : "Zaštićena"
+            let duplicatedPassword = isPasswordItem &&
+                !item.password.isEmpty &&
+                store.items.contains { $0.id != item.id && $0.password == item.password }
+            let securityLabel: String = {
+                if isPasswordItem && item.password.isEmpty { return "Bez lozinke" }
+                if duplicatedPassword { return "Ponovno korištena" }
+                if isPasswordItem && isStrongPassword(item.password) { return "Snažna" }
+                if isPasswordItem { return "Potrebno ažuriranje" }
+                return "Zaštićena"
+            }()
             let securityColor: Color = {
                 switch securityLabel {
                 case "Snažna", "Zaštićena": return good
+                case "Ponovno korištena": return danger
                 case "Potrebno ažuriranje": return warn
                 default: return muted
                 }
@@ -2863,12 +2872,31 @@ struct DetailView: View {
                             .minimumScaleFactor(0.8)
                     }
                     Spacer()
-                    if item.favorite { Image(systemName: "star.fill").foregroundStyle(warn) }
+                    Button {
+                        store.toggleSelectedFavorite()
+                    } label: {
+                        Image(systemName: item.favorite ? "star.fill" : "star")
+                            .foregroundStyle(item.favorite ? warn : ice)
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.favorite ? "Ukloni iz favorita" : "Dodaj u favorite")
                 }
                 .padding(18)
 
+                Picker("Prikaz", selection: $selectedTab) {
+                    Text("Detalji").tag("Detalji")
+                    Text("Sigurnost").tag("Sigurnost")
+                    Text("Aktivnost").tag("Aktivnost")
+                }
+                .pickerStyle(.segmented)
+                .tint(cyan)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 6)
+
                 ScrollView {
                     VStack(spacing: 10) {
+                        if selectedTab == "Detalji" {
                         if item.kind == "Prijava" {
                             if !item.website.isEmpty {
                                 DetailRow(icon: "link", title: "Web-stranica", value: item.website) {
@@ -3067,6 +3095,68 @@ struct DetailView: View {
                                 detailDeleteButton
                             }
                         }
+                        }
+
+                        if selectedTab == "Sigurnost" {
+                            GlassCard {
+                                Image(systemName: "shield.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(securityColor)
+                                Text("Ocjena sigurnosti")
+                                    .font(.caption)
+                                    .foregroundStyle(muted)
+                                Text(securityLabel)
+                                    .font(.title2.bold())
+                                    .foregroundStyle(securityColor)
+                                Text({
+                                    if duplicatedPassword {
+                                        return "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
+                                    }
+                                    if isPasswordItem && item.password.isEmpty {
+                                        return "Ova stavka nema spremljenu lozinku."
+                                    }
+                                    if isPasswordItem && !isStrongPassword(item.password) {
+                                        return "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                    }
+                                    if isPasswordItem {
+                                        return "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                    }
+                                    return "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
+                                }())
+                                .foregroundStyle(muted)
+                            }
+
+                            DetailMetaCard(
+                                icon: "lock.shield.fill",
+                                title: "Zaštita stavke",
+                                value: store.sensitiveReauthEnabled && store.biometricEnabled
+                                    ? "Dodatna potvrda uključena"
+                                    : "Zaštita trezora",
+                                accent: cyan
+                            )
+                        }
+
+                        if selectedTab == "Aktivnost" {
+                            DetailMetaCard(
+                                icon: "clock.fill",
+                                title: "Zadnja izmjena",
+                                value: item.updatedAt.formatted(date: .abbreviated, time: .shortened),
+                                accent: indigo
+                            )
+
+                            GlassCard {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(cyan)
+                                Text("Aktivnost stavke")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                Text(
+                                    "Keyra trenutno čuva vrijeme posljednje izmjene stavke. Povijest svih pristupa i kopiranja ne zapisuje se u trezor."
+                                )
+                                .foregroundStyle(muted)
+                            }
+                        }
                     }
                     .padding(18)
                 }
@@ -3084,6 +3174,13 @@ struct DetailView: View {
                 Button("Odustani", role: .cancel) {}
             } message: {
                 Text("Ova radnja ne može se poništiti.")
+            }
+            .onChange(of: item.id) { _, _ in
+                selectedTab = "Detalji"
+                reveal = false
+                revealCardNumber = false
+                revealSecurityCode = false
+                revealDocumentNumber = false
             }
         }
     }
