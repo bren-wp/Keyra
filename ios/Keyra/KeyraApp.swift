@@ -1,5 +1,6 @@
 import SwiftUI
 import CryptoKit
+import CommonCrypto
 import LocalAuthentication
 import Security
 import UIKit
@@ -50,37 +51,47 @@ enum KeyraError: Error {
 }
 
 enum PasswordTools {
-    static func derive(_ password: String, salt: Data, iterations: Int = 120_000, keyLength: Int = 32) -> Data {
-        let passwordData = Data(password.utf8)
-        let key = SymmetricKey(data: passwordData)
-        var blockIndex = UInt32(1).bigEndian
-        var saltBlock = Data(salt)
-        withUnsafeBytes(of: &blockIndex) { saltBlock.append(contentsOf: $0) }
+    static let currentIterations = 600_000
 
-        var u = Data(HMAC<SHA256>.authenticationCode(for: saltBlock, using: key))
-        var result = [UInt8](u)
-
-        if iterations > 1 {
-            for _ in 2...iterations {
-                u = Data(HMAC<SHA256>.authenticationCode(for: u, using: key))
-                let bytes = [UInt8](u)
-                for i in 0..<result.count { result[i] ^= bytes[i] }
+    static func derive(_ password: String, salt: Data, iterations: Int = currentIterations, keyLength: Int = 32) -> Data {
+        let passwordBytes = Array(password.utf8)
+        var output = [UInt8](repeating: 0, count: keyLength)
+        let status = passwordBytes.withUnsafeBytes { passwordBuffer in
+            salt.withUnsafeBytes { saltBuffer in
+                CCKeyDerivationPBKDF(
+                    CCPBKDFAlgorithm(kCCPBKDF2),
+                    passwordBuffer.bindMemory(to: Int8.self).baseAddress,
+                    passwordBytes.count,
+                    saltBuffer.bindMemory(to: UInt8.self).baseAddress,
+                    salt.count,
+                    CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+                    UInt32(iterations),
+                    &output,
+                    keyLength
+                )
             }
         }
-        return Data(result.prefix(keyLength))
+        precondition(status == kCCSuccess, "Key derivation failed")
+        return Data(output)
     }
 
     static func generate(length: Int, upper: Bool, lower: Bool, numbers: Bool, symbols: Bool) -> String {
-        var pool = ""
-        if upper { pool += "ABCDEFGHIJKLMNOPQRSTUVWXYZ" }
-        if lower { pool += "abcdefghijklmnopqrstuvwxyz" }
-        if numbers { pool += "0123456789" }
-        if symbols { pool += "!@#$%&*+-_=.?" }
-        if pool.isEmpty { pool = "abcdefghijklmnopqrstuvwxyz" }
+        let selectedSets = [
+            upper ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" : "",
+            lower ? "abcdefghijklmnopqrstuvwxyz" : "",
+            numbers ? "0123456789" : "",
+            symbols ? "!@#$%&*+-_=.?" : ""
+        ].filter { !$0.isEmpty }
 
+        let sets = selectedSets.isEmpty ? ["abcdefghijklmnopqrstuvwxyz"] : selectedSets
+        let pool = Array(sets.joined())
         var rng = SystemRandomNumberGenerator()
-        let chars = Array(pool)
-        return String((0..<length).compactMap { _ in chars.randomElement(using: &rng) })
+        var result = sets.compactMap { Array($0).randomElement(using: &rng) }
+        while result.count < max(length, result.count) {
+            if let next = pool.randomElement(using: &rng) { result.append(next) }
+        }
+        result.shuffle(using: &rng)
+        return String(result.prefix(length))
     }
 }
 
@@ -93,6 +104,7 @@ enum KeychainVault {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -111,6 +123,7 @@ enum KeychainVault {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
             kSecValueData as String: data
         ]
@@ -124,6 +137,7 @@ enum KeychainVault {
 
 final class AuthStore {
     private let defaults = UserDefaults.standard
+    private let legacyIterations = 120_000
 
     var isSetup: Bool {
         defaults.data(forKey: "master_hash") != nil && defaults.data(forKey: "master_salt") != nil
@@ -135,6 +149,7 @@ final class AuthStore {
         let saltData = Data(salt)
         let hash = PasswordTools.derive(password, salt: saltData)
         defaults.set(saltData, forKey: "master_salt")
+        defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
         defaults.set(hash, forKey: "master_hash")
     }
 
@@ -143,7 +158,17 @@ final class AuthStore {
             let salt = defaults.data(forKey: "master_salt"),
             let expected = defaults.data(forKey: "master_hash")
         else { return false }
-        return PasswordTools.derive(password, salt: salt) == expected
+
+        let storedIterations = defaults.integer(forKey: "master_iterations")
+        let iterations = storedIterations > 0 ? storedIterations : legacyIterations
+        let actual = PasswordTools.derive(password, salt: salt, iterations: iterations)
+        let ok = actual == expected
+
+        if ok && iterations < PasswordTools.currentIterations {
+            defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
+            defaults.set(PasswordTools.derive(password, salt: salt), forKey: "master_hash")
+        }
+        return ok
     }
 }
 
@@ -174,19 +199,38 @@ enum PortableBackup {
         let clear = try JSONEncoder().encode(items)
         let sealed = try AES.GCM.seal(clear, using: key)
         guard let combined = sealed.combined else { throw KeyraError.invalidBackup }
-        return "KEYRA1." + saltData.base64EncodedString() + "." + combined.base64EncodedString()
+        return [
+            "KEYRA2",
+            String(PasswordTools.currentIterations),
+            saltData.base64EncodedString(),
+            combined.base64EncodedString()
+        ].joined(separator: ".")
     }
 
     static func decrypt(_ text: String, password: String) throws -> [VaultItem] {
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+
+        let iterations: Int
+        let saltPart: Substring
+        let payloadPart: Substring
+        if parts.count == 4, parts[0] == "KEYRA2", let parsed = Int(parts[1]), (100_000...2_000_000).contains(parsed) {
+            iterations = parsed
+            saltPart = parts[2]
+            payloadPart = parts[3]
+        } else if parts.count == 3, parts[0] == "KEYRA1" {
+            iterations = 120_000
+            saltPart = parts[1]
+            payloadPart = parts[2]
+        } else {
+            throw KeyraError.invalidBackup
+        }
+
         guard
-            parts.count == 3,
-            parts[0] == "KEYRA1",
-            let salt = Data(base64Encoded: String(parts[1])),
-            let combined = Data(base64Encoded: String(parts[2]))
+            let salt = Data(base64Encoded: String(saltPart)),
+            let combined = Data(base64Encoded: String(payloadPart))
         else { throw KeyraError.invalidBackup }
 
-        let key = SymmetricKey(data: PasswordTools.derive(password, salt: salt))
+        let key = SymmetricKey(data: PasswordTools.derive(password, salt: salt, iterations: iterations))
         let box = try AES.GCM.SealedBox(combined: combined)
         let clear = try AES.GCM.open(box, using: key)
         return try JSONDecoder().decode([VaultItem].self, from: clear)
@@ -360,6 +404,7 @@ struct KeyraApp: App {
 
 struct RootView: View {
     @EnvironmentObject var store: KeyraStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var splash = true
 
     var body: some View {
@@ -385,6 +430,19 @@ struct RootView: View {
                 }
             }
 
+            if scenePhase != .active && !splash {
+                ZStack {
+                    midnight.ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        KeyraMark(size: 88)
+                        Text("Keyra").font(.largeTitle.bold()).foregroundStyle(.white)
+                        Text("Trezor je zaključan radi vaše privatnosti.").foregroundStyle(muted)
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(50)
+            }
+
             if let message = store.message {
                 Text(message)
                     .font(.subheadline)
@@ -405,6 +463,11 @@ struct RootView: View {
             try? await Task.sleep(nanoseconds: 850_000_000)
             withAnimation(.easeOut(duration: 0.3)) { splash = false }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active && store.isSetup && store.screen != .unlock {
+                store.lock()
+            }
+        }
     }
 }
 
@@ -412,16 +475,53 @@ struct KeyraMark: View {
     var size: CGFloat = 74
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size / 4)
-            .fill(LinearGradient(colors: [cyan, Color(hex: 0x22BDF7), indigo], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(
-                Image(systemName: "lock.fill")
-                    .font(.system(size: size * 0.38, weight: .bold))
-                    .foregroundStyle(midnight)
-            )
-            .overlay(RoundedRectangle(cornerRadius: size / 4).stroke(ice.opacity(0.5), lineWidth: 1))
-            .frame(width: size, height: size)
-            .shadow(color: cyan.opacity(0.28), radius: 20)
+        ZStack {
+            RoundedRectangle(cornerRadius: size / 4)
+                .fill(midnight)
+
+            Canvas { context, canvas in
+                let w = canvas.width
+                let h = canvas.height
+
+                var left = Path()
+                left.move(to: CGPoint(x: w * 0.20, y: h * 0.14))
+                left.addLine(to: CGPoint(x: w * 0.43, y: h * 0.08))
+                left.addLine(to: CGPoint(x: w * 0.43, y: h * 0.43))
+                left.addLine(to: CGPoint(x: w * 0.68, y: h * 0.22))
+                left.addLine(to: CGPoint(x: w * 0.84, y: h * 0.28))
+                left.addLine(to: CGPoint(x: w * 0.55, y: h * 0.52))
+                left.addLine(to: CGPoint(x: w * 0.84, y: h * 0.79))
+                left.addLine(to: CGPoint(x: w * 0.65, y: h * 0.88))
+                left.addLine(to: CGPoint(x: w * 0.43, y: h * 0.65))
+                left.addLine(to: CGPoint(x: w * 0.43, y: h * 0.90))
+                left.addLine(to: CGPoint(x: w * 0.20, y: h * 0.78))
+                left.closeSubpath()
+
+                context.fill(
+                    left,
+                    with: .linearGradient(
+                        Gradient(colors: [cyan, Color(hex: 0x22BDF7), indigo]),
+                        startPoint: CGPoint(x: 0, y: 0),
+                        endPoint: CGPoint(x: w, y: h)
+                    )
+                )
+
+                let keyholeCenter = CGPoint(x: w * 0.50, y: h * 0.50)
+                let circle = Path(ellipseIn: CGRect(x: keyholeCenter.x - w * 0.07, y: keyholeCenter.y - h * 0.07, width: w * 0.14, height: h * 0.14))
+                context.fill(circle, with: .color(midnight))
+                var stem = Path()
+                stem.move(to: CGPoint(x: w * 0.47, y: h * 0.55))
+                stem.addLine(to: CGPoint(x: w * 0.53, y: h * 0.55))
+                stem.addLine(to: CGPoint(x: w * 0.58, y: h * 0.73))
+                stem.addLine(to: CGPoint(x: w * 0.42, y: h * 0.73))
+                stem.closeSubpath()
+                context.fill(stem, with: .color(midnight))
+            }
+            .padding(size * 0.08)
+        }
+        .overlay(RoundedRectangle(cornerRadius: size / 4).stroke(cyan.opacity(0.65), lineWidth: 1))
+        .frame(width: size, height: size)
+        .shadow(color: cyan.opacity(0.28), radius: 20)
     }
 }
 
