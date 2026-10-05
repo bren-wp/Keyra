@@ -20,7 +20,7 @@ Za trenutačni build tehnička implementacija ne šalje sadržaj trezora, glavnu
 
 Kada korisnik izričito odabere spremanje .keyra datoteke u cloud kroz sistemski picker, Keyra lokalno izradi šifriranu KEYRA2 datoteku i predaje je odabranom OS/provider sučelju. Keyra ne prima vjerodajnice cloud providera i nema svoj poslužitelj u tom toku.
 
-Ako Play Console promijeni tumačenje user-directed transfera kroz third-party document provider, odgovor u konzoli treba prilagoditi njihovoj tada važećoj definiciji. Ne treba automatski kopirati ovaj dokument bez provjere obrasca.
+Google Play traži da Data safety odgovori budu potpuni, točni i usklađeni s privacy policyjem. Ako se tumačenje user-directed transfera kroz third-party document provider ili formular promijeni, odgovor u konzoli treba prilagoditi tada važećim definicijama. Ne treba automatski kopirati ovaj dokument bez provjere obrasca.
 
 ## Security practices
 
