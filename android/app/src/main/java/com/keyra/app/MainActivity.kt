@@ -286,6 +286,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         sessionPassword = null
         items.clear()
         selected = null
+        vaultCategoryFilter = null
+        vaultTypeFilter = null
         screen = Screen.UNLOCK
     }
 
