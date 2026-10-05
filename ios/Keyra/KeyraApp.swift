@@ -594,6 +594,9 @@ enum PortableBackup {
                 guard decoded.count <= maxVaultItems else {
                     throw KeyraError.invalidBackup
                 }
+                guard Set(decoded.map(\.id)).count == decoded.count else {
+                    throw KeyraError.invalidBackup
+                }
                 return decoded
             } catch {
                 lastError = error
