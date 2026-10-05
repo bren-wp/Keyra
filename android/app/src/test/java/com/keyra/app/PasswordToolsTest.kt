@@ -105,6 +105,28 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun portableTimestampKeepsUnixMilliseconds() {
+        val timestamp = 1_796_675_123_000.0
+        assertEquals(timestamp.toLong(), normalizePortableUpdatedAt(timestamp, fallback = 1L))
+    }
+
+    @Test
+    fun portableTimestampMigratesLegacyIOSReferenceSeconds() {
+        val iosReferenceSeconds = 783_000_000.0
+        val expectedUnixMilliseconds = ((iosReferenceSeconds + 978_307_200.0) * 1000.0).toLong()
+        assertEquals(
+            expectedUnixMilliseconds,
+            normalizePortableUpdatedAt(iosReferenceSeconds, fallback = 1L)
+        )
+    }
+
+    @Test
+    fun portableTimestampUsesFallbackForInvalidValues() {
+        assertEquals(1234L, normalizePortableUpdatedAt(Double.NaN, fallback = 1234L))
+        assertEquals(1234L, normalizePortableUpdatedAt(0.0, fallback = 1234L))
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
