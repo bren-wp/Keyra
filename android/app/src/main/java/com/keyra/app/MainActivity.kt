@@ -502,6 +502,7 @@ private fun KeyraRoot(model: KeyraViewModel, requestBiometric: () -> Unit) {
             Screen.ADD -> AddScreen(model)
             Screen.DETAIL -> DetailScreen(model)
             Screen.SETTINGS -> MainScaffold(model, Screen.SETTINGS) { SettingsScreen(model) }
+            Screen.SECURITY -> MainScaffold(model, Screen.SETTINGS) { SecurityScreen(model) }
         }
         model.message?.let { msg ->
             LaunchedEffect(msg) { delay(2600); model.message = null }
