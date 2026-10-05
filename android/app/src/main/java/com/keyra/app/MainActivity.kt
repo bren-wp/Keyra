@@ -2452,7 +2452,7 @@ private fun SettingsScreen(
                 }
             }
             item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
+            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
             item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Logout, null)
