@@ -439,7 +439,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             items.clear()
             items.addAll(imported)
             selected = null
-            message = "Sigurnosna kopija uspješno je uvezena."
+            clearClipboardIfMatches(context, text)
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         }.onFailure {
             message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
         }
