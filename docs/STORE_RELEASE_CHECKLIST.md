@@ -9,6 +9,7 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 - [ ] Smoke test na stvarnom Android i iOS uređaju.
 - [ ] Novi trezor, otključavanje, biometrija, auto-lock, dodavanje/uređivanje/brisanje i favoriti rade.
 - [ ] TOTP kodovi potvrđeni su RFC 6238 testovima i barem jednim stvarnim servisom.
+- [ ] Potpuno lokalno brisanje potvrđeno je na stvarnom uređaju i nakon njega se stari trezor više ne može otvoriti.
 - [ ] KEYRA2 backup Android → iOS i iOS → Android uspješno je vraćen.
 - [ ] .keyra izvoz/uvoz kroz sistemski Files/Document picker radi.
 - [ ] Screenshot/screen-record zaštita ponovno provjerena.
