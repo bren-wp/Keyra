@@ -290,11 +290,13 @@ final class KeyraStore: ObservableObject {
     func select(_ item: VaultItem) { selected = item; screen = .detail }
 
     func createVault(password: String) -> Bool {
-        guard password.count >= 8 else {
-            message = "Glavna lozinka mora imati najmanje 8 znakova."
+        guard password.count >= 12 else {
+            message = "Glavna lozinka mora imati najmanje 12 znakova."
             return false
         }
         auth.create(password: password)
+        defaults.removeObject(forKey: "unlock_failed_attempts")
+        defaults.removeObject(forKey: "unlock_lockout_until")
         isSetup = true
         sessionPassword = password
         items = seedItems()
@@ -304,10 +306,33 @@ final class KeyraStore: ObservableObject {
     }
 
     func unlock(password: String) -> Bool {
-        guard auth.verify(password: password) else {
-            message = "Glavna lozinka nije ispravna."
+        let now = Date().timeIntervalSince1970
+        let lockoutUntil = defaults.double(forKey: "unlock_lockout_until")
+        if lockoutUntil > now {
+            let seconds = max(1, Int(ceil(lockoutUntil - now)))
+            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
             return false
         }
+
+        guard auth.verify(password: password) else {
+            let attempts = defaults.integer(forKey: "unlock_failed_attempts") + 1
+            let penalty: TimeInterval
+            switch attempts {
+            case 10...: penalty = 300
+            case 7...: penalty = 60
+            case 5...: penalty = 30
+            default: penalty = 0
+            }
+            defaults.set(attempts, forKey: "unlock_failed_attempts")
+            defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
+            message = penalty > 0
+                ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+                : "Glavna lozinka nije ispravna."
+            return false
+        }
+
+        defaults.removeObject(forKey: "unlock_failed_attempts")
+        defaults.removeObject(forKey: "unlock_lockout_until")
         sessionPassword = password
         load()
         screen = .vault
