@@ -59,6 +59,8 @@ import org.json.JSONObject
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.text.DateFormat
+import java.util.Date
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -67,9 +69,9 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 
-private val Midnight = Color(0xFF06111F)
-private val Slate = Color(0xFF0B2034)
-private val Slate2 = Color(0xFF121826)
+private val Midnight = Color(0xFF0B0F14)
+private val Slate = Color(0xFF121826)
+private val Slate2 = Color(0xFF172033)
 private val Cyan = Color(0xFF00E5D1)
 private val Ice = Color(0xFF7DD3FC)
 private val Indigo = Color(0xFF6366F1)
@@ -171,10 +173,24 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
     var sensitiveReauthEnabled by mutableStateOf(prefs.getBoolean("sensitive_reauth_enabled", true))
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
+    var importingNewVault by mutableStateOf(false)
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
 
-    fun startCreate() { screen = Screen.UNLOCK }
+    fun startCreate() {
+        importingNewVault = false
+        screen = Screen.UNLOCK
+    }
+
+    fun startImport() {
+        importingNewVault = true
+        screen = Screen.UNLOCK
+    }
+
+    fun cancelSetup() {
+        importingNewVault = false
+        if (!isSetup) screen = Screen.ONBOARDING
+    }
 
     fun open(screen: Screen) {
         if (screen == Screen.VAULT) {
@@ -204,26 +220,79 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
 
-        val created = runCatching {
-            store.save(emptyList())
-            auth.create(password)
-        }.isSuccess
-
-        if (!created) {
+        if (runCatching { store.save(emptyList()) }.isFailure) {
             message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
             return false
         }
+        if (!auth.create(password)) {
+            store.clear()
+            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Pokušajte ponovno."
+            return false
+        }
 
+        finishInitialSetup(password, emptyList())
+        return true
+    }
+
+    fun importNewVault(context: Context, password: String): Boolean {
+        if (password.length < 12) {
+            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
+            return false
+        }
+
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip
+        val payload = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
+        } else {
+            ""
+        }
+        if (payload.isBlank()) {
+            message = "Međuspremnik ne sadrži Keyra sigurnosnu kopiju."
+            return false
+        }
+        if (payload.length > MAX_BACKUP_CHARS) {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
+            return false
+        }
+
+        val imported = runCatching {
+            val json = PortableBackup.decrypt(payload, password)
+            store.fromJson(json)
+        }.getOrElse {
+            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            return false
+        }
+
+        if (runCatching { store.save(imported) }.isFailure) {
+            message = "Uvezeni trezor nije moguće trajno spremiti. Postojeći podaci nisu promijenjeni."
+            return false
+        }
+        if (!auth.create(password)) {
+            store.clear()
+            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
+            return false
+        }
+
+        clearClipboardIfMatches(context, payload)
+        finishInitialSetup(password, imported)
+        message = "Keyra trezor uspješno je uvezen."
+        return true
+    }
+
+    private fun finishInitialSetup(password: String, initialItems: List<VaultItem>) {
         prefs.edit()
             .remove("unlock_failed_attempts")
             .remove("unlock_lockout_until")
             .apply()
         isSetup = true
+        importingNewVault = false
         sessionPassword = password
         unlocked = true
         items.clear()
+        items.addAll(initialItems)
+        selected = null
         screen = Screen.VAULT
-        return true
     }
 
     fun unlock(password: String): Boolean {
@@ -446,13 +515,13 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
 
     fun isSetup() = prefs.contains("master_hash")
 
-    fun create(password: String) {
+    fun create(password: String): Boolean {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        prefs.edit()
+        return prefs.edit()
             .putString("master_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
             .putInt("master_iterations", CURRENT_ITERATIONS)
             .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
-            .apply()
+            .commit()
     }
 
     fun verify(password: String): Boolean {
@@ -532,8 +601,13 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore()
 
     fun save(items: List<VaultItem>) {
-        prefs.edit().putString("vault_blob", crypto.encrypt(toJson(items))).apply()
+        val encrypted = crypto.encrypt(toJson(items))
+        check(prefs.edit().putString("vault_blob", encrypted).commit()) {
+            "Trezor nije moguće trajno spremiti."
+        }
     }
+
+    fun clear(): Boolean = prefs.edit().remove("vault_blob").commit()
 
     fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
@@ -894,19 +968,33 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 Spacer(Modifier.height(12.dp))
             }
 
-            Button(
-                onClick = model::startCreate,
-                modifier = Modifier
+            Column(
+                Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 10.dp)
                     .navigationBarsPadding()
-                    .height(if (compact) 52.dp else 58.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-                shape = RoundedCornerShape(28.dp)
+                    .padding(top = 8.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Kreni", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+                Button(
+                    onClick = model::startCreate,
+                    modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 58.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                    shape = RoundedCornerShape(28.dp)
+                ) {
+                    Text("Izradi trezor", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+                }
+                OutlinedButton(
+                    onClick = model::startImport,
+                    modifier = Modifier.fillMaxWidth().height(if (compact) 48.dp else 54.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .72f)),
+                    shape = RoundedCornerShape(27.dp)
+                ) {
+                    Icon(Icons.Outlined.Download, contentDescription = null, tint = Cyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Uvezi Keyra trezor", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -967,6 +1055,8 @@ private fun UnlockScreen(
     var confirm by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
     val creating = !model.isSetup
+    val importing = creating && model.importingNewVault
+    val context = LocalContext.current
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 700.dp || maxWidth < 360.dp
@@ -1003,30 +1093,49 @@ private fun UnlockScreen(
 
                 GlassCard {
                     Text(
-                        if (creating) "Izradite trezor" else "Otključajte trezor",
+                        when {
+                            importing -> "Uvezite Keyra trezor"
+                            creating -> "Izradite trezor"
+                            else -> "Otključajte trezor"
+                        },
                         color = Color.White,
                         fontSize = if (compact) 26.sp else 31.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        if (creating) "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
-                        else "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.",
+                        when {
+                            importing -> "Kopirajte šifriranu Keyra sigurnosnu kopiju u međuspremnik i unesite njezinu glavnu lozinku."
+                            creating -> "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
+                            else -> "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru."
+                        },
                         color = Muted,
                         fontSize = if (compact) 14.sp else 16.sp
                     )
                     Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
                     KeyraPasswordField(password, { password = it }, show, { show = !show }, "Glavna lozinka")
-                    if (creating) {
+                    if (creating && !importing) {
                         Spacer(Modifier.height(10.dp))
                         KeyraPasswordField(confirm, { confirm = it }, show, { show = !show }, "Ponovite glavnu lozinku")
+                    }
+                    if (importing) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Uvoz prihvaća šifriranu Keyra sigurnosnu kopiju i neće zamijeniti podatke ako provjera ili spremanje ne uspiju.",
+                            color = Muted,
+                            fontSize = 12.sp
+                        )
                     }
                     Spacer(Modifier.height(if (compact) 12.dp else 16.dp))
                     Button(
                         onClick = {
-                            if (creating) {
-                                if (password != confirm) model.message = "Lozinke se ne podudaraju."
-                                else model.createVault(password)
-                            } else model.unlock(password)
+                            when {
+                                importing -> model.importNewVault(context, password)
+                                creating -> {
+                                    if (password != confirm) model.message = "Lozinke se ne podudaraju."
+                                    else model.createVault(password)
+                                }
+                                else -> model.unlock(password)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
@@ -1034,7 +1143,15 @@ private fun UnlockScreen(
                     ) {
                         Icon(Icons.Outlined.Lock, null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (creating) "Izradi trezor" else "Otključaj", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            when {
+                                importing -> "Uvezi trezor"
+                                creating -> "Izradi trezor"
+                                else -> "Otključaj"
+                            },
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     if (!creating && model.biometricEnabled) {
@@ -1054,6 +1171,13 @@ private fun UnlockScreen(
                             Spacer(Modifier.width(8.dp))
                             Text("Biometrijsko otključavanje", color = Color.White, maxLines = 1)
                         }
+                    }
+                }
+                if (creating) {
+                    TextButton(onClick = model::cancelSetup) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = null, tint = Ice)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Natrag", color = Ice)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -1161,7 +1285,7 @@ private fun RowScope.NavItem(
     )
 }
 
-private fun isStrongPassword(password: String): Boolean {
+internal fun isStrongPassword(password: String): Boolean {
     if (password.length < 14) return false
     val classes = listOf(
         password.any(Char::isUpperCase),
@@ -1665,7 +1789,27 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     var numbers by remember { mutableStateOf(true) }
     var symbols by remember { mutableStateOf(true) }
     var password by remember { mutableStateOf(generatePassword(16, true, true, true, true)) }
-    fun refresh() { password = generatePassword(length.toInt(), upper, lower, numbers, symbols) }
+    var preset by remember { mutableStateOf("Snažna") }
+
+    fun refresh() {
+        password = generatePassword(length.toInt(), upper, lower, numbers, symbols)
+    }
+
+    fun applyPreset(name: String) {
+        preset = name
+        when (name) {
+            "Jednostavna" -> {
+                length = 12f; upper = true; lower = true; numbers = true; symbols = false
+            }
+            "Maksimalna" -> {
+                length = 32f; upper = true; lower = true; numbers = true; symbols = true
+            }
+            else -> {
+                length = 16f; upper = true; lower = true; numbers = true; symbols = true
+            }
+        }
+        refresh()
+    }
 
     val poolSize = (if (upper) 26 else 0) +
         (if (lower) 26 else 0) +
@@ -1721,20 +1865,49 @@ private fun GeneratorScreen(model: KeyraViewModel) {
             }
             item {
                 GlassCard {
+                    Text("Zadana jačina", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Jednostavna", "Snažna", "Maksimalna", "Prilagodi").forEach { name ->
+                            FilterChip(
+                                selected = preset == name,
+                                onClick = {
+                                    if (name == "Prilagodi") preset = name else applyPreset(name)
+                                },
+                                label = { Text(name) }
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                GlassCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Duljina lozinke", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Text(length.toInt().toString(), color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
-                    Slider(value = length, onValueChange = { length = it; refresh() }, valueRange = 8f..64f, steps = 55)
+                    Slider(
+                        value = length,
+                        onValueChange = {
+                            length = it
+                            preset = "Prilagodi"
+                            refresh()
+                        },
+                        valueRange = 8f..64f,
+                        steps = 55
+                    )
                 }
             }
             item {
                 GlassCard {
                     Text("Vrste znakova", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    GeneratorToggle("Velika slova (A–Z)", upper) { upper = it; refresh() }
-                    GeneratorToggle("Mala slova (a–z)", lower) { lower = it; refresh() }
-                    GeneratorToggle("Brojevi (0–9)", numbers) { numbers = it; refresh() }
-                    GeneratorToggle("Simboli (!@#...)", symbols) { symbols = it; refresh() }
+                    GeneratorToggle("Velika slova (A–Z)", upper) { upper = it; preset = "Prilagodi"; refresh() }
+                    GeneratorToggle("Mala slova (a–z)", lower) { lower = it; preset = "Prilagodi"; refresh() }
+                    GeneratorToggle("Brojevi (0–9)", numbers) { numbers = it; preset = "Prilagodi"; refresh() }
+                    GeneratorToggle("Simboli (!@#...)", symbols) { symbols = it; preset = "Prilagodi"; refresh() }
                 }
             }
             item {
@@ -1768,7 +1941,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 }
 
-private fun generatePassword(length: Int, upper: Boolean, lower: Boolean, numbers: Boolean, symbols: Boolean): String {
+internal fun generatePassword(length: Int, upper: Boolean, lower: Boolean, numbers: Boolean, symbols: Boolean): String {
     val sets = buildList {
         if (upper) add("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         if (lower) add("abcdefghijklmnopqrstuvwxyz")
@@ -1969,8 +2142,23 @@ private fun AddScreen(model: KeyraViewModel) {
             item {
                 Button(
                     onClick = {
-                        if (title.isBlank()) {
-                            model.message = "Unesite naslov stavke."
+                        val cleanTitle = title.trim()
+                        val validationMessage = when {
+                            cleanTitle.isBlank() -> "Unesite naslov stavke."
+                            type == "Prijava" && website.isNotBlank() && normalizedWebsiteUri(website) == null ->
+                                "Web-adresa nije valjana. Unesite ispravnu HTTP ili HTTPS adresu."
+                            type == "Wi-Fi" && field1.isBlank() ->
+                                "Unesite naziv Wi-Fi mreže."
+                            type == "Kartica" && field2.isNotBlank() && field2.length !in 12..19 ->
+                                "Broj kartice mora sadržavati između 12 i 19 znamenki."
+                            type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
+                                "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            type == "Identitet" && field1.isBlank() && field2.isBlank() ->
+                                "Unesite puno ime ili broj dokumenta."
+                            else -> null
+                        }
+                        if (validationMessage != null) {
+                            model.message = validationMessage
                         } else {
                             val extra = when (type) {
                                 "Kartica" -> mapOf(
@@ -1994,7 +2182,7 @@ private fun AddScreen(model: KeyraViewModel) {
                             model.saveItem(
                                 VaultItem(
                                     id = original?.id ?: UUID.randomUUID().toString(),
-                                    title = title.trim(),
+                                    title = cleanTitle,
                                     website = if (type == "Prijava") website.trim() else "",
                                     username = if (type == "Prijava" || type == "Wi-Fi") username.trim() else "",
                                     password = if (type == "Prijava" || type == "Wi-Fi") password else "",
@@ -2049,6 +2237,21 @@ private fun DetailScreen(
     var revealDocumentNumber by remember(current.id) { mutableStateOf(false) }
     var confirmDelete by remember(current.id) { mutableStateOf(false) }
     val context = LocalContext.current
+    val isPasswordItem = current.type == "Prijava" || current.type == "Wi-Fi"
+    val securityLabel = when {
+        isPasswordItem && current.password.isBlank() -> "Bez lozinke"
+        isPasswordItem && isStrongPassword(current.password) -> "Snažna"
+        isPasswordItem -> "Potrebno ažuriranje"
+        else -> "Zaštićena"
+    }
+    val securityColor = when (securityLabel) {
+        "Snažna", "Zaštićena" -> Good
+        "Potrebno ažuriranje" -> Warn
+        else -> Muted
+    }
+    val updatedLabel = remember(current.updatedAt) {
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(current.updatedAt))
+    }
 
     fun guarded(reason: String, action: () -> Unit) {
         if (model.sensitiveReauthEnabled && model.biometricEnabled) {
@@ -2252,6 +2455,46 @@ private fun DetailScreen(
             }
 
             item {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth < 500.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            DetailMetaCard(
+                                icon = Icons.Outlined.Security,
+                                label = "Ocjena sigurnosti",
+                                value = securityLabel,
+                                accent = securityColor,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            DetailMetaCard(
+                                icon = Icons.Outlined.Schedule,
+                                label = "Zadnje ažurirano",
+                                value = updatedLabel,
+                                accent = Indigo,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            DetailMetaCard(
+                                icon = Icons.Outlined.Security,
+                                label = "Ocjena sigurnosti",
+                                value = securityLabel,
+                                accent = securityColor,
+                                modifier = Modifier.weight(1f)
+                            )
+                            DetailMetaCard(
+                                icon = Icons.Outlined.Schedule,
+                                label = "Zadnje ažurirano",
+                                value = updatedLabel,
+                                accent = Indigo,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(
                         onClick = model::editSelected,
@@ -2276,6 +2519,36 @@ private fun DetailScreen(
             }
         }
         }
+        }
+    }
+}
+
+@Composable
+private fun DetailMetaCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = .45f))
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent.copy(alpha = .14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = accent)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(label, color = Muted, fontSize = 12.sp)
+                Text(value, color = if (label == "Ocjena sigurnosti") accent else Color.White, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -2622,9 +2895,9 @@ private fun keyraFieldColors() = OutlinedTextFieldDefaults.colors(
 )
 
 
-private fun openWebsite(context: Context, raw: String): Boolean {
+private fun normalizedWebsiteUri(raw: String): Uri? {
     val trimmed = raw.trim()
-    if (trimmed.isBlank()) return false
+    if (trimmed.isBlank()) return null
 
     val normalized = if (
         trimmed.startsWith("https://", ignoreCase = true) ||
@@ -2635,8 +2908,13 @@ private fun openWebsite(context: Context, raw: String): Boolean {
         "https://$trimmed"
     }
 
-    val uri = runCatching { Uri.parse(normalized) }.getOrNull() ?: return false
-    if (uri.scheme !in listOf("https", "http") || uri.host.isNullOrBlank()) return false
+    val uri = runCatching { Uri.parse(normalized) }.getOrNull() ?: return null
+    if (uri.scheme?.lowercase() !in listOf("https", "http") || uri.host.isNullOrBlank()) return null
+    return uri
+}
+
+private fun openWebsite(context: Context, raw: String): Boolean {
+    val uri = normalizedWebsiteUri(raw) ?: return false
 
     return runCatching {
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -2646,6 +2924,20 @@ private fun openWebsite(context: Context, raw: String): Boolean {
         context.startActivity(intent)
         true
     }.getOrDefault(false)
+}
+
+private fun clearClipboardIfMatches(context: Context, expected: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = clipboard.primaryClip
+    val current = if (clip != null && clip.itemCount > 0) {
+        clip.getItemAt(0).coerceToText(context)?.toString()
+    } else {
+        null
+    }
+    if (current == expected) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+        else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+    }
 }
 
 private fun copy(context: Context, text: String) {
