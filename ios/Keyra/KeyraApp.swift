@@ -6,9 +6,9 @@ import Security
 import UIKit
 import UniformTypeIdentifiers
 
-private let midnight = Color(hex: 0x06111F)
-private let slate = Color(hex: 0x0B2034)
-private let slate2 = Color(hex: 0x121826)
+private let midnight = Color(hex: 0x0B0F14)
+private let slate = Color(hex: 0x121826)
+private let slate2 = Color(hex: 0x172033)
 private let cyan = Color(hex: 0x00E5D1)
 private let ice = Color(hex: 0x7DD3FC)
 private let indigo = Color(hex: 0x6366F1)
@@ -271,19 +271,66 @@ final class AuthStore {
 
 final class EncryptedVault {
     private let defaults = UserDefaults.standard
+    private let legacyKey = "vault_blob"
+
+    private func storageURL() throws -> URL {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw KeyraError.keyUnavailable
+        }
+
+        var directory = root.appendingPathComponent("Keyra", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? directory.setResourceValues(values)
+        return directory.appendingPathComponent("vault.bin", isDirectory: false)
+    }
 
     func save(_ items: [VaultItem]) throws {
         let data = try JSONEncoder().encode(items)
         let sealed = try AES.GCM.seal(data, using: KeychainVault.key())
         guard let combined = sealed.combined else { throw KeyraError.invalidData }
-        defaults.set(combined, forKey: "vault_blob")
+
+        let url = try storageURL()
+        try combined.write(to: url, options: [.atomic, .completeFileProtection])
+        defaults.removeObject(forKey: legacyKey)
     }
 
     func load() throws -> [VaultItem] {
-        guard let data = defaults.data(forKey: "vault_blob") else { return [] }
+        let url = try storageURL()
+        let data: Data
+        let migratedFromDefaults: Bool
+
+        if FileManager.default.fileExists(atPath: url.path) {
+            data = try Data(contentsOf: url)
+            migratedFromDefaults = false
+        } else if let legacy = defaults.data(forKey: legacyKey) {
+            data = legacy
+            migratedFromDefaults = true
+        } else {
+            return []
+        }
+
         let box = try AES.GCM.SealedBox(combined: data)
         let clear = try AES.GCM.open(box, using: KeychainVault.key())
-        return try JSONDecoder().decode([VaultItem].self, from: clear)
+        let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+
+        if migratedFromDefaults {
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            defaults.removeObject(forKey: legacyKey)
+        }
+        return decoded
+    }
+
+    func clear() {
+        if let url = try? storageURL(), FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+        defaults.removeObject(forKey: legacyKey)
     }
 }
 
@@ -361,6 +408,7 @@ final class KeyraStore: ObservableObject {
     @Published var sensitiveReauthEnabled: Bool
     @Published var autoLockSeconds: Int
     @Published var isSetup: Bool
+    @Published var importingNewVault = false
 
     private var sessionPassword: String?
 
@@ -375,7 +423,20 @@ final class KeyraStore: ObservableObject {
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
-    func startCreate() { screen = .unlock }
+    func startCreate() {
+        importingNewVault = false
+        screen = .unlock
+    }
+
+    func startImport() {
+        importingNewVault = true
+        screen = .unlock
+    }
+
+    func cancelSetup() {
+        importingNewVault = false
+        if !isSetup { screen = .onboarding }
+    }
 
     func open(_ target: KeyraScreen) {
         if target == .vault {
@@ -412,17 +473,61 @@ final class KeyraStore: ObservableObject {
         }
 
         guard auth.create(password: password) else {
-            message = "Zaštitu glavne lozinke nije moguće postaviti. Pokušajte ponovno."
+            vault.clear()
+            message = "Zaštitu glavne lozinke nije moguće postaviti. Spremanje je poništeno."
             return false
         }
 
+        finishInitialSetup(password: password, initialItems: [])
+        return true
+    }
+
+    func importNewVault(password: String) -> Bool {
+        guard password.count >= 12 else {
+            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
+            return false
+        }
+        guard let payload = UIPasteboard.general.string, !payload.isEmpty else {
+            message = "Međuspremnik ne sadrži Keyra sigurnosnu kopiju."
+            return false
+        }
+        guard payload.utf8.count <= 2_500_000 else {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
+            return false
+        }
+
+        let imported: [VaultItem]
+        do {
+            imported = try PortableBackup.decrypt(payload, password: password)
+            try vault.save(imported)
+        } catch {
+            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
+            return false
+        }
+
+        guard auth.create(password: password) else {
+            vault.clear()
+            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
+            return false
+        }
+
+        if UIPasteboard.general.string == payload {
+            UIPasteboard.general.items = []
+        }
+        finishInitialSetup(password: password, initialItems: imported)
+        message = "Keyra trezor uspješno je uvezen."
+        return true
+    }
+
+    private func finishInitialSetup(password: String, initialItems: [VaultItem]) {
         defaults.removeObject(forKey: "unlock_failed_attempts")
         defaults.removeObject(forKey: "unlock_lockout_until")
         isSetup = true
+        importingNewVault = false
         sessionPassword = password
-        items = []
+        items = initialItems
+        selected = nil
         screen = .vault
-        return true
     }
 
     func unlock(password: String) -> Bool {
@@ -648,6 +753,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var splash = true
     @State private var backgroundedAt: Date?
+    @State private var screenCaptured = UIScreen.main.isCaptured
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -673,13 +779,20 @@ struct RootView: View {
                 }
             }
 
-            if scenePhase != .active && !splash {
+            if (scenePhase != .active || screenCaptured) && !splash {
                 ZStack {
                     midnight.ignoresSafeArea()
                     VStack(spacing: 14) {
                         KeyraMark(size: 88)
                         Text("Keyra").font(.largeTitle.bold()).foregroundStyle(.white)
-                        Text("Trezor je zaključan radi vaše privatnosti.").foregroundStyle(muted)
+                        Text(
+                            screenCaptured
+                                ? "Sadržaj je skriven dok je aktivno snimanje zaslona."
+                                : "Trezor je zaključan radi vaše privatnosti."
+                        )
+                        .foregroundStyle(muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                     }
                 }
                 .transition(.opacity)
@@ -705,6 +818,9 @@ struct RootView: View {
         .task {
             try? await Task.sleep(nanoseconds: 850_000_000)
             withAnimation(.easeOut(duration: 0.3)) { splash = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
+            screenCaptured = UIScreen.main.isCaptured
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background && store.isSetup && store.screen != .unlock {
@@ -967,20 +1083,36 @@ struct OnboardingView: View {
                     .padding(.bottom, 8)
                 }
 
-                Button {
-                    store.startCreate()
-                } label: {
-                    HStack {
-                        Text("Kreni").fontWeight(.bold)
-                        Image(systemName: "arrow.right")
+                VStack(spacing: 8) {
+                    Button {
+                        store.startCreate()
+                    } label: {
+                        HStack {
+                            Text("Izradi trezor").fontWeight(.bold)
+                            Image(systemName: "arrow.right")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 50 : 56)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: compact ? 50 : 56)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(midnight)
+                    .background(cyan)
+                    .clipShape(Capsule())
+
+                    Button {
+                        store.startImport()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.down")
+                            Text("Uvezi Keyra trezor").fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 46 : 52)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .overlay(Capsule().stroke(cyan.opacity(0.72), lineWidth: 1))
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(midnight)
-                .background(cyan)
-                .clipShape(Capsule())
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
@@ -996,6 +1128,7 @@ struct UnlockView: View {
     @State private var reveal = false
 
     private var creating: Bool { !store.isSetup }
+    private var importing: Bool { creating && store.importingNewVault }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1012,19 +1145,37 @@ struct UnlockView: View {
                     .foregroundStyle(muted)
 
                 GlassCard {
-                    Text(creating ? "Izradite trezor" : "Otključajte trezor")
-                        .font(.system(size: compact ? 26 : 31, weight: .black))
-                        .foregroundStyle(.white)
-                    Text(creating ? "Postavite glavnu lozinku kojom ćete otključavati svoj trezor." : "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.")
-                        .foregroundStyle(muted)
+                    Text(
+                        importing
+                            ? "Uvezite Keyra trezor"
+                            : (creating ? "Izradite trezor" : "Otključajte trezor")
+                    )
+                    .font(.system(size: compact ? 26 : 31, weight: .black))
+                    .foregroundStyle(.white)
+
+                    Text(
+                        importing
+                            ? "Kopirajte šifriranu Keyra sigurnosnu kopiju u međuspremnik i unesite njezinu glavnu lozinku."
+                            : (creating
+                                ? "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
+                                : "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.")
+                    )
+                    .foregroundStyle(muted)
 
                     SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal)
-                    if creating {
+                    if creating && !importing {
                         SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal)
+                    }
+                    if importing {
+                        Text("Uvoz neće zamijeniti podatke ako provjera ili trajno spremanje ne uspiju.")
+                            .font(.caption)
+                            .foregroundStyle(muted)
                     }
 
                     Button {
-                        if creating {
+                        if importing {
+                            _ = store.importNewVault(password: password)
+                        } else if creating {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
                             else { _ = store.createVault(password: password) }
                         } else {
@@ -1033,7 +1184,7 @@ struct UnlockView: View {
                     } label: {
                         HStack {
                             Image(systemName: "lock.fill")
-                            Text(creating ? "Izradi trezor" : "Otključaj").fontWeight(.bold)
+                            Text(importing ? "Uvezi trezor" : (creating ? "Izradi trezor" : "Otključaj")).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -1042,6 +1193,18 @@ struct UnlockView: View {
                     .foregroundStyle(midnight)
                     .background(cyan)
                     .clipShape(Capsule())
+
+                    if creating {
+                        Button {
+                            store.cancelSetup()
+                        } label: {
+                            Label("Natrag", systemImage: "chevron.left")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(ice)
+                    }
 
                     if !creating && store.biometricEnabled {
                         Button {
@@ -1658,6 +1821,37 @@ struct GeneratorView: View {
     @State private var symbols = true
     @State private var password = PasswordTools.generate(length: 16, upper: true, lower: true, numbers: true, symbols: true)
 
+    private var presetName: String {
+        if length == 12 && upper && lower && numbers && !symbols { return "Jednostavna" }
+        if length == 16 && upper && lower && numbers && symbols { return "Snažna" }
+        if length == 32 && upper && lower && numbers && symbols { return "Maksimalna" }
+        return "Prilagodi"
+    }
+
+    private func applyPreset(_ name: String) {
+        switch name {
+        case "Jednostavna":
+            length = 12
+            upper = true
+            lower = true
+            numbers = true
+            symbols = false
+        case "Maksimalna":
+            length = 32
+            upper = true
+            lower = true
+            numbers = true
+            symbols = true
+        default:
+            length = 16
+            upper = true
+            lower = true
+            numbers = true
+            symbols = true
+        }
+        refresh()
+    }
+
     private func refresh() {
         password = PasswordTools.generate(length: Int(length), upper: upper, lower: lower, numbers: numbers, symbols: symbols)
     }
@@ -1710,6 +1904,31 @@ struct GeneratorView: View {
                             Text("~\(entropyBits) bita entropije")
                                 .font(.caption)
                                 .foregroundStyle(muted)
+                        }
+                    }
+
+                    GlassCard {
+                        Text("Zadana jačina")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(["Jednostavna", "Snažna", "Maksimalna", "Prilagodi"], id: \.self) { name in
+                                    Button(name) {
+                                        if name != "Prilagodi" {
+                                            applyPreset(name)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(presetName == name ? midnight : .white)
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 8)
+                                    .background(presetName == name ? cyan : slate2)
+                                    .overlay(Capsule().stroke(cyan.opacity(presetName == name ? 0 : 0.45), lineWidth: 1))
+                                    .clipShape(Capsule())
+                                }
+                            }
                         }
                     }
 
@@ -1978,8 +2197,32 @@ struct AddEditView: View {
                     }
 
                     Button {
-                        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                            store.message = "Unesite naslov stavke."
+                        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let validationMessage: String? = {
+                            if cleanTitle.isEmpty {
+                                return "Unesite naslov stavke."
+                            }
+                            if type == "Prijava", !website.isEmpty, normalizedWebURL(website) == nil {
+                                return "Web-adresa nije valjana. Unesite ispravnu HTTP ili HTTPS adresu."
+                            }
+                            if type == "Wi-Fi", field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                return "Unesite naziv Wi-Fi mreže."
+                            }
+                            if type == "Kartica", !field2.isEmpty, !(12...19).contains(field2.count) {
+                                return "Broj kartice mora sadržavati između 12 i 19 znamenki."
+                            }
+                            if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
+                                return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            }
+                            if type == "Identitet",
+                               field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                               field2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                return "Unesite puno ime ili broj dokumenta."
+                            }
+                            return nil
+                        }()
+                        if let validationMessage {
+                            store.message = validationMessage
                             return
                         }
 
@@ -2010,7 +2253,7 @@ struct AddEditView: View {
                         store.save(
                             VaultItem(
                                 id: original?.id ?? UUID(),
-                                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                title: cleanTitle,
                                 username: (type == "Prijava" || type == "Wi-Fi") ? username.trimmingCharacters(in: .whitespacesAndNewlines) : "",
                                 password: (type == "Prijava" || type == "Wi-Fi") ? password : "",
                                 website: type == "Prijava" ? website.trimmingCharacters(in: .whitespacesAndNewlines) : "",
@@ -2066,6 +2309,17 @@ struct DetailView: View {
 
     var body: some View {
         if let item = store.selected {
+            let isPasswordItem = item.kind == "Prijava" || item.kind == "Wi-Fi"
+            let securityLabel = isPasswordItem
+                ? (item.password.isEmpty ? "Bez lozinke" : (isStrongPassword(item.password) ? "Snažna" : "Potrebno ažuriranje"))
+                : "Zaštićena"
+            let securityColor: Color = {
+                switch securityLabel {
+                case "Snažna", "Zaštićena": return good
+                case "Potrebno ažuriranje": return warn
+                default: return muted
+                }
+            }()
             VStack(spacing: 0) {
                 HStack {
                     Button { store.open(.vault) } label: {
@@ -2254,6 +2508,37 @@ struct DetailView: View {
                             DetailRow(icon: "doc.text", title: "Bilješke", value: item.notes)
                         }
 
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                DetailMetaCard(
+                                    icon: "shield.fill",
+                                    title: "Ocjena sigurnosti",
+                                    value: securityLabel,
+                                    accent: securityColor
+                                )
+                                DetailMetaCard(
+                                    icon: "clock.fill",
+                                    title: "Zadnje ažurirano",
+                                    value: item.updatedAt.formatted(date: .abbreviated, time: .omitted),
+                                    accent: indigo
+                                )
+                            }
+                            VStack(spacing: 10) {
+                                DetailMetaCard(
+                                    icon: "shield.fill",
+                                    title: "Ocjena sigurnosti",
+                                    value: securityLabel,
+                                    accent: securityColor
+                                )
+                                DetailMetaCard(
+                                    icon: "clock.fill",
+                                    title: "Zadnje ažurirano",
+                                    value: item.updatedAt.formatted(date: .abbreviated, time: .omitted),
+                                    accent: indigo
+                                )
+                            }
+                        }
+
                         HStack {
                             Button {
                                 store.editSelected()
@@ -2294,6 +2579,40 @@ struct DetailView: View {
                 Text("Ova radnja ne može se poništiti.")
             }
         }
+    }
+}
+
+struct DetailMetaCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(accent)
+                .frame(width: 42, height: 42)
+                .background(accent.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 13))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(muted)
+                Text(value)
+                    .fontWeight(.bold)
+                    .foregroundStyle(title == "Ocjena sigurnosti" ? accent : .white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(slate)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(accent.opacity(0.45), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
