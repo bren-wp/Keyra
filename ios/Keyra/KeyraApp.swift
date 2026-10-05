@@ -39,6 +39,7 @@ extension Color {
 func isValidCardNumber(_ raw: String) -> Bool {
     let digits = raw.compactMap { $0.wholeNumberValue }
     guard (12...19).contains(digits.count) else { return false }
+    guard Set(digits).count >= 2 else { return false }
 
     var sum = 0
     var shouldDouble = false
