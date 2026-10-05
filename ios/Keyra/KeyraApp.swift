@@ -3926,6 +3926,7 @@ struct DetailRow: View {
 
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
+    @Environment(\.openURL) private var openURL
     @State private var search = ""
     @State private var confirmImport = false
     @State private var backupDocument = KeyraBackupDocument()
@@ -3984,7 +3985,13 @@ struct SettingsView: View {
     }
 
     private var privacyVisible: Bool {
-        matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+        matches(
+            "O aplikaciji Keyra",
+            "Pravila privatnosti",
+            "Privatnost",
+            "Zaključaj trezor",
+            "sigurnost privatnost"
+        )
     }
 
     var body: some View {
@@ -4169,6 +4176,23 @@ struct SettingsView: View {
                             title: "O aplikaciji Keyra",
                             subtitle: "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                         )
+                    }
+
+                    if matches("Pravila privatnosti", "privatnost", "privacy") {
+                        Button {
+                            if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
+                                openURL(url)
+                            }
+                        } label: {
+                            SettingRow(
+                                icon: "hand.raised.fill",
+                                title: "Pravila privatnosti",
+                                subtitle: "Pročitajte kako Keyra obrađuje podatke i što se nikada ne šalje razvojnom programeru."
+                            ) {
+                                Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     if matches("Zaključaj trezor", "zaključavanje") {
