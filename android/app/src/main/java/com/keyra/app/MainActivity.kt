@@ -3105,7 +3105,7 @@ private fun DetailScreen(
                         Icon(Icons.Outlined.Info, contentDescription = null, tint = Cyan)
                         Text("Aktivnost stavke", color = Color.White, fontWeight = FontWeight.Bold)
                         Text(
-                            "Keyra trenutno čuva vrijeme posljednje izmjene stavke. Povijest svih pristupa i kopiranja ne zapisuje se u trezor.",
+                            "Keyra čuva samo vrijeme posljednje izmjene ove stavke. Radi privatnosti ne zapisuje povijest otvaranja, prikaza ni kopiranja osjetljivih vrijednosti.",
                             color = Muted
                         )
                     }

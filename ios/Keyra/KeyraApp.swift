@@ -3198,7 +3198,7 @@ struct DetailView: View {
                                     .font(.headline)
                                     .foregroundStyle(.white)
                                 Text(
-                                    "Keyra trenutno čuva vrijeme posljednje izmjene stavke. Povijest svih pristupa i kopiranja ne zapisuje se u trezor."
+                                    "Keyra čuva samo vrijeme posljednje izmjene ove stavke. Radi privatnosti ne zapisuje povijest otvaranja, prikaza ni kopiranja osjetljivih vrijednosti."
                                 )
                                 .foregroundStyle(muted)
                             }
