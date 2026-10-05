@@ -26,4 +26,8 @@ jobs:
       - name: Provjeri Android aplikaciju
         run: |
           set -euo pipefail
-          gradle -p android :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+          gradle -p android \
+            :app:lintDebug \
+            :app:testDebugUnitTest \
+            :app:assembleDebug \
+            :app:assembleRelease
