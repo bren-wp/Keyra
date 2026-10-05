@@ -78,6 +78,33 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun securityIssuesDeduplicateWeakAndReusedPasswords() {
+        val reused = "Abcd1234!Efgh56"
+        val weak = "password123"
+        val items = listOf(
+            VaultItem(id = "a", title = "A", password = reused),
+            VaultItem(id = "b", title = "B", password = reused),
+            VaultItem(id = "c", title = "C", password = weak),
+            VaultItem(id = "d", title = "D", password = "", type = "Bilješka")
+        )
+
+        assertEquals(setOf("a", "b", "c"), securityIssueIds(items))
+        assertEquals(3, securityIssueCount(items))
+    }
+
+    @Test
+    fun securityIssuesIgnoreStrongUniquePasswordsAndNonPasswordItems() {
+        val items = listOf(
+            VaultItem(id = "a", title = "A", password = "Abcd1234!Efgh56"),
+            VaultItem(id = "b", title = "B", notes = "tajna", type = "Bilješka"),
+            VaultItem(id = "c", title = "C", fields = mapOf("Broj kartice" to "4111111111111111"), type = "Kartica")
+        )
+
+        assertTrue(securityIssueIds(items).isEmpty())
+        assertEquals(0, securityIssueCount(items))
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
