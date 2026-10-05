@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.keyra.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.keyra.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 5
         versionName = "0.5.0"
     }
