@@ -626,17 +626,39 @@ private fun KeyraRoot(
 
 @Composable
 private fun SplashScreen() {
-    Box(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Midnight, Color(0xFF071B36), Midnight))),
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Midnight, Color(0xFF071B36), Midnight))),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            KeyraMark(132.dp)
-            Spacer(Modifier.height(24.dp))
-            Text("Keyra", color = Color.White, fontSize = 58.sp, fontWeight = FontWeight.ExtraBold)
-            Text("SIGURNI UPRAVITELJ LOZINKI", color = Muted, fontSize = 13.sp, letterSpacing = 3.sp)
-            Spacer(Modifier.height(32.dp))
-            Text("VAŠI KLJUČEVI. VAŠI PODACI. UVIJEK VAŠI.", color = Ice, fontSize = 11.sp, letterSpacing = 1.8.sp)
+        val compact = maxHeight < 620.dp || maxWidth < 340.dp
+        val markSize = if (compact) 94.dp else 118.dp
+        val titleSize = if (compact) 46.sp else 54.sp
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            KeyraMark(markSize)
+            Spacer(Modifier.height(if (compact) 14.dp else 18.dp))
+            Text(
+                "Keyra",
+                color = Color.White,
+                fontSize = titleSize,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+            Text(
+                "SIGURNI UPRAVITELJ LOZINKI",
+                color = Muted,
+                fontSize = if (compact) 10.sp else 11.sp,
+                letterSpacing = if (compact) 1.8.sp else 2.4.sp,
+                maxLines = 1
+            )
         }
     }
 }
@@ -660,77 +682,189 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
 
 @Composable
 private fun BrandHeader(subtitle: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        KeyraMark(56.dp)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Keyra", fontSize = 34.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
-            Text(subtitle, color = Muted, fontSize = 12.sp, letterSpacing = 3.sp)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 370.dp
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = if (compact) 14.dp else 20.dp,
+                    vertical = if (compact) 8.dp else 12.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            KeyraMark(if (compact) 44.dp else 54.dp)
+            Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Keyra",
+                    fontSize = if (compact) 28.sp else 32.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
+                )
+                Text(
+                    subtitle,
+                    color = Muted,
+                    fontSize = if (compact) 9.sp else 11.sp,
+                    letterSpacing = if (compact) 1.4.sp else 2.2.sp,
+                    maxLines = 1
+                )
+            }
+            IconButton(
+                onClick = {},
+                modifier = Modifier.size(if (compact) 38.dp else 44.dp)
+            ) {
+                Icon(Icons.Outlined.Notifications, contentDescription = "Obavijesti", tint = Color.White)
+            }
+            Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
+            Box(
+                Modifier
+                    .size(if (compact) 38.dp else 44.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, Cyan, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("K", color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 14.sp)
+            }
         }
-        Icon(Icons.Outlined.Notifications, null, tint = Color.White)
-        Spacer(Modifier.width(14.dp))
-        Box(
-            Modifier.size(48.dp).clip(CircleShape).border(1.dp, Cyan, CircleShape),
-            contentAlignment = Alignment.Center
-        ) { Text("K", color = Color.White, fontWeight = FontWeight.Bold) }
     }
 }
 
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(24.dp))
-        KeyraMark(96.dp)
-        Text("Keyra", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.ExtraBold)
-        Text("SIGURNI UPRAVITELJ LOZINKI", color = Muted, fontSize = 12.sp, letterSpacing = 2.sp)
-        Spacer(Modifier.height(34.dp))
-        Text("Sigurniji način", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
-        Text("upravljanja lozinkama", color = Cyan, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Čuvajte svoje lozinke, pristupne ključeve i osjetljive podatke na jednom sigurnom mjestu.",
-            color = Muted, fontSize = 17.sp
-        )
-        Spacer(Modifier.height(26.dp))
-        FeatureCard(Icons.Outlined.Lock, "Potpuno šifrirano", "Vaši podaci ostaju na vašem uređaju.")
-        FeatureCard(Icons.Outlined.Fingerprint, "Privatnost u osnovi", "Stvoreno za vaš mir.")
-        FeatureCard(Icons.Outlined.PhoneAndroid, "Radi svugdje", "Besprijekorno na Androidu i iOS-u.")
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = model::startCreate,
-            modifier = Modifier.fillMaxWidth().height(58.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-            shape = RoundedCornerShape(28.dp)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxHeight < 720.dp || maxWidth < 360.dp
+        val horizontal = if (maxWidth >= 600.dp) 72.dp else 20.dp
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .widthIn(max = 680.dp)
+                .align(Alignment.TopCenter)
+                .padding(horizontal = horizontal)
         ) {
-            Text("Izradi trezor", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(8.dp)); Icon(Icons.Outlined.ArrowForward, null)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
+                KeyraMark(if (compact) 66.dp else 84.dp)
+                Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
+                Text(
+                    "Keyra",
+                    color = Color.White,
+                    fontSize = if (compact) 34.sp else 42.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
+                )
+                Text(
+                    "SIGURNI UPRAVITELJ LOZINKI",
+                    color = Muted,
+                    fontSize = if (compact) 9.sp else 11.sp,
+                    letterSpacing = if (compact) 1.4.sp else 2.sp,
+                    maxLines = 1
+                )
+
+                Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
+                Text(
+                    "Sve važno. Jedan siguran trezor.",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    fontSize = if (compact) 25.sp else 31.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    "Lozinke, bilješke, kartice, identiteti i Wi‑Fi na jednom mjestu.",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Muted,
+                    fontSize = if (compact) 14.sp else 16.sp
+                )
+
+                Spacer(Modifier.height(if (compact) 12.dp else 18.dp))
+                FeatureCard(
+                    Icons.Outlined.Lock,
+                    "Potpuno šifrirano",
+                    "Vaši podaci ostaju zaštićeni.",
+                    compact
+                )
+                FeatureCard(
+                    Icons.Outlined.Fingerprint,
+                    "Privatnost u osnovi",
+                    "Brzo otključavanje uz potvrdu identiteta.",
+                    compact
+                )
+                FeatureCard(
+                    Icons.Outlined.PhoneAndroid,
+                    "Spremno za svaki ekran",
+                    "Pregledno na telefonu i tabletu.",
+                    compact
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
+            Button(
+                onClick = model::startCreate,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 10.dp)
+                    .navigationBarsPadding()
+                    .height(if (compact) 52.dp else 58.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Text("Kreni", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+            }
         }
     }
 }
 
 @Composable
-private fun FeatureCard(icon: ImageVector, title: String, subtitle: String) {
+private fun FeatureCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    compact: Boolean = false
+) {
     Surface(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Slate.copy(alpha=.9f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.35f))
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = if (compact) 3.dp else 5.dp),
+        shape = RoundedCornerShape(if (compact) 17.dp else 20.dp),
+        color = Slate.copy(alpha = .9f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .35f))
     ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(if (compact) 10.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF0A2D3C)),
+                Modifier
+                    .size(if (compact) 40.dp else 48.dp)
+                    .clip(RoundedCornerShape(if (compact) 12.dp else 15.dp))
+                    .background(Color(0xFF0A2D3C)),
                 contentAlignment = Alignment.Center
-            ) { Icon(icon, null, tint = Cyan) }
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(subtitle, color = Muted, fontSize = 14.sp)
+            ) {
+                Icon(icon, contentDescription = null, tint = Cyan, modifier = Modifier.size(if (compact) 21.dp else 24.dp))
+            }
+            Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (compact) 15.sp else 17.sp
+                )
+                Text(
+                    subtitle,
+                    color = Muted,
+                    fontSize = if (compact) 12.sp else 14.sp
+                )
             }
         }
     }
@@ -847,27 +981,53 @@ private fun MainScaffold(model: KeyraViewModel, active: Screen, content: @Compos
         containerColor = Midnight,
         bottomBar = { BottomNav(model, active) }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) { content() }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 920.dp)
+            ) {
+                content()
+            }
+        }
     }
 }
 
 @Composable
 private fun BottomNav(model: KeyraViewModel, active: Screen) {
-    NavigationBar(containerColor = Slate, tonalElevation = 10.dp) {
-        NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT) { model.open(Screen.VAULT) }
-        NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR) { model.open(Screen.GENERATOR) }
-        NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS) { model.open(Screen.COLLECTIONS) }
-        NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS) { model.open(Screen.SETTINGS) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp
+        NavigationBar(
+            containerColor = Slate,
+            tonalElevation = 10.dp,
+            modifier = Modifier.navigationBarsPadding()
+        ) {
+            NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
+            NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
+            NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
+            NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
+        }
     }
 }
 
 @Composable
-private fun RowScope.NavItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.NavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    compact: Boolean,
+    onClick: () -> Unit
+) {
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        icon = { Icon(icon, null) },
-        label = { Text(label) },
+        icon = { Icon(icon, contentDescription = label, modifier = Modifier.size(if (compact) 21.dp else 24.dp)) },
+        label = { Text(label, fontSize = if (compact) 9.sp else 11.sp, maxLines = 1) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = Cyan,
             selectedTextColor = Cyan,
@@ -966,13 +1126,29 @@ private fun VaultScreen(model: KeyraViewModel) {
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SummaryCard(model.items.size.toString(), "Ukupno", Cyan, Modifier.weight(1f))
-            SummaryCard(weak.toString(), "Slabe", Danger, Modifier.weight(1f))
-            SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.weight(1f))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (maxWidth < 370.dp) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SummaryCard(model.items.size.toString(), "Ukupno", Cyan, Modifier.width(112.dp))
+                    SummaryCard(weak.toString(), "Slabe", Danger, Modifier.width(112.dp))
+                    SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.width(122.dp))
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SummaryCard(model.items.size.toString(), "Ukupno", Cyan, Modifier.weight(1f))
+                    SummaryCard(weak.toString(), "Slabe", Danger, Modifier.weight(1f))
+                    SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.weight(1f))
+                }
+            }
         }
 
         Row(
@@ -1089,24 +1265,36 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         color = Slate,
         border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
     ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        BoxWithConstraints {
+            val compact = maxWidth < 350.dp
+            Row(
+                Modifier.padding(if (compact) 11.dp else 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             Box(
-                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha=.16f)),
+                Modifier.size(if (compact) 40.dp else 48.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha=.16f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(icon, null, tint = accent)
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
+                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (compact) 15.sp else 17.sp, maxLines = 1)
+                Text(subtitle, color = Muted, fontSize = if (compact) 11.sp else 13.sp, maxLines = 1)
             }
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = stateColor.copy(alpha=.12f),
                 border = androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha=.8f))
             ) {
-                Text(state, color = stateColor, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                Text(
+                    state,
+                    color = stateColor,
+                    fontSize = if (compact) 9.sp else 11.sp,
+                    modifier = Modifier.padding(horizontal = if (compact) 7.dp else 10.dp, vertical = if (compact) 5.dp else 7.dp),
+                    maxLines = 1
+                )
+            }
             }
         }
     }
@@ -1132,113 +1320,144 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         .sortedByDescending { it.updatedAt }
         .take(3)
 
-    Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR")
-        Text("Kolekcije", Modifier.padding(horizontal = 18.dp), color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold)
-        Text("Organizirajte podatke. Pronađite ih odmah.", Modifier.padding(horizontal = 18.dp), color = Muted, fontSize = 16.sp)
-        Spacer(Modifier.height(12.dp))
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val narrow = maxWidth < 370.dp
+        val side = if (narrow) 14.dp else 18.dp
 
-        OutlinedTextField(
-            search, { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-            placeholder = { Text("Pretražite lozinke, bilješke, kartice...") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
-            colors = keyraFieldColors(),
-            shape = RoundedCornerShape(24.dp)
-        )
+        Column(Modifier.fillMaxSize()) {
+            BrandHeader("MOJ TREZOR")
+            Text(
+                "Kolekcije",
+                Modifier.padding(horizontal = side),
+                color = Color.White,
+                fontSize = if (narrow) 34.sp else 42.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                "Organizirajte podatke. Pronađite ih odmah.",
+                Modifier.padding(horizontal = side),
+                color = Muted,
+                fontSize = if (narrow) 14.sp else 16.sp
+            )
+            Spacer(Modifier.height(if (narrow) 8.dp else 12.dp))
 
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti").forEach { value ->
-                FilterChip(
-                    selected = type == value,
-                    onClick = { type = value },
-                    label = {
-                        Text(
-                            when (value) {
-                                "Prijava" -> "Lozinke"
-                                "Bilješka" -> "Bilješke"
-                                "Kartica" -> "Kartice"
-                                else -> value
-                            }
-                        )
-                    }
-                )
+            OutlinedTextField(
+                search,
+                { search = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = side),
+                placeholder = { Text("Pretražite trezor...") },
+                leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
+                colors = keyraFieldColors(),
+                shape = RoundedCornerShape(24.dp),
+                singleLine = true
+            )
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = side, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti").forEach { value ->
+                    FilterChip(
+                        selected = type == value,
+                        onClick = { type = value },
+                        label = {
+                            Text(
+                                when (value) {
+                                    "Prijava" -> "Lozinke"
+                                    "Bilješka" -> "Bilješke"
+                                    "Kartica" -> "Kartice"
+                                    else -> value
+                                }
+                            )
+                        }
+                    )
+                }
             }
-        }
 
-        LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 18.dp)
-        ) {
-            items(categories.chunked(2)) { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    pair.forEach { (name, accent) ->
-                        val count = model.items.count { it.category == name }
-                        Surface(
-                            Modifier.weight(1f).height(90.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            color = accent.copy(alpha=.13f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha=.8f))
-                        ) {
-                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent.copy(alpha=.18f)),
-                                    contentAlignment = Alignment.Center
+            LazyColumn(
+                Modifier.fillMaxSize().padding(horizontal = side),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 18.dp)
+            ) {
+                items(categories.chunked(if (narrow) 1 else 2)) { group ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        group.forEach { (name, accent) ->
+                            val count = model.items.count { it.category == name }
+                            Surface(
+                                Modifier.weight(1f).height(if (narrow) 74.dp else 88.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                color = accent.copy(alpha=.13f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha=.8f))
+                            ) {
+                                Row(
+                                    Modifier.padding(if (narrow) 12.dp else 15.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        when (name) {
-                                            "Posao" -> Icons.Outlined.Work
-                                            "Financije" -> Icons.Outlined.CreditCard
-                                            "Društvene mreže" -> Icons.Outlined.Groups
-                                            "Kupovina" -> Icons.Outlined.ShoppingCart
-                                            "Putovanja" -> Icons.Outlined.Flight
-                                            "Zdravlje" -> Icons.Outlined.Favorite
-                                            "Ostalo" -> Icons.Outlined.GridView
-                                            else -> Icons.Outlined.Person
-                                        },
-                                        null,
-                                        tint = accent
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Column {
-                                    Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Text(count.toString() + " stavki", color = Muted, fontSize = 13.sp)
+                                    Box(
+                                        Modifier
+                                            .size(if (narrow) 40.dp else 44.dp)
+                                            .clip(RoundedCornerShape(13.dp))
+                                            .background(accent.copy(alpha=.18f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            when (name) {
+                                                "Posao" -> Icons.Outlined.Work
+                                                "Financije" -> Icons.Outlined.CreditCard
+                                                "Društvene mreže" -> Icons.Outlined.Groups
+                                                "Kupovina" -> Icons.Outlined.ShoppingCart
+                                                "Putovanja" -> Icons.Outlined.Flight
+                                                "Zdravlje" -> Icons.Outlined.Favorite
+                                                "Ostalo" -> Icons.Outlined.GridView
+                                                else -> Icons.Outlined.Person
+                                            },
+                                            null,
+                                            tint = accent
+                                        )
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (narrow) 15.sp else 16.sp, maxLines = 1)
+                                        Text("$count stavki", color = Muted, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
+                        if (!narrow && group.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text("Nedavne bilješke", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Vaše najnovije bilješke i sigurne informacije.", color = Muted)
-            }
-            items(recentNotes) { noteItem ->
-                Surface(
-                    Modifier.fillMaxWidth().clickable { model.select(noteItem) },
-                    shape = RoundedCornerShape(18.dp),
-                    color = Slate
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Description, null, tint = Indigo)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold)
-                            Text(noteItem.notes, color = Muted, maxLines = 1)
+
+                item {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Nedavne bilješke", color = Color.White, fontSize = if (narrow) 22.sp else 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Vaše najnovije bilješke i sigurne informacije.", color = Muted, fontSize = if (narrow) 13.sp else 14.sp)
+                }
+
+                items(recentNotes) { noteItem ->
+                    Surface(
+                        Modifier.fillMaxWidth().clickable { model.select(noteItem) },
+                        shape = RoundedCornerShape(18.dp),
+                        color = Slate
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Description, null, tint = Indigo)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(noteItem.notes, color = Muted, maxLines = 1)
+                            }
+                            Icon(Icons.Outlined.MoreVert, null, tint = Muted)
                         }
-                        Icon(Icons.Outlined.MoreVert, null, tint = Muted)
                     }
                 }
-            }
-            if (recentNotes.isEmpty()) {
-                item { Text("Još nema sigurnih bilješki.", color = Muted, modifier = Modifier.padding(vertical = 18.dp)) }
+
+                if (recentNotes.isEmpty()) {
+                    item { Text("Još nema sigurnih bilješki.", color = Muted, modifier = Modifier.padding(vertical = 18.dp)) }
+                }
             }
         }
     }
@@ -1287,7 +1506,13 @@ private fun GeneratorScreen(model: KeyraViewModel) {
                     Text("Generirajte sigurnu lozinku", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
                     Text("Izradite snažne, jedinstvene lozinke u nekoliko sekundi.", color = Muted)
                     Spacer(Modifier.height(18.dp))
-                    Text(password, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        password,
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 3
+                    )
                     Spacer(Modifier.height(12.dp))
                     LinearProgressIndicator(
                         progress = { strengthProgress },
@@ -1986,7 +2211,7 @@ private fun SettingsScreen(
             item { SectionTitle("PREFERENCIJE") }
             item { SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") }
             item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.3.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
+            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
             item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Logout, null)
