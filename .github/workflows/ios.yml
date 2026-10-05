@@ -44,6 +44,15 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             analyze
 
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build/ci-ios-device \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
       - name: Provjeri pokretanje iOS aplikacije
         timeout-minutes: 4
         run: |
