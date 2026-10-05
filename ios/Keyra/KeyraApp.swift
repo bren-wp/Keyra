@@ -1434,7 +1434,19 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
-                Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                Menu {
+                    Button(newestFirst ? "Poredaj A–Ž" : "Poredaj po nedavnim") {
+                        newestFirst.toggle()
+                    }
+                    Button("Prikaži sve") {
+                        filter = "Sve"
+                        search = ""
+                        store.clearVaultCategoryFilter()
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                }
+                .accessibilityLabel("Filtri i sortiranje")
             }
             .padding()
             .background(slate)
@@ -1780,7 +1792,26 @@ struct CollectionsView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
-                Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                Menu {
+                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti"], id: \.self) { value in
+                        Button({
+                            switch value {
+                            case "Prijava": return "Lozinke"
+                            case "Bilješka": return "Bilješke"
+                            case "Kartica": return "Kartice"
+                            default: return value
+                            }
+                        }()) {
+                            selectedType = value
+                        }
+                    }
+                    Button("Očisti pretragu") {
+                        search = ""
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                }
+                .accessibilityLabel("Filtriraj kolekcije")
             }
             .padding()
             .background(slate)
