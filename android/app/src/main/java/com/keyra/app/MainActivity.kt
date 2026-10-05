@@ -2246,6 +2246,14 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 }
 
+internal fun formatCardExpiry(raw: String): String {
+    val digits = raw.filter(Char::isDigit).take(6)
+    return when {
+        digits.length <= 2 -> digits
+        else -> digits.take(2) + "/" + digits.drop(2)
+    }
+}
+
 internal fun generatePassword(length: Int, upper: Boolean, lower: Boolean, numbers: Boolean, symbols: Boolean): String {
     val sets = buildList {
         if (upper) add("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -2440,7 +2448,7 @@ private fun AddScreen(model: KeyraViewModel) {
             if (type == "Kartica") {
                 item { KeyraTextField(field1, { field1 = it }, "Vlasnik kartice", Icons.Outlined.Person) }
                 item { KeyraTextField(field2, { field2 = it.filter(Char::isDigit).take(19) }, "Broj kartice", Icons.Outlined.CreditCard) }
-                item { KeyraTextField(field3, { field3 = it.take(7) }, "Vrijedi do", Icons.Outlined.DateRange) }
+                item { KeyraTextField(field3, { field3 = formatCardExpiry(it) }, "Vrijedi do (MM/GG)", Icons.Outlined.DateRange) }
                 item { KeyraTextField(field4, { field4 = it.filter(Char::isDigit).take(4) }, "Sigurnosni kod", Icons.Outlined.Lock) }
             }
 
