@@ -52,7 +52,7 @@ Brza pretraga, filteri prema vrsti stavke, kategorije, favoriti i pregled sigurn
 
 ## Kolekcije
 
-Organizirajte podatke u cjeline kao što su Osobno, Posao, Financije, Društvene mreže, Kupovina, Putovanja, Zdravlje i Ostalo.
+Organizirajte podatke u cjeline kao što su Osobno, Posao, Financije, Društvene mreže, Kupovina, Putovanja, Zdravlje i Ostalo. Dodirom kategorije otvara se Trezor s odgovarajućim filtrom, koji možete ukloniti jednim dodirom.
 
 <div align="center">
 <img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
