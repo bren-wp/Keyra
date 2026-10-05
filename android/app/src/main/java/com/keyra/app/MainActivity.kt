@@ -777,10 +777,24 @@ private fun KeyraRoot(
         }
         model.message?.let { msg ->
             LaunchedEffect(msg) { delay(2600); model.message = null }
+            val hasBottomNavigation = model.screen in listOf(
+                Screen.VAULT,
+                Screen.COLLECTIONS,
+                Screen.GENERATOR,
+                Screen.SETTINGS,
+                Screen.SECURITY
+            )
             Surface(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(22.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(
+                        start = 22.dp,
+                        end = 22.dp,
+                        bottom = if (hasBottomNavigation) 96.dp else 22.dp
+                    ),
                 shape = RoundedCornerShape(18.dp),
-                color = Slate2
+                color = Slate2,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha = .28f))
             ) { Text(msg, modifier = Modifier.padding(16.dp), color = Color.White) }
         }
     }
@@ -1069,6 +1083,7 @@ private fun UnlockScreen(
                     .fillMaxHeight()
                     .widthIn(max = 620.dp)
                     .verticalScroll(rememberScrollState())
+                    .imePadding()
                     .padding(horizontal = if (compact) 16.dp else 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -2073,7 +2088,10 @@ private fun AddScreen(model: KeyraViewModel) {
         }
 
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 26.dp)
         ) {
