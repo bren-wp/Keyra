@@ -127,6 +127,22 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun cardNumberValidationUsesLuhnChecksum() {
+        assertTrue(isValidCardNumber("4111 1111 1111 1111"))
+        assertTrue(isValidCardNumber("5555555555554444"))
+        assertFalse(isValidCardNumber("4111111111111112"))
+        assertFalse(isValidCardNumber("1234"))
+    }
+
+    @Test
+    fun cardExpiryRejectsPastDates() {
+        assertTrue(isCardExpiryNotPast("12/30", currentYear = 2026, currentMonth = 10))
+        assertTrue(isCardExpiryNotPast("10/26", currentYear = 2026, currentMonth = 10))
+        assertFalse(isCardExpiryNotPast("09/26", currentYear = 2026, currentMonth = 10))
+        assertFalse(isCardExpiryNotPast("13/26", currentYear = 2026, currentMonth = 10))
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
