@@ -60,16 +60,21 @@ import org.json.JSONObject
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.text.DateFormat
 import java.util.Date
 import java.util.Calendar
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 private val Midnight = Color(0xFF0B0F14)
 private val Slate = Color(0xFF121826)
@@ -2434,6 +2439,195 @@ private fun GeneratorScreen(model: KeyraViewModel) {
             }
         }
     }
+}
+
+internal data class TotpConfig(
+    val secret: String,
+    val issuer: String = "",
+    val account: String = "",
+    val algorithm: String = "SHA1",
+    val digits: Int = 6,
+    val period: Int = 30
+)
+
+private const val BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+internal fun normalizeBase32Secret(raw: String): String? {
+    val clean = raw
+        .trim()
+        .replace(" ", "")
+        .replace("-", "")
+        .trimEnd('=')
+        .uppercase()
+
+    if (clean.isBlank() || clean.any { it !in BASE32_ALPHABET }) return null
+    return if (decodeBase32(clean)?.isNotEmpty() == true) clean else null
+}
+
+internal fun decodeBase32(raw: String): ByteArray? {
+    val clean = raw.trim().trimEnd('=').uppercase()
+    if (clean.isBlank()) return null
+
+    val output = ArrayList<Byte>()
+    var buffer = 0
+    var bits = 0
+
+    for (char in clean) {
+        val value = BASE32_ALPHABET.indexOf(char)
+        if (value < 0) return null
+
+        buffer = (buffer shl 5) or value
+        bits += 5
+
+        while (bits >= 8) {
+            bits -= 8
+            output.add(((buffer shr bits) and 0xFF).toByte())
+            buffer = if (bits == 0) 0 else buffer and ((1 shl bits) - 1)
+        }
+    }
+
+    return output.toByteArray()
+}
+
+private fun normalizeTotpAlgorithm(raw: String): String? = when (
+    raw.trim().uppercase().replace("-", "")
+) {
+    "SHA1" -> "SHA1"
+    "SHA256" -> "SHA256"
+    "SHA512" -> "SHA512"
+    else -> null
+}
+
+private fun decodeUrlPart(value: String): String =
+    runCatching { URLDecoder.decode(value, StandardCharsets.UTF_8.name()) }
+        .getOrDefault(value)
+
+internal fun parseTotpInput(
+    raw: String,
+    fallbackIssuer: String = "",
+    fallbackAccount: String = "",
+    fallbackAlgorithm: String = "SHA1",
+    fallbackDigits: Int = 6,
+    fallbackPeriod: Int = 30
+): TotpConfig? {
+    val input = raw.trim()
+    if (input.isBlank()) return null
+
+    if (!input.startsWith("otpauth://", ignoreCase = true)) {
+        val secret = normalizeBase32Secret(input) ?: return null
+        val algorithm = normalizeTotpAlgorithm(fallbackAlgorithm) ?: "SHA1"
+        val digits = fallbackDigits.takeIf { it in 6..8 } ?: 6
+        val period = fallbackPeriod.takeIf { it in 15..120 } ?: 30
+        return TotpConfig(
+            secret = secret,
+            issuer = fallbackIssuer.trim(),
+            account = fallbackAccount.trim(),
+            algorithm = algorithm,
+            digits = digits,
+            period = period
+        )
+    }
+
+    val uri = runCatching { URI(input) }.getOrNull() ?: return null
+    if (!uri.scheme.equals("otpauth", ignoreCase = true)) return null
+    if (!uri.host.equals("totp", ignoreCase = true)) return null
+
+    val params = uri.rawQuery
+        ?.split("&")
+        ?.mapNotNull { entry ->
+            val pair = entry.split("=", limit = 2)
+            if (pair.isEmpty()) null
+            else decodeUrlPart(pair[0]).lowercase() to decodeUrlPart(pair.getOrElse(1) { "" })
+        }
+        ?.toMap()
+        .orEmpty()
+
+    val secret = normalizeBase32Secret(params["secret"].orEmpty()) ?: return null
+    val label = decodeUrlPart(uri.rawPath.orEmpty().trimStart('/'))
+    val labelParts = label.split(":", limit = 2)
+    val labelIssuer = if (labelParts.size == 2) labelParts[0].trim() else ""
+    val labelAccount = if (labelParts.size == 2) labelParts[1].trim() else label.trim()
+
+    val issuer = params["issuer"].orEmpty().trim().ifBlank {
+        fallbackIssuer.trim().ifBlank { labelIssuer }
+    }
+    val account = fallbackAccount.trim().ifBlank { labelAccount }
+    val algorithm = normalizeTotpAlgorithm(params["algorithm"] ?: fallbackAlgorithm) ?: return null
+    val digits = (params["digits"]?.toIntOrNull() ?: fallbackDigits).takeIf { it in 6..8 } ?: return null
+    val period = (params["period"]?.toIntOrNull() ?: fallbackPeriod).takeIf { it in 15..120 } ?: return null
+
+    return TotpConfig(
+        secret = secret,
+        issuer = issuer,
+        account = account,
+        algorithm = algorithm,
+        digits = digits,
+        period = period
+    )
+}
+
+internal fun generateTotp(
+    config: TotpConfig,
+    timeMillis: Long = System.currentTimeMillis()
+): String? {
+    val secretBytes = decodeBase32(config.secret) ?: return null
+    if (secretBytes.isEmpty()) return null
+
+    val counter = (timeMillis / 1000L) / config.period
+    val counterBytes = ByteArray(8)
+    for (index in 0 until 8) {
+        counterBytes[7 - index] = ((counter ushr (index * 8)) and 0xFF).toByte()
+    }
+
+    val macName = when (config.algorithm) {
+        "SHA256" -> "HmacSHA256"
+        "SHA512" -> "HmacSHA512"
+        else -> "HmacSHA1"
+    }
+    val hash = runCatching {
+        val mac = Mac.getInstance(macName)
+        mac.init(SecretKeySpec(secretBytes, macName))
+        mac.doFinal(counterBytes)
+    }.getOrNull() ?: return null
+
+    val offset = hash.last().toInt() and 0x0F
+    if (offset + 3 >= hash.size) return null
+
+    val binary =
+        ((hash[offset].toInt() and 0x7F) shl 24) or
+        ((hash[offset + 1].toInt() and 0xFF) shl 16) or
+        ((hash[offset + 2].toInt() and 0xFF) shl 8) or
+        (hash[offset + 3].toInt() and 0xFF)
+
+    var modulo = 1
+    repeat(config.digits) { modulo *= 10 }
+    return (binary % modulo).toString().padStart(config.digits, '0')
+}
+
+internal fun totpRemainingSeconds(
+    config: TotpConfig,
+    timeMillis: Long = System.currentTimeMillis()
+): Int {
+    val elapsed = ((timeMillis / 1000L) % config.period).toInt()
+    return config.period - elapsed
+}
+
+internal fun totpConfigFromFields(fields: Map<String, String>): TotpConfig? {
+    val secret = fields["TOTP tajna"] ?: return null
+    return parseTotpInput(
+        raw = secret,
+        fallbackIssuer = fields["Izdavatelj"].orEmpty(),
+        fallbackAccount = fields["Račun"].orEmpty(),
+        fallbackAlgorithm = fields["Algoritam"].orEmpty().ifBlank { "SHA1" },
+        fallbackDigits = fields["Znamenke"]?.toIntOrNull() ?: 6,
+        fallbackPeriod = fields["Period"]?.toIntOrNull() ?: 30
+    )
+}
+
+internal fun formatTotpCode(code: String): String = when {
+    code.length == 6 -> code.chunked(3).joinToString(" ")
+    code.length == 8 -> code.chunked(4).joinToString(" ")
+    else -> code
 }
 
 internal fun isValidCardNumber(raw: String): Boolean {
