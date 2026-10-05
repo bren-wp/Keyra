@@ -69,6 +69,15 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun cardExpiryFormattingKeepsOnlyDigitsAndAddsSeparator() {
+        assertEquals("12", formatCardExpiry("12"))
+        assertEquals("12/27", formatCardExpiry("1227"))
+        assertEquals("12/27", formatCardExpiry("12/27"))
+        assertEquals("12/2027", formatCardExpiry("12 2027"))
+        assertEquals("12/2027", formatCardExpiry("12202799"))
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
