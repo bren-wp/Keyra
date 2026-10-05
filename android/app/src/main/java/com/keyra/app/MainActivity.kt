@@ -342,13 +342,15 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         runCatching {
             val json = PortableBackup.decrypt(text, password)
             val imported = store.fromJson(json)
+            store.save(imported)
+            imported
+        }.onSuccess { imported ->
             items.clear()
             items.addAll(imported)
-            store.save(items)
-        }.onSuccess {
+            selected = null
             message = "Sigurnosna kopija uspješno je uvezena."
         }.onFailure {
-            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
         }
     }
 
