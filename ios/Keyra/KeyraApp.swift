@@ -3981,6 +3981,7 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var search = ""
     @State private var confirmImport = false
+    @State private var confirmErase = false
     @State private var backupDocument = KeyraBackupDocument()
     @State private var exportBackupFile = false
     @State private var importBackupFile = false
@@ -4041,6 +4042,7 @@ struct SettingsView: View {
             "O aplikaciji Keyra",
             "Pravila privatnosti",
             "Privatnost",
+            "Izbriši sve lokalne podatke",
             "Zaključaj trezor",
             "sigurnost privatnost"
         )
@@ -4247,6 +4249,21 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
 
+                    if matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset") {
+                        Button {
+                            confirmErase = true
+                        } label: {
+                            SettingRow(
+                                icon: "trash.slash.fill",
+                                title: "Izbriši sve lokalne podatke",
+                                subtitle: "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja."
+                            ) {
+                                Image(systemName: "chevron.right").foregroundStyle(danger)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     if matches("Zaključaj trezor", "zaključavanje") {
                         Button {
                             store.lock()
@@ -4276,6 +4293,23 @@ struct SettingsView: View {
                 .padding(.bottom, 100)
             }
             .scrollDismissesKeyboard(.interactively)
+        }
+        .confirmationDialog(
+            "Izbrisati sve lokalne podatke?",
+            isPresented: $confirmErase,
+            titleVisibility: .visible
+        ) {
+            Button("Trajno izbriši", role: .destructive) {
+                store.authorizeSensitive(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                    _ = store.eraseAllLocalData()
+                }
+            }
+            Button("Odustani", role: .cancel) {}
+        } message: {
+            Text(
+                "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+            )
         }
         .confirmationDialog(
             "Uvesti sigurnosnu kopiju?",
