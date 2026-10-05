@@ -2044,7 +2044,9 @@ private fun DetailScreen(
 ) {
     val current = model.selected ?: return
     var reveal by remember(current.id) { mutableStateOf(false) }
-    var revealCard by remember(current.id) { mutableStateOf(false) }
+    var revealCardNumber by remember(current.id) { mutableStateOf(false) }
+    var revealSecurityCode by remember(current.id) { mutableStateOf(false) }
+    var revealDocumentNumber by remember(current.id) { mutableStateOf(false) }
     var confirmDelete by remember(current.id) { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -2174,11 +2176,11 @@ private fun DetailScreen(
                             icon = Icons.Outlined.CreditCard,
                             label = "Broj kartice",
                             value = value,
-                            reveal = revealCard,
+                            reveal = revealCardNumber,
                             hidden = "•••• •••• •••• " + value.takeLast(4),
                             onReveal = {
-                                if (revealCard) revealCard = false
-                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                                if (revealCardNumber) revealCardNumber = false
+                                else guarded("Potvrdite identitet za prikaz broja kartice.") { revealCardNumber = true }
                             },
                             onCopy = {
                                 guarded("Potvrdite identitet za kopiranje broja kartice.") {
@@ -2198,11 +2200,11 @@ private fun DetailScreen(
                             icon = Icons.Outlined.Lock,
                             label = "Sigurnosni kod",
                             value = value,
-                            reveal = revealCard,
+                            reveal = revealSecurityCode,
                             hidden = "•••",
                             onReveal = {
-                                if (revealCard) revealCard = false
-                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                                if (revealSecurityCode) revealSecurityCode = false
+                                else guarded("Potvrdite identitet za prikaz sigurnosnog koda.") { revealSecurityCode = true }
                             },
                             onCopy = {
                                 guarded("Potvrdite identitet za kopiranje sigurnosnog koda.") {
@@ -2225,11 +2227,11 @@ private fun DetailScreen(
                             icon = Icons.Outlined.Badge,
                             label = "Broj dokumenta",
                             value = value,
-                            reveal = revealCard,
+                            reveal = revealDocumentNumber,
                             hidden = "••••" + value.takeLast(4),
                             onReveal = {
-                                if (revealCard) revealCard = false
-                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                                if (revealDocumentNumber) revealDocumentNumber = false
+                                else guarded("Potvrdite identitet za prikaz broja dokumenta.") { revealDocumentNumber = true }
                             },
                             onCopy = {
                                 guarded("Potvrdite identitet za kopiranje broja dokumenta.") {
