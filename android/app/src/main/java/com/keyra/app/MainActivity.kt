@@ -1088,6 +1088,7 @@ private fun isStrongPassword(password: String): Boolean {
 private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("Sve") }
+    var newestFirst by remember { mutableStateOf(true) }
 
     val displayed = model.items
         .filter {
@@ -1106,7 +1107,10 @@ private fun VaultScreen(model: KeyraViewModel) {
             }
             typeMatch && (search.isBlank() || haystack.contains(search, true))
         }
-        .sortedByDescending { it.updatedAt }
+        .let { list ->
+            if (newestFirst) list.sortedByDescending { it.updatedAt }
+            else list.sortedBy { it.title.lowercase() }
+        }
 
     val passwordItems = model.items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
     val weak = passwordItems.count { it.password.isNotBlank() && !isStrongPassword(it.password) }
@@ -1191,7 +1195,19 @@ private fun VaultScreen(model: KeyraViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Vaše stavke", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-            Text("Poredaj po nedavnim", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(end = 10.dp))
+            TextButton(
+                onClick = { newestFirst = !newestFirst },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    if (newestFirst) Icons.Outlined.Schedule else Icons.Outlined.SortByAlpha,
+                    contentDescription = null,
+                    tint = Ice,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(if (newestFirst) "Najnovije" else "A–Ž", color = Muted, fontSize = 12.sp)
+            }
             FilledIconButton(
                 onClick = model::addNew,
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Cyan, contentColor = Midnight)
@@ -1350,6 +1366,25 @@ private fun CollectionsScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Prijava") }
 
+    val collectionItems = model.items
+        .filter { item ->
+            when (type) {
+                "Favoriti" -> item.favorite
+                else -> item.type == type
+            }
+        }
+        .filter { item ->
+            if (search.isBlank()) true
+            else listOf(
+                item.title,
+                item.username,
+                item.website,
+                item.notes,
+                item.category,
+                item.fields.values.joinToString(" ")
+            ).joinToString(" ").contains(search, true)
+        }
+
     val recentNotes = model.items
         .filter { it.type == "Bilješka" && (search.isBlank() || it.title.contains(search, true) || it.notes.contains(search, true)) }
         .sortedByDescending { it.updatedAt }
@@ -1421,7 +1456,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 items(categories.chunked(if (narrow) 1 else 2)) { group ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         group.forEach { (name, accent) ->
-                            val count = model.items.count { it.category == name }
+                            val count = collectionItems.count { it.category == name }
                             Surface(
                                 Modifier.weight(1f).height(if (narrow) 74.dp else 88.dp),
                                 shape = RoundedCornerShape(20.dp),
@@ -2389,7 +2424,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                             Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
                                 if (duplicate) "Lozinka se koristi na više mjesta."
-                                else "Lozinka je prekratka i preporučuje se zamjena.",
+                                else "Lozinka nije dovoljno snažna i preporučuje se zamjena.",
                                 color = Muted,
                                 fontSize = 13.sp
                             )
