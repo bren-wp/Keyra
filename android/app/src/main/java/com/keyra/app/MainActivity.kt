@@ -479,9 +479,9 @@ private fun SplashScreen() {
 @Composable
 private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size / 4))
+        Modifier.size(size).clip(RoundedCornerShape(size * 0.25f))
             .background(Brush.linearGradient(listOf(Cyan, Color(0xFF22BDF7), Indigo)))
-            .border(1.dp, Ice.copy(alpha=.5f), RoundedCornerShape(size / 4)),
+            .border(1.dp, Ice.copy(alpha=.5f), RoundedCornerShape(size * 0.25f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(Icons.Outlined.Lock, null, tint = Midnight, modifier = Modifier.size(size * .42f))
@@ -901,7 +901,7 @@ private fun GeneratorScreen() {
                     Spacer(Modifier.height(18.dp))
                     Text(password, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(progress = { .9f }, modifier = Modifier.fillMaxWidth(), color = Cyan, trackColor = Color(0xFF164C53))
+                    LinearProgressIndicator(progress = { 0.9f }, modifier = Modifier.fillMaxWidth(), color = Cyan, trackColor = Color(0xFF164C53))
                     Text("Vrlo snažna", color = Good, fontWeight = FontWeight.Bold)
                 }
             }
