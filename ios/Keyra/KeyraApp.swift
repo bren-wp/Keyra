@@ -2059,7 +2059,9 @@ struct DetailView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.openURL) private var openURL
     @State private var reveal = false
-    @State private var revealSensitive = false
+    @State private var revealCardNumber = false
+    @State private var revealSecurityCode = false
+    @State private var revealDocumentNumber = false
     @State private var confirmDelete = false
 
     var body: some View {
@@ -2168,13 +2170,13 @@ struct DetailView: View {
                                     title: "Broj kartice",
                                     value: number,
                                     hidden: "•••• •••• •••• " + String(number.suffix(4)),
-                                    reveal: revealSensitive,
+                                    reveal: revealCardNumber,
                                     onReveal: {
-                                        if revealSensitive {
-                                            revealSensitive = false
+                                        if revealCardNumber {
+                                            revealCardNumber = false
                                         } else {
-                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
-                                                revealSensitive = true
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz broja kartice.") {
+                                                revealCardNumber = true
                                             }
                                         }
                                     },
@@ -2195,13 +2197,13 @@ struct DetailView: View {
                                     title: "Sigurnosni kod",
                                     value: code,
                                     hidden: "•••",
-                                    reveal: revealSensitive,
+                                    reveal: revealSecurityCode,
                                     onReveal: {
-                                        if revealSensitive {
-                                            revealSensitive = false
+                                        if revealSecurityCode {
+                                            revealSecurityCode = false
                                         } else {
-                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
-                                                revealSensitive = true
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz sigurnosnog koda.") {
+                                                revealSecurityCode = true
                                             }
                                         }
                                     },
@@ -2225,13 +2227,13 @@ struct DetailView: View {
                                     title: "Broj dokumenta",
                                     value: number,
                                     hidden: "••••" + String(number.suffix(4)),
-                                    reveal: revealSensitive,
+                                    reveal: revealDocumentNumber,
                                     onReveal: {
-                                        if revealSensitive {
-                                            revealSensitive = false
+                                        if revealDocumentNumber {
+                                            revealDocumentNumber = false
                                         } else {
-                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz osjetljivog podatka.") {
-                                                revealSensitive = true
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz broja dokumenta.") {
+                                                revealDocumentNumber = true
                                             }
                                         }
                                     },
