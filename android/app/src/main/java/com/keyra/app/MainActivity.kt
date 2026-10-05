@@ -3184,23 +3184,68 @@ private fun SettingRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     Surface(
-        modifier = Modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = RoundedCornerShape(20.dp),
         color = Slate,
         border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
     ) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0B3551)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = Cyan)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(subtitle, color = Muted, fontSize = 13.sp)
-            }
-            trailing?.invoke()
-            if (onClick != null && trailing == null) {
-                Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+        BoxWithConstraints {
+            val compact = maxWidth < 380.dp
+            if (compact && trailing != null) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(13.dp))
+                                .background(Color(0xFF0B3551)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, null, tint = Cyan)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
+                            Text(subtitle, color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.align(Alignment.End)) {
+                        trailing.invoke()
+                    }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(if (compact) 12.dp else 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(if (compact) 44.dp else 48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF0B3551)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, null, tint = Cyan)
+                    }
+                    Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            title,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (compact) 15.sp else 17.sp,
+                            maxLines = 2
+                        )
+                        Text(subtitle, color = Muted, fontSize = if (compact) 12.sp else 13.sp)
+                    }
+                    trailing?.invoke()
+                    if (onClick != null && trailing == null) {
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+                    }
+                }
             }
         }
     }
