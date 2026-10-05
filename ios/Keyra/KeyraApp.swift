@@ -2557,8 +2557,15 @@ struct DetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     VStack(alignment: .leading) {
-                        Text(item.title).font(.system(size: 32, weight: .black)).foregroundStyle(.white)
-                        Text(item.kind + " • " + item.category).foregroundStyle(muted)
+                        Text(item.title)
+                            .font(.system(size: 32, weight: .black))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.72)
+                        Text(item.kind + " • " + item.category)
+                            .foregroundStyle(muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     Spacer()
                     if item.favorite { Image(systemName: "star.fill").foregroundStyle(warn) }
@@ -2755,28 +2762,15 @@ struct DetailView: View {
                             }
                         }
 
-                        HStack {
-                            Button {
-                                store.editSelected()
-                            } label: {
-                                Label("Uredi stavku", systemImage: "pencil")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                detailEditButton
+                                detailDeleteButton
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(ice)
-                            .overlay(Capsule().stroke(ice.opacity(0.5), lineWidth: 1))
-
-                            Button {
-                                confirmDelete = true
-                            } label: {
-                                Label("Izbriši", systemImage: "trash")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                            VStack(spacing: 8) {
+                                detailEditButton
+                                detailDeleteButton
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(danger)
-                            .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
                         }
                     }
                     .padding(18)
@@ -2797,6 +2791,32 @@ struct DetailView: View {
                 Text("Ova radnja ne može se poništiti.")
             }
         }
+    }
+
+    private var detailEditButton: some View {
+        Button {
+            store.editSelected()
+        } label: {
+            Label("Uredi stavku", systemImage: "pencil")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ice)
+        .overlay(Capsule().stroke(ice.opacity(0.5), lineWidth: 1))
+    }
+
+    private var detailDeleteButton: some View {
+        Button {
+            confirmDelete = true
+        } label: {
+            Label("Izbriši", systemImage: "trash")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(danger)
+        .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
     }
 }
 
