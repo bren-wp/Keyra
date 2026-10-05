@@ -2746,103 +2746,209 @@ struct DetailRow: View {
 
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
+    @State private var search = ""
+
+    private func matches(_ values: String...) -> Bool {
+        search.isEmpty || values.contains { $0.localizedCaseInsensitiveContains(search) }
+    }
+
+    private var accountVisible: Bool {
+        matches(
+            "Biometrijsko otključavanje",
+            "Potvrda prije prikaza tajni",
+            "Automatsko zaključavanje",
+            "Provjera sigurnosti"
+        )
+    }
+
+    private var dataVisible: Bool {
+        matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+    }
+
+    private var preferenceVisible: Bool {
+        matches("Tamni način", "tamni izgled")
+    }
+
+    private var privacyVisible: Bool {
+        matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             BrandHeader(subtitle: "POSTAVKE I SIGURNOST")
+
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(ice)
+                TextField("Pretražite postavke...", text: $search)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .foregroundStyle(.white)
+                if !search.isEmpty {
+                    Button {
+                        search = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Očisti pretragu")
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 54)
+            .background(slate)
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(ice.opacity(0.35), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 4)
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel("RAČUN I SIGURNOST")
-                    SettingRow(icon: "fingerprint", title: "Biometrijsko otključavanje", subtitle: "Brz i siguran pristup trezoru.") {
-                        Toggle("", isOn: Binding(get: { store.biometricEnabled }, set: { store.toggleBiometric($0) }))
-                            .labelsHidden()
-                            .tint(cyan)
-                    }
-                    SettingRow(
-                        icon: "eye",
-                        title: "Potvrda prije prikaza tajni",
-                        subtitle: "Tražite biometriju ili šifru uređaja prije prikaza i kopiranja osjetljivih podataka."
-                    ) {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { store.sensitiveReauthEnabled },
-                                set: { store.toggleSensitiveReauth($0) }
-                            )
-                        )
-                        .labelsHidden()
-                        .tint(cyan)
-                        .disabled(!store.biometricEnabled)
+                    if accountVisible {
+                        SectionLabel("RAČUN I SIGURNOST")
                     }
 
-                    SettingRow(
-                        icon: "timer",
-                        title: "Automatsko zaključavanje",
-                        subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
-                    ) {
+                    if matches("Biometrijsko otključavanje", "biometrija") {
+                        SettingRow(icon: "fingerprint", title: "Biometrijsko otključavanje", subtitle: "Brz i siguran pristup trezoru.") {
+                            Toggle("", isOn: Binding(get: { store.biometricEnabled }, set: { store.toggleBiometric($0) }))
+                                .labelsHidden()
+                                .tint(cyan)
+                        }
+                    }
+
+                    if matches("Potvrda prije prikaza tajni", "osjetljive vrijednosti", "potvrda identiteta") {
+                        SettingRow(
+                            icon: "eye",
+                            title: "Potvrda prije prikaza tajni",
+                            subtitle: "Tražite biometriju ili šifru uređaja prije prikaza i kopiranja osjetljivih podataka."
+                        ) {
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { store.sensitiveReauthEnabled },
+                                    set: { store.toggleSensitiveReauth($0) }
+                                )
+                            )
+                            .labelsHidden()
+                            .tint(cyan)
+                            .disabled(!store.biometricEnabled)
+                        }
+                    }
+
+                    if matches("Automatsko zaključavanje", "zaključavanje") {
+                        SettingRow(
+                            icon: "timer",
+                            title: "Automatsko zaključavanje",
+                            subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
+                        ) {
+                            Button {
+                                store.cycleAutoLock()
+                            } label: {
+                                Text(store.autoLockLabel)
+                                    .foregroundStyle(cyan)
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if matches("Provjera sigurnosti", "slabe lozinke", "ponovljene lozinke") {
                         Button {
-                            store.cycleAutoLock()
+                            store.open(.security)
                         } label: {
-                            Text(store.autoLockLabel)
-                                .foregroundStyle(cyan)
-                                .font(.subheadline.weight(.semibold))
+                            SettingRow(
+                                icon: "shield.checkered",
+                                title: "Provjera sigurnosti",
+                                subtitle: "Pronađite slabe i ponovljene lozinke."
+                            ) {
+                                Image(systemName: "chevron.right").foregroundStyle(ice)
+                            }
                         }
                         .buttonStyle(.plain)
                     }
 
-                    Button {
-                        store.open(.security)
-                    } label: {
-                        SettingRow(
-                            icon: "shield.checkered",
-                            title: "Provjera sigurnosti",
-                            subtitle: "Pronađite slabe i ponovljene lozinke."
-                        ) {
-                            Image(systemName: "chevron.right").foregroundStyle(ice)
+                    if dataVisible {
+                        SectionLabel("UPRAVLJANJE PODACIMA")
+                    }
+
+                    if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
+                        SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
+                            Button {
+                                store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+                                    store.copyBackup()
+                                }
+                            } label: {
+                                Image(systemName: "doc.on.doc").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .buttonStyle(.plain)
 
-                    SectionLabel("UPRAVLJANJE PODACIMA")
-                    SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
-                        Button {
-                            store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
-                                store.copyBackup()
+                    if matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija") {
+                        SettingRow(icon: "square.and.arrow.down", title: "Uvezi sigurnosnu kopiju", subtitle: "Vratite šifriranu kopiju iz međuspremnika.") {
+                            Button {
+                                store.importBackup()
+                            } label: {
+                                Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
                             }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if preferenceVisible {
+                        SectionLabel("PREFERENCIJE")
+                    }
+
+                    if matches("Tamni način", "tamni izgled") {
+                        SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.") {
+                            Text("Uvijek uključen")
+                                .font(.caption)
+                                .foregroundStyle(cyan)
+                        }
+                    }
+
+                    if privacyVisible {
+                        SectionLabel("SIGURNOST I PRIVATNOST")
+                    }
+
+                    if matches("O aplikaciji Keyra", "verzija") {
+                        SettingRow(
+                            icon: "info.circle",
+                            title: "O aplikaciji Keyra",
+                            subtitle: "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        )
+                    }
+
+                    if matches("Zaključaj trezor", "zaključavanje") {
+                        Button {
+                            store.lock()
                         } label: {
-                            Image(systemName: "doc.on.doc").foregroundStyle(cyan)
-                        }.buttonStyle(.plain)
-                    }
-                    SettingRow(icon: "square.and.arrow.down", title: "Uvezi sigurnosnu kopiju", subtitle: "Vratite šifriranu kopiju iz međuspremnika.") {
-                        Button { store.importBackup() } label: {
-                            Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
-                        }.buttonStyle(.plain)
-                    }
-
-                    SectionLabel("PREFERENCIJE")
-                    SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.") {
-                        Text("Uvijek uključen")
-                            .font(.caption)
-                            .foregroundStyle(cyan)
+                            Label("Zaključaj trezor", systemImage: "lock")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .overlay(Capsule().stroke(ice.opacity(0.4), lineWidth: 1))
                     }
 
-                    SectionLabel("SIGURNOST I PRIVATNOST")
-                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
-
-                    Button {
-                        store.lock()
-                    } label: {
-                        Label("Zaključaj trezor", systemImage: "lock")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                    if !search.isEmpty && !accountVisible && !dataVisible && !preferenceVisible && !privacyVisible {
+                        GlassCard {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(cyan)
+                            Text("Nema rezultata")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                            Text("Pokušajte s drugim pojmom za pretragu postavki.")
+                                .foregroundStyle(muted)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .overlay(Capsule().stroke(ice.opacity(0.4), lineWidth: 1))
                 }
                 .padding(18)
                 .padding(.bottom, 100)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 }
