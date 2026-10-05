@@ -3093,6 +3093,23 @@ private fun DetailScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+                if (
+                    isPasswordItem &&
+                    (current.password.isBlank() || duplicatedPassword || !isStrongPassword(current.password))
+                ) {
+                    item {
+                        Button(
+                            onClick = model::editSelected,
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                            shape = RoundedCornerShape(27.dp)
+                        ) {
+                            Icon(Icons.Outlined.Edit, contentDescription = null)
+                            Spacer(Modifier.width(7.dp))
+                            Text("Uredi i promijeni lozinku", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             if (selectedTab == "Aktivnost") {

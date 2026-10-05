@@ -3184,6 +3184,21 @@ struct DetailView: View {
                                     : "Zaštita trezora",
                                 accent: cyan
                             )
+
+                            if isPasswordItem && (item.password.isEmpty || duplicatedPassword || !isStrongPassword(item.password)) {
+                                Button {
+                                    store.editSelected()
+                                } label: {
+                                    Label("Uredi i promijeni lozinku", systemImage: "pencil")
+                                        .fontWeight(.bold)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 54)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(midnight)
+                                .background(cyan)
+                                .clipShape(Capsule())
+                            }
                         }
 
                         if selectedTab == "Aktivnost" {
