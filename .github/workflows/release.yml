@@ -1,4 +1,4 @@
-name: Izdanje 0.4.0
+name: Izdanje 0.5.0
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: "0.4.0"
+  VERSION: "0.5.0"
 
 jobs:
   android:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Izradi APK i AAB
         run: |
-          gradle -p android :app:assembleDebug :app:assembleRelease :app:bundleRelease
+          gradle -p android :app:lintRelease :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease
           mkdir -p dist
           cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Keyra-${VERSION}-Android.apk"
           cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/Keyra-${VERSION}-Android-unsigned.apk"
@@ -84,8 +84,36 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphonesimulator \
+            -configuration Release \
+            -derivedDataPath build/analyze \
+            CODE_SIGNING_ALLOWED=NO \
+            analyze
+
           SIM_APP="build/simulator/Build/Products/Release-iphonesimulator/Keyra.app"
           test -d "$SIM_APP"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$SIM_APP/Info.plist")
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin).get("devices", {})
+          for runtime_devices in devices.values():
+              for device in runtime_devices:
+                  if device.get("isAvailable") and str(device.get("name", "")).startswith("iPhone"):
+                      print(device["udid"])
+                      raise SystemExit(0)
+          raise SystemExit(1)
+          ')
+          xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$SIM_APP"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+          sleep 3
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+          xcrun simctl shutdown "$UDID" || true
+
           ditto -c -k --sequesterRsrc --keepParent "$SIM_APP" "dist/Keyra-${VERSION}-iOS-Simulator.zip"
 
           cd dist
@@ -113,23 +141,30 @@ jobs:
       - name: Pripremi bilješke izdanja
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          # Keyra 0.4.0
+          # Keyra 0.5.0
 
-          Keyra 0.4.0 donosi veliko poliranje sučelja i prilagodbu svim veličinama zaslona na Androidu i iOS-u.
+          Keyra 0.5.0 usmjerena je na stabilnost, sigurnije rukovanje podacima i dovršavanje svakodnevnih radnji u trezoru.
 
           ## Novo i poboljšano
-          - početni ekran više ne zahtijeva pomicanje kako bi se došlo do glavnog gumba
-          - glavni gumb Kreni ostaje stalno dostupan, dok se sadržaj iznad njega po potrebi pomiče
-          - pojednostavljen splash ekran s fokusom na Keyra identitet i brže čitanje
-          - prilagodljivi rasporedi za manje telefone, veće uređaje, tablete i vodoravni prikaz
-          - sužena i centrirana radna površina na velikim ekranima kako sadržaj ne bi bio nepotrebno rastegnut
-          - prilagođeni zaglavlja, donja navigacija, kartice sažetka, kolekcije, otključavanje, dodavanje i detalji stavki
-          - kolekcije prelaze u jednu kolonu na užim zaslonima i prilagodljivu mrežu na većim ekranima
-          - generator pravilno prikazuje i vrlo duge lozinke bez rezanja sadržaja
-          - sortiranje trezora sada stvarno radi: Najnovije ili A–Ž
-          - filtri u Kolekcijama sada stvarno utječu na prikazane brojeve stavki
-          - poboljšane poruke za slabe lozinke i sigurnosne preporuke
-          - dodatno poliranje razmaka, veličina teksta i dodirnih područja
+          - zaštita od rušenja pri oštećenim ili neočekivanim spremljenim podacima
+          - postojeći sadržaj trezora ostaje sačuvan ako spremanje, brisanje ili uvoz ne uspiju
+          - sigurnosne kopije provjeravaju format, veličinu i dopušten broj stavki prije uvoza
+          - poboljšano rukovanje Android Keystore i Apple Keychain pogreškama
+          - uklonjena prisilna iOS provjera koja je u rijetkim slučajevima mogla zatvoriti aplikaciju
+          - potvrda prije trajnog brisanja stavke
+          - broj kartice, sigurnosni kod i broj dokumenta otkrivaju se zasebno
+          - web-adrese se provjeravaju prije otvaranja i ne mogu srušiti prikaz detalja
+          - kartice u Kolekcijama sada otvaraju odgovarajuće filtrirani Trezor
+          - aktivni filtar kategorije jasno je prikazan i može se ukloniti jednim dodirom
+          - gumb obavijesti više nije neaktivan i prikazuje stvarno stanje
+          - postavka tamnog prikaza jasno pokazuje da je uvijek uključena
+          - zadržana su sva poboljšanja prilagodbe malim telefonima, većim ekranima, tabletima i vodoravnom prikazu iz 0.4.0
+
+          ## Dodatne provjere kvalitete
+          - proširene automatske provjere Android paketa
+          - proširena analiza iOS aplikacije
+          - automatska provjera pokretanja iOS aplikacije u simulatoru prije objave
+          - izdanje se objavljuje tek nakon uspješnih Android i iOS provjera
 
           ## Sigurnost
           - AES-256-GCM zaštita sadržaja trezora
@@ -137,15 +172,15 @@ jobs:
           - PBKDF2-HMAC-SHA-256 s 600.000 iteracija
           - dodatna potvrda identiteta prije prikaza i kopiranja osjetljivih podataka
           - podesivo automatsko zaključavanje
-          - privremeno zaključavanje nakon više uzastopnih pogrešnih pokušaja
+          - zaštita od uzastopnog pogađanja glavne lozinke
           - osjetljivi sadržaj međuspremnika automatski istječe
 
           ## Paketi
-          - `Keyra-0.4.0-Android.apk`
-          - `Keyra-0.4.0-Android.aab`
-          - `Keyra-0.4.0-Android-unsigned.apk`
-          - `Keyra-0.4.0-iOS-unsigned.ipa`
-          - `Keyra-0.4.0-iOS-Simulator.zip`
+          - `Keyra-0.5.0-Android.apk`
+          - `Keyra-0.5.0-Android.aab`
+          - `Keyra-0.5.0-Android-unsigned.apk`
+          - `Keyra-0.5.0-iOS-unsigned.ipa`
+          - `Keyra-0.5.0-iOS-Simulator.zip`
 
           iOS paket bez distribucijskog potpisa potrebno je potpisati odgovarajućim Apple certifikatom i profilom prije instalacije na fizički uređaj ili objave.
           EOF
