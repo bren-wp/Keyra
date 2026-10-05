@@ -15,6 +15,10 @@ Stvarne lozinke, pristupne ključeve i privatne sigurnosne kopije nemojte prilag
 - novi trezor zahtijeva glavnu lozinku od najmanje 12 znakova
 - uzastopni pogrešni pokušaji otključavanja uvode privremeno zaključavanje
 - osjetljivi prikaz i kopiranje mogu zahtijevati dodatnu potvrdu identiteta
-- aplikacija onemogućuje snimanje osjetljivog Android prozora i zaključava trezor prema odabranoj politici
+- spremanje trezora mora uspjeti prije nego što aplikacija prikaže novo stanje kao spremljeno
+- Android onemogućuje snimanje osjetljivog prozora, a iOS skriva sadržaj tijekom aktivnog snimanja zaslona
+- sigurnosne kopije imaju ograničenje veličine i broja stavki prije prihvaćanja uvoza
+- oštećena sigurnosna kopija ne zamjenjuje postojeći trezor
+- trezor se zaključava prema odabranoj politici automatskog zaključavanja
 
 Sigurnosne tvrdnje odnose se na implementirani model zaštite i ne znače da je bilo koji softver apsolutno neprobojan.
