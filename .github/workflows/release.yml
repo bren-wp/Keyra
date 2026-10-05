@@ -1,0 +1,153 @@
+name: Izdanje 0.1.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION: "0.1.0"
+
+jobs:
+  android:
+    name: Android paketi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Izradi APK i AAB
+        run: |
+          gradle -p android :app:assembleDebug :app:assembleRelease :app:bundleRelease
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Keyra-${VERSION}-Android.apk"
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/Keyra-${VERSION}-Android-unsigned.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist/Keyra-${VERSION}-Android.aab"
+          cd dist
+          sha256sum * > SHA256SUMS-Android.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyra-android-${{ env.VERSION }}
+          path: dist/*
+          if-no-files-found: error
+
+  ios:
+    name: iOS paketi
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Izradi paket za iPhone i iPad
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build/device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+          APP_PATH="build/device/Build/Products/Release-iphoneos/Keyra.app"
+          test -d "$APP_PATH"
+          mkdir -p build/package/Payload
+          cp -R "$APP_PATH" build/package/Payload/
+          (
+            cd build/package
+            zip -qry "../../dist/Keyra-${VERSION}-iOS-unsigned.ipa" Payload
+          )
+
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphonesimulator \
+            -configuration Release \
+            -derivedDataPath build/simulator \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          SIM_APP="build/simulator/Build/Products/Release-iphonesimulator/Keyra.app"
+          test -d "$SIM_APP"
+          ditto -c -k --sequesterRsrc --keepParent "$SIM_APP" "dist/Keyra-${VERSION}-iOS-Simulator.zip"
+
+          cd dist
+          shasum -a 256 * > SHA256SUMS-iOS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyra-ios-${{ env.VERSION }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Objavi izdanje
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: keyra-*
+          path: dist
+          merge-multiple: true
+
+      - name: Pripremi bilješke izdanja
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          # Keyra 0.1.0
+
+          Prvo izdanje Keyre donosi šifrirani trezor za vjerodajnice, generator snažnih lozinki, kolekcije, sigurnosni pregled, biometrijsko otključavanje i šifrirane sigurnosne kopije.
+
+          ## Sigurnost
+          - AES-256-GCM zaštita sadržaja trezora
+          - ključevi zaštićeni sigurnosnim spremnikom uređaja
+          - PBKDF2-HMAC-SHA-256 s 600.000 iteracija za glavnu lozinku i prijenosne sigurnosne kopije
+          - biometrijsko otključavanje i provjera identiteta uređaja
+          - automatsko zaključavanje pri napuštanju aplikacije
+          - zaštita prikaza osjetljivog sadržaja
+          - osjetljivi sadržaj međuspremnika automatski istječe
+          - provjera slabih i ponovno korištenih lozinki
+
+          ## Paketi
+          - `Keyra-0.1.0-Android.apk` — instalacijski Android paket za testiranje
+          - `Keyra-0.1.0-Android.aab` — Android App Bundle
+          - `Keyra-0.1.0-Android-unsigned.apk` — nepotpisani Android release paket
+          - `Keyra-0.1.0-iOS-unsigned.ipa` — iOS paket bez distribucijskog potpisa
+          - `Keyra-0.1.0-iOS-Simulator.zip` — iOS Simulator paket
+
+          iOS paket bez distribucijskog potpisa potrebno je potpisati odgovarajućim Apple certifikatom i profilom prije instalacije na fizički uređaj ili objave.
+          EOF
+
+      - name: Objavi ili ažuriraj GitHub izdanje
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" dist/* --clobber
+            gh release edit "v${VERSION}" --title "Keyra ${VERSION}" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "v${VERSION}" \
+              --target "${GITHUB_SHA}" \
+              --title "Keyra ${VERSION}" \
+              --notes-file RELEASE_NOTES.md \
+              dist/*
+          fi
