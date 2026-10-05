@@ -2585,7 +2585,9 @@ struct DetailView: View {
                 titleVisibility: .visible
             ) {
                 Button("Izbriši", role: .destructive) {
-                    store.deleteSelected()
+                    store.authorizeSensitive(reason: "Potvrdite identitet za brisanje stavke.") {
+                        store.deleteSelected()
+                    }
                 }
                 Button("Odustani", role: .cancel) {}
             } message: {
@@ -2888,7 +2890,9 @@ struct SettingsView: View {
                     if matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija") {
                         SettingRow(icon: "square.and.arrow.down", title: "Uvezi sigurnosnu kopiju", subtitle: "Vratite šifriranu kopiju iz međuspremnika.") {
                             Button {
-                                store.importBackup()
+                                store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+                                    store.importBackup()
+                                }
                             } label: {
                                 Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
                             }
