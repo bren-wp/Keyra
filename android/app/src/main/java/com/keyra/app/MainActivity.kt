@@ -2766,16 +2766,22 @@ private fun DetailScreen(
     var revealSecurityCode by remember(current.id) { mutableStateOf(false) }
     var revealDocumentNumber by remember(current.id) { mutableStateOf(false) }
     var confirmDelete by remember(current.id) { mutableStateOf(false) }
+    var selectedTab by remember(current.id) { mutableStateOf("Detalji") }
     val context = LocalContext.current
     val isPasswordItem = current.type == "Prijava" || current.type == "Wi-Fi"
+    val duplicatedPassword = isPasswordItem &&
+        current.password.isNotBlank() &&
+        model.items.any { it.id != current.id && it.password == current.password }
     val securityLabel = when {
         isPasswordItem && current.password.isBlank() -> "Bez lozinke"
+        duplicatedPassword -> "Ponovno korištena"
         isPasswordItem && isStrongPassword(current.password) -> "Snažna"
         isPasswordItem -> "Potrebno ažuriranje"
         else -> "Zaštićena"
     }
     val securityColor = when (securityLabel) {
         "Snažna", "Zaštićena" -> Good
+        "Ponovno korištena" -> Danger
         "Potrebno ažuriranje" -> Warn
         else -> Muted
     }
@@ -2841,15 +2847,27 @@ private fun DetailScreen(
                 Text(current.title, color = Color.White, fontSize = if (compact) 23.sp else 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
                 Text(current.type + " • " + current.category, color = Muted)
             }
-            if (current.favorite) Icon(Icons.Outlined.Star, null, tint = Warn)
+            IconButton(onClick = model::toggleSelectedFavorite) {
+                Icon(
+                    if (current.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                    contentDescription = if (current.favorite) "Ukloni iz favorita" else "Dodaj u favorite",
+                    tint = if (current.favorite) Warn else Ice
+                )
+            }
         }
+
+        DetailTabBar(
+            selected = selectedTab,
+            onSelected = { selectedTab = it },
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)
+        )
 
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            if (current.type == "Prijava") {
+            if (selectedTab == "Detalji" && current.type == "Prijava") {
                 if (current.website.isNotBlank()) item {
                     DetailRow(Icons.Outlined.Link, "Web-stranica", current.website) {
                         if (!openWebsite(context, current.website)) {
@@ -2867,7 +2885,7 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.type == "Wi-Fi") {
+            if (selectedTab == "Detalji" && current.type == "Wi-Fi") {
                 current.fields["Naziv mreže"]?.takeIf { it.isNotBlank() }?.let { network ->
                     item { DetailRow(Icons.Outlined.Wifi, "Naziv mreže", network) }
                 }
@@ -2884,7 +2902,7 @@ private fun DetailScreen(
                 }
             }
 
-            if ((current.type == "Prijava" || current.type == "Wi-Fi") && current.password.isNotBlank()) item {
+            if (selectedTab == "Detalji" && (current.type == "Prijava" || current.type == "Wi-Fi") && current.password.isNotBlank()) item {
                 PasswordDetailRow(
                     password = current.password,
                     reveal = reveal,
@@ -2901,7 +2919,7 @@ private fun DetailScreen(
                 )
             }
 
-            if (current.type == "Kartica") {
+            if (selectedTab == "Detalji" && current.type == "Kartica") {
                 current.fields["Vlasnik kartice"]?.takeIf { it.isNotBlank() }?.let { value ->
                     item { DetailRow(Icons.Outlined.Person, "Vlasnik kartice", value) }
                 }
@@ -2952,7 +2970,7 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.type == "Identitet") {
+            if (selectedTab == "Detalji" && current.type == "Identitet") {
                 current.fields["Puno ime"]?.takeIf { it.isNotBlank() }?.let { value ->
                     item { DetailRow(Icons.Outlined.Person, "Puno ime", value) }
                 }
@@ -2982,51 +3000,75 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.notes.isNotBlank()) item {
+            if (selectedTab == "Detalji" && current.notes.isNotBlank()) item {
                 DetailRow(Icons.Outlined.Description, "Bilješke", current.notes)
             }
 
-            item {
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    if (maxWidth < 500.dp) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Security,
-                                label = "Ocjena sigurnosti",
-                                value = securityLabel,
-                                accent = securityColor,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Schedule,
-                                label = "Zadnje ažurirano",
-                                value = updatedLabel,
-                                accent = Indigo,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Security,
-                                label = "Ocjena sigurnosti",
-                                value = securityLabel,
-                                accent = securityColor,
-                                modifier = Modifier.weight(1f)
-                            )
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Schedule,
-                                label = "Zadnje ažurirano",
-                                value = updatedLabel,
-                                accent = Indigo,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+            if (selectedTab == "Sigurnost") {
+                item {
+                    GlassCard {
+                        Icon(Icons.Outlined.Security, contentDescription = null, tint = securityColor)
+                        Text("Ocjena sigurnosti", color = Muted, fontSize = 13.sp)
+                        Text(
+                            securityLabel,
+                            color = securityColor,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            when {
+                                duplicatedPassword ->
+                                    "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
+                                isPasswordItem && current.password.isBlank() ->
+                                    "Ova stavka nema spremljenu lozinku."
+                                isPasswordItem && !isStrongPassword(current.password) ->
+                                    "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                isPasswordItem ->
+                                    "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                else ->
+                                    "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
+                            },
+                            color = Muted
+                        )
+                    }
+                }
+                item {
+                    DetailMetaCard(
+                        icon = Icons.Outlined.Security,
+                        label = "Zaštita stavke",
+                        value = if (model.sensitiveReauthEnabled && model.biometricEnabled)
+                            "Dodatna potvrda uključena"
+                        else
+                            "Zaštita trezora",
+                        accent = Cyan,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            if (selectedTab == "Aktivnost") {
+                item {
+                    DetailMetaCard(
+                        icon = Icons.Outlined.Schedule,
+                        label = "Zadnja izmjena",
+                        value = updatedLabel,
+                        accent = Indigo,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    GlassCard {
+                        Icon(Icons.Outlined.Info, contentDescription = null, tint = Cyan)
+                        Text("Aktivnost stavke", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Keyra trenutno čuva vrijeme posljednje izmjene stavke. Povijest svih pristupa i kopiranja ne zapisuje se u trezor.",
+                            color = Muted
+                        )
                     }
                 }
             }
 
-            item {
+            if (selectedTab == "Detalji") item {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     if (maxWidth < 390.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3079,6 +3121,44 @@ private fun DetailScreen(
             }
         }
         }
+        }
+    }
+}
+
+@Composable
+private fun DetailTabBar(
+    selected: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Slate),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        listOf("Detalji", "Sigurnost", "Aktivnost").forEach { label ->
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelected(label) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (selected == label) Cyan.copy(alpha = .16f) else Color.Transparent,
+                border = if (selected == label)
+                    androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .8f))
+                else
+                    null
+            ) {
+                Text(
+                    label,
+                    color = if (selected == label) Cyan else Muted,
+                    fontWeight = if (selected == label) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            }
         }
     }
 }
