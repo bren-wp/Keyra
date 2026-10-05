@@ -3159,16 +3159,20 @@ struct DetailView: View {
     @State private var revealCardNumber = false
     @State private var revealSecurityCode = false
     @State private var revealDocumentNumber = false
+    @State private var revealTotpSecret = false
     @State private var confirmDelete = false
     @State private var selectedTab = "Detalji"
 
     var body: some View {
         if let item = store.selected {
             let isPasswordItem = item.kind == "Prijava" || item.kind == "Wi-Fi"
+            let totpConfig = item.kind == "Autentifikator" ? totpConfigFromFields(item.extraFields) : nil
             let duplicatedPassword = isPasswordItem &&
                 !item.password.isEmpty &&
                 store.items.contains { $0.id != item.id && $0.password == item.password }
             let securityLabel: String = {
+                if item.kind == "Autentifikator", totpConfig != nil { return "TOTP aktivan" }
+                if item.kind == "Autentifikator" { return "TOTP greška" }
                 if isPasswordItem && item.password.isEmpty { return "Bez lozinke" }
                 if duplicatedPassword { return "Ponovno korištena" }
                 if isPasswordItem && isStrongPassword(item.password) { return "Snažna" }
@@ -3177,8 +3181,8 @@ struct DetailView: View {
             }()
             let securityColor: Color = {
                 switch securityLabel {
-                case "Snažna", "Zaštićena": return good
-                case "Ponovno korištena": return danger
+                case "Snažna", "Zaštićena", "TOTP aktivan": return good
+                case "Ponovno korištena", "TOTP greška": return danger
                 case "Potrebno ažuriranje": return warn
                 default: return muted
                 }
@@ -3195,6 +3199,7 @@ struct DetailView: View {
                         case "Kartica": return "creditcard.fill"
                         case "Identitet": return "person.text.rectangle.fill"
                         case "Wi-Fi": return "wifi"
+                        case "Autentifikator": return "shield.lefthalf.filled"
                         default: return "lock.fill"
                         }
                     }())
@@ -3393,6 +3398,81 @@ struct DetailView: View {
                             }
                         }
 
+                        if item.kind == "Autentifikator" {
+                            if let config = totpConfig {
+                                TimelineView(.periodic(from: .now, by: 1)) { context in
+                                    TotpCodeCard(config: config, date: context.date) {
+                                        if let code = generateTotp(config, at: context.date) {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje 2FA koda.") {
+                                                SecureClipboard.copy(code)
+                                                store.message = "2FA kod kopiran je i automatski će se ukloniti."
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !config.issuer.isEmpty {
+                                    DetailRow(icon: "building.2", title: "Izdavatelj", value: config.issuer)
+                                }
+                                if !config.account.isEmpty {
+                                    DetailRow(icon: "person", title: "Račun", value: config.account)
+                                }
+
+                                SensitiveDetailView(
+                                    icon: "key.fill",
+                                    title: "TOTP tajna",
+                                    value: config.secret,
+                                    hidden: "••••••••" + String(config.secret.suffix(4)),
+                                    reveal: revealTotpSecret,
+                                    onReveal: {
+                                        if revealTotpSecret {
+                                            revealTotpSecret = false
+                                        } else {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz TOTP tajne.") {
+                                                revealTotpSecret = true
+                                            }
+                                        }
+                                    },
+                                    onCopy: {
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje TOTP tajne.") {
+                                            SecureClipboard.copy(config.secret)
+                                            store.message = "TOTP tajna kopirana je i automatski će se ukloniti."
+                                        }
+                                    }
+                                )
+
+                                DetailMetaCard(
+                                    icon: "clock.arrow.circlepath",
+                                    title: "TOTP postavke",
+                                    value: "\(config.algorithm) • \(config.digits) znamenki • \(config.period) s",
+                                    accent: good
+                                )
+                            } else {
+                                GlassCard {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(danger)
+                                    Text("TOTP konfiguracija nije valjana.")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                    Text("Uredite stavku i ponovno unesite Base32 tajnu ili otpauth URI.")
+                                        .foregroundStyle(muted)
+                                    Button {
+                                        store.editSelected()
+                                    } label: {
+                                        Text("Uredi autentifikator")
+                                            .fontWeight(.bold)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 11)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(midnight)
+                                    .background(cyan)
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+
                         if !item.notes.isEmpty {
                             DetailRow(icon: "doc.text", title: "Bilješke", value: item.notes)
                         }
@@ -3463,6 +3543,12 @@ struct DetailView: View {
                                     }
                                     if isPasswordItem {
                                         return "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                    }
+                                    if item.kind == "Autentifikator", totpConfig != nil {
+                                        return "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                    }
+                                    if item.kind == "Autentifikator" {
+                                        return "TOTP konfiguracija nije valjana i treba je urediti."
                                     }
                                     return "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
                                 }())
@@ -3539,6 +3625,7 @@ struct DetailView: View {
                 revealCardNumber = false
                 revealSecurityCode = false
                 revealDocumentNumber = false
+                revealTotpSecret = false
             }
         }
     }
@@ -3567,6 +3654,70 @@ struct DetailView: View {
         .buttonStyle(.plain)
         .foregroundStyle(danger)
         .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
+    }
+}
+
+struct TotpCodeCard: View {
+    let config: TotpConfig
+    let date: Date
+    let onCopy: () -> Void
+
+    var body: some View {
+        let code = generateTotp(config, at: date) ?? String(repeating: "—", count: config.digits)
+        let remaining = totpRemainingSeconds(config, at: date)
+        let progress = Double(remaining) / Double(config.period)
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.title2)
+                    .foregroundStyle(good)
+                    .frame(width: 48, height: 48)
+                    .background(good.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Vremenski 2FA kod")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Automatski se mijenja svakih \(config.period) s")
+                        .font(.caption)
+                        .foregroundStyle(muted)
+                }
+
+                Spacer()
+
+                Button(action: onCopy) {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(ice)
+                        .frame(width: 42, height: 42)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Kopiraj 2FA kod")
+            }
+
+            Text(formatTotpCode(code))
+                .font(.system(size: 38, weight: .black, design: .rounded))
+                .tracking(2)
+                .foregroundStyle(cyan)
+                .minimumScaleFactor(0.72)
+
+            ProgressView(value: progress, total: 1)
+                .tint(good)
+
+            Text("\(remaining) s do novog koda")
+                .font(.caption)
+                .foregroundStyle(muted)
+
+            Text("Kod ovisi o točnom vremenu uređaja i generira se lokalno bez slanja TOTP tajne.")
+                .font(.caption)
+                .foregroundStyle(muted)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(slate)
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(good.opacity(0.65), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 }
 
