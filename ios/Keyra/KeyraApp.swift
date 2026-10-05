@@ -36,6 +36,46 @@ extension Color {
     }
 }
 
+func isValidCardNumber(_ raw: String) -> Bool {
+    let digits = raw.compactMap { $0.wholeNumberValue }
+    guard (12...19).contains(digits.count) else { return false }
+
+    var sum = 0
+    var shouldDouble = false
+    for digit in digits.reversed() {
+        var value = digit
+        if shouldDouble {
+            value *= 2
+            if value > 9 { value -= 9 }
+        }
+        sum += value
+        shouldDouble.toggle()
+    }
+    return sum.isMultiple(of: 10)
+}
+
+func isCardExpiryNotPast(
+    _ raw: String,
+    now: Date = Date(),
+    calendar: Calendar = .current
+) -> Bool {
+    let parts = raw.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "/")
+    guard
+        parts.count == 2,
+        let month = Int(parts[0]),
+        (1...12).contains(month),
+        let parsedYear = Int(parts[1]),
+        parts[1].count == 2 || parts[1].count == 4
+    else {
+        return false
+    }
+
+    let year = parts[1].count == 2 ? 2000 + parsedYear : parsedYear
+    let currentYear = calendar.component(.year, from: now)
+    let currentMonth = calendar.component(.month, from: now)
+    return year > currentYear || (year == currentYear && month >= currentMonth)
+}
+
 func formatCardExpiry(_ raw: String) -> String {
     let digits = raw.filter(\.isNumber).prefix(6)
     guard digits.count > 2 else { return String(digits) }
@@ -2714,6 +2754,9 @@ struct AddEditView: View {
                             if type == "Kartica", !field2.isEmpty, !(12...19).contains(field2.count) {
                                 return "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             }
+                            if type == "Kartica", !field2.isEmpty, !isValidCardNumber(field2) {
+                                return "Broj kartice nije prošao provjeru kontrolne znamenke."
+                            }
                             if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
                                 return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             }
@@ -2722,6 +2765,9 @@ struct AddEditView: View {
                                 let pattern = "^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$"
                                 if expiry.range(of: pattern, options: .regularExpression) == nil {
                                     return "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
+                                }
+                                if !isCardExpiryNotPast(expiry) {
+                                    return "Datum isteka kartice je u prošlosti."
                                 }
                             }
                             if type == "Identitet",
