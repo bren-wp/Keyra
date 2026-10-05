@@ -1002,6 +1002,7 @@ struct VaultView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
     @State private var filter = "Sve"
+    @State private var newestFirst = true
 
     private var passwordItems: [VaultItem] {
         store.items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
@@ -1034,7 +1035,11 @@ struct VaultView: View {
                 let searchOK = search.isEmpty || haystack.localizedCaseInsensitiveContains(search)
                 return typeOK && searchOK
             }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted {
+                newestFirst
+                ? $0.updatedAt > $1.updatedAt
+                : $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
     }
 
     var body: some View {
@@ -1116,9 +1121,18 @@ struct VaultView: View {
                     .font(.system(size: 28, weight: .black))
                     .foregroundStyle(.white)
                 Spacer()
-                Text("Poredaj po nedavnim")
+                Button {
+                    newestFirst.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: newestFirst ? "clock" : "textformat.abc")
+                        Text(newestFirst ? "Najnovije" : "A–Ž")
+                    }
                     .font(.caption)
                     .foregroundStyle(muted)
+                }
+                .buttonStyle(.plain)
+
                 Button { store.addNew() } label: {
                     Image(systemName: "plus")
                         .font(.title2.bold())
@@ -1300,6 +1314,22 @@ struct CollectionsView: View {
         ("Ostalo", muted, "square.grid.2x2")
     ]
 
+    private var collectionItems: [VaultItem] {
+        store.items.filter { item in
+            let typeMatch = selectedType == "Favoriti" ? item.favorite : item.kind == selectedType
+            let haystack = [
+                item.title,
+                item.username,
+                item.website,
+                item.notes,
+                item.category,
+                item.extraFields.values.joined(separator: " ")
+            ].joined(separator: " ")
+            let searchMatch = search.isEmpty || haystack.localizedCaseInsensitiveContains(search)
+            return typeMatch && searchMatch
+        }
+    }
+
     private var recentNotes: [VaultItem] {
         Array(
             store.items
@@ -1385,7 +1415,7 @@ struct CollectionsView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 13))
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(name).font(.headline).foregroundStyle(.white)
-                                Text("\(store.items.filter { $0.category == name }.count) stavki")
+                                Text("\(collectionItems.filter { $0.category == name }.count) stavki")
                                     .font(.subheadline).foregroundStyle(muted)
                             }
                             Spacer()
@@ -2350,7 +2380,7 @@ struct SecurityCenterView: View {
                                         Text(
                                             duplicateIDs.contains(item.id)
                                             ? "Lozinka se koristi na više mjesta."
-                                            : "Lozinka je prekratka i preporučuje se zamjena."
+                                            : "Lozinka nije dovoljno snažna i preporučuje se zamjena."
                                         )
                                         .font(.subheadline)
                                         .foregroundStyle(muted)
