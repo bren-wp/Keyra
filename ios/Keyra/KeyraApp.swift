@@ -129,11 +129,10 @@ func parseTotpInput(
         return nil
     }
 
-    let params = Dictionary(
-        uniqueKeysWithValues: (components.queryItems ?? []).map {
-            ($0.name.lowercased(), $0.value ?? "")
-        }
-    )
+    var params: [String: String] = [:]
+    for item in components.queryItems ?? [] {
+        params[item.name.lowercased()] = item.value ?? ""
+    }
     guard let secret = normalizedBase32Secret(params["secret"] ?? "") else { return nil }
 
     let rawLabel = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
