@@ -24,4 +24,6 @@ jobs:
         with:
           gradle-version: "8.10.2"
       - name: Provjeri Android aplikaciju
-        run: gradle -p android :app:assembleDebug
+        run: |
+          set -euo pipefail
+          gradle -p android :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
