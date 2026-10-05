@@ -3,15 +3,22 @@ package com.keyra.app
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ClipDescription
 import android.content.Context
 import android.os.Bundle
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.PersistableBundle
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +42,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -43,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
@@ -86,11 +95,17 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             KeyraTheme {
                 KeyraRoot(model = model, requestBiometric = { authenticateBiometric() })
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (model.unlocked) model.lock()
     }
 
     private fun authenticateBiometric() {
@@ -262,26 +277,45 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 }
 
 private class AuthStore(private val prefs: android.content.SharedPreferences) {
+    companion object {
+        private const val CURRENT_ITERATIONS = 600_000
+        private const val LEGACY_ITERATIONS = 180_000
+    }
+
     fun isSetup() = prefs.contains("master_hash")
 
     fun create(password: String) {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
             .putString("master_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            .putString("master_hash", derive(password, salt))
+            .putInt("master_iterations", CURRENT_ITERATIONS)
+            .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
             .apply()
     }
 
     fun verify(password: String): Boolean {
         val salt = prefs.getString("master_salt", null)?.let { Base64.decode(it, Base64.NO_WRAP) } ?: return false
         val expected = prefs.getString("master_hash", null) ?: return false
-        return MessageDigest.isEqual(expected.toByteArray(), derive(password, salt).toByteArray())
+        val iterations = prefs.getInt("master_iterations", LEGACY_ITERATIONS)
+        val actual = derive(password, salt, iterations)
+        val ok = MessageDigest.isEqual(expected.toByteArray(), actual.toByteArray())
+        if (ok && iterations < CURRENT_ITERATIONS) {
+            prefs.edit()
+                .putInt("master_iterations", CURRENT_ITERATIONS)
+                .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
+                .apply()
+        }
+        return ok
     }
 
-    private fun derive(password: String, salt: ByteArray): String {
-        val spec = PBEKeySpec(password.toCharArray(), salt, 180_000, 256)
-        val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        return Base64.encodeToString(bytes, Base64.NO_WRAP)
+    private fun derive(password: String, salt: ByteArray, iterations: Int): String {
+        val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
+        return try {
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } finally {
+            spec.clearPassword()
+        }
     }
 }
 
@@ -292,16 +326,18 @@ private class CryptoStore {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        generator.init(
-            KeyGenParameterSpec.Builder(
-                alias,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
+        val builder = KeyGenParameterSpec.Builder(
+            alias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
         )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setRandomizedEncryptionRequired(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            builder.setUnlockedDeviceRequired(true)
+        }
+        generator.init(builder.build())
         return generator.generateKey()
     }
 
@@ -380,15 +416,18 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
 }
 
 private object PortableBackup {
+    private const val ITERATIONS = 600_000
+
     fun encrypt(text: String, password: String): String {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-        val key = derive(password, salt)
+        val key = derive(password, salt, ITERATIONS)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
         val data = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
         return listOf(
-            "KEYRA1",
+            "KEYRA2",
+            ITERATIONS.toString(),
             Base64.encodeToString(salt, Base64.NO_WRAP),
             Base64.encodeToString(iv, Base64.NO_WRAP),
             Base64.encodeToString(data, Base64.NO_WRAP)
@@ -397,19 +436,36 @@ private object PortableBackup {
 
     fun decrypt(payload: String, password: String): String {
         val p = payload.split(".")
-        require(p.size == 4 && p[0] == "KEYRA1")
-        val salt = Base64.decode(p[1], Base64.NO_WRAP)
-        val iv = Base64.decode(p[2], Base64.NO_WRAP)
-        val data = Base64.decode(p[3], Base64.NO_WRAP)
+        val iterations: Int
+        val saltIndex: Int
+        when {
+            p.size == 5 && p[0] == "KEYRA2" -> {
+                iterations = p[1].toInt()
+                require(iterations in 100_000..2_000_000)
+                saltIndex = 2
+            }
+            p.size == 4 && p[0] == "KEYRA1" -> {
+                iterations = 180_000
+                saltIndex = 1
+            }
+            else -> error("Neispravan format sigurnosne kopije.")
+        }
+        val salt = Base64.decode(p[saltIndex], Base64.NO_WRAP)
+        val iv = Base64.decode(p[saltIndex + 1], Base64.NO_WRAP)
+        val data = Base64.decode(p[saltIndex + 2], Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, derive(password, salt), GCMParameterSpec(128, iv))
+        cipher.init(Cipher.DECRYPT_MODE, derive(password, salt, iterations), GCMParameterSpec(128, iv))
         return cipher.doFinal(data).toString(Charsets.UTF_8)
     }
 
-    private fun derive(password: String, salt: ByteArray): SecretKey {
-        val spec = PBEKeySpec(password.toCharArray(), salt, 180_000, 256)
-        val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        return javax.crypto.spec.SecretKeySpec(bytes, "AES")
+    private fun derive(password: String, salt: ByteArray, iterations: Int): SecretKey {
+        val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
+        return try {
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            javax.crypto.spec.SecretKeySpec(bytes, "AES")
+        } finally {
+            spec.clearPassword()
+        }
     }
 }
 
@@ -479,12 +535,17 @@ private fun SplashScreen() {
 @Composable
 private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size * 0.25f))
-            .background(Brush.linearGradient(listOf(Cyan, Color(0xFF22BDF7), Indigo)))
-            .border(1.dp, Ice.copy(alpha=.5f), RoundedCornerShape(size * 0.25f)),
+        Modifier.size(size)
+            .clip(RoundedCornerShape(size * 0.25f))
+            .background(Midnight)
+            .border(1.dp, Cyan.copy(alpha=.7f), RoundedCornerShape(size * 0.25f)),
         contentAlignment = Alignment.Center
     ) {
-        Icon(Icons.Outlined.Lock, null, tint = Midnight, modifier = Modifier.size(size * .42f))
+        Image(
+            painter = painterResource(id = R.drawable.ic_keyra),
+            contentDescription = "Keyra",
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -1097,7 +1158,20 @@ private fun DetailScreen(model: KeyraViewModel) {
 
 private fun copy(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Keyra", text))
+    val clip = ClipData.newPlainText("Keyra", text)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        clip.description.extras = PersistableBundle().apply {
+            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+        }
+    }
+    clipboard.setPrimaryClip(clip)
+    Handler(Looper.getMainLooper()).postDelayed({
+        val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        if (current == text) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+    }, 30_000)
 }
 
 @Composable
