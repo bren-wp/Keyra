@@ -62,6 +62,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.text.DateFormat
 import java.util.Date
+import java.util.Calendar
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -2431,6 +2432,41 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 }
 
+internal fun isValidCardNumber(raw: String): Boolean {
+    val digits = raw.filter(Char::isDigit)
+    if (digits.length !in 12..19) return false
+
+    var sum = 0
+    var doubleDigit = false
+    for (index in digits.indices.reversed()) {
+        var value = digits[index].digitToInt()
+        if (doubleDigit) {
+            value *= 2
+            if (value > 9) value -= 9
+        }
+        sum += value
+        doubleDigit = !doubleDigit
+    }
+    return sum % 10 == 0
+}
+
+internal fun isCardExpiryNotPast(
+    raw: String,
+    currentYear: Int,
+    currentMonth: Int
+): Boolean {
+    val match = Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matchEntire(raw.trim())
+        ?: return false
+    val month = match.groupValues[1].toInt()
+    val yearPart = match.groupValues[2].toInt()
+    val year = if (match.groupValues[2].length == 2) {
+        2000 + yearPart
+    } else {
+        yearPart
+    }
+    return year > currentYear || (year == currentYear && month >= currentMonth)
+}
+
 internal fun formatCardExpiry(raw: String): String {
     val digits = raw.filter(Char::isDigit).take(6)
     return when {
@@ -2672,6 +2708,9 @@ private fun AddScreen(model: KeyraViewModel) {
                 Button(
                     onClick = {
                         val cleanTitle = title.trim()
+                        val now = Calendar.getInstance()
+                        val currentYear = now.get(Calendar.YEAR)
+                        val currentMonth = now.get(Calendar.MONTH) + 1
                         val validationMessage = when {
                             cleanTitle.isBlank() -> "Unesite naslov stavke."
                             type == "Prijava" && website.isNotBlank() && normalizedWebsiteUri(website) == null ->
@@ -2680,10 +2719,14 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Unesite naziv Wi-Fi mreže."
                             type == "Kartica" && field2.isNotBlank() && field2.length !in 12..19 ->
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
+                            type == "Kartica" && field2.isNotBlank() && !isValidCardNumber(field2) ->
+                                "Broj kartice nije prošao provjeru kontrolne znamenke."
                             type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
                                 "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             type == "Kartica" && field3.isNotBlank() && !Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matches(field3.trim()) ->
                                 "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
+                            type == "Kartica" && field3.isNotBlank() && !isCardExpiryNotPast(field3, currentYear, currentMonth) ->
+                                "Datum isteka kartice je u prošlosti."
                             type == "Identitet" && field1.isBlank() && field2.isBlank() ->
                                 "Unesite puno ime ili broj dokumenta."
                             else -> null
