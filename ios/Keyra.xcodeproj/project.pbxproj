@@ -7,11 +7,13 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* KeyraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* KeyraApp.swift */; };
+		A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* KeyraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyraApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Keyra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keyra.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +38,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* KeyraApp.swift */,
+				A10000000000000000000013 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Keyra;
 			sourceTree = "<group>";
@@ -98,7 +101,9 @@
 		A1000000000000000000000B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+				A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -152,6 +157,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Keyra;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Omogućuje brzo i sigurno otključavanje trezora.";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app;
@@ -173,6 +179,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Keyra;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Omogućuje brzo i sigurno otključavanje trezora.";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app;
