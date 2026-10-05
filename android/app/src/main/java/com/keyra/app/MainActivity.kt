@@ -604,7 +604,7 @@ private fun KeyraRoot(model: KeyraViewModel, requestBiometric: () -> Unit) {
             Screen.UNLOCK -> UnlockScreen(model, requestBiometric)
             Screen.VAULT -> MainScaffold(model, Screen.VAULT) { VaultScreen(model) }
             Screen.COLLECTIONS -> MainScaffold(model, Screen.COLLECTIONS) { CollectionsScreen(model) }
-            Screen.GENERATOR -> MainScaffold(model, Screen.GENERATOR) { GeneratorScreen() }
+            Screen.GENERATOR -> MainScaffold(model, Screen.GENERATOR) { GeneratorScreen(model) }
             Screen.ADD -> AddScreen(model)
             Screen.DETAIL -> DetailScreen(model)
             Screen.SETTINGS -> MainScaffold(model, Screen.SETTINGS) { SettingsScreen(model) }
@@ -1195,7 +1195,8 @@ private fun CollectionsScreen(model: KeyraViewModel) {
 }
 
 @Composable
-private fun GeneratorScreen() {
+private fun GeneratorScreen(model: KeyraViewModel) {
+    val context = LocalContext.current
     var length by remember { mutableFloatStateOf(16f) }
     var upper by remember { mutableStateOf(true) }
     var lower by remember { mutableStateOf(true) }
@@ -1241,15 +1242,30 @@ private fun GeneratorScreen() {
                 }
             }
             item {
-                Button(
-                    onClick = { refresh() },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-                    shape = RoundedCornerShape(28.dp)
-                ) {
-                    Icon(Icons.Outlined.Refresh, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Generiraj novu", fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            copy(context, password)
+                            model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                        },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.7f)),
+                        shape = RoundedCornerShape(28.dp)
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, null, tint = Ice)
+                        Spacer(Modifier.width(7.dp))
+                        Text("Kopiraj lozinku", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { refresh() },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                        shape = RoundedCornerShape(28.dp)
+                    ) {
+                        Icon(Icons.Outlined.Refresh, null)
+                        Spacer(Modifier.width(7.dp))
+                        Text("Generiraj novu", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
