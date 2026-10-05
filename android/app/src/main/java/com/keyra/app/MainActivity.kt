@@ -230,9 +230,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val payload = PortableBackup.encrypt(store.toJson(items), password)
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Keyra sigurnosna kopija", payload))
-        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik."
+        copy(context, payload)
+        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
     }
 
     fun importBackup(context: Context) {
@@ -1001,14 +1000,26 @@ private fun GeneratorScreen() {
 }
 
 private fun generatePassword(length: Int, upper: Boolean, lower: Boolean, numbers: Boolean, symbols: Boolean): String {
-    val pool = buildString {
-        if (upper) append("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        if (lower) append("abcdefghijklmnopqrstuvwxyz")
-        if (numbers) append("0123456789")
-        if (symbols) append("!@#$%&*+-_=.?")
-    }.ifBlank { "abcdefghijklmnopqrstuvwxyz" }
+    val sets = buildList {
+        if (upper) add("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        if (lower) add("abcdefghijklmnopqrstuvwxyz")
+        if (numbers) add("0123456789")
+        if (symbols) add("!@#$%&*+-_=.?")
+    }.ifEmpty { listOf("abcdefghijklmnopqrstuvwxyz") }
+
     val random = SecureRandom()
-    return buildString { repeat(length) { append(pool[random.nextInt(pool.length)]) } }
+    val required = sets.map { it[random.nextInt(it.length)] }.toMutableList()
+    val pool = sets.joinToString("")
+    while (required.size < length) {
+        required.add(pool[random.nextInt(pool.length)])
+    }
+    for (i in required.lastIndex downTo 1) {
+        val j = random.nextInt(i + 1)
+        val tmp = required[i]
+        required[i] = required[j]
+        required[j] = tmp
+    }
+    return required.take(length).joinToString("")
 }
 
 @Composable
@@ -1137,9 +1148,15 @@ private fun DetailScreen(model: KeyraViewModel) {
                 }
             }
             if (current.password.isNotBlank()) item {
-                DetailRow(Icons.Outlined.Lock, "Lozinka", if (reveal) current.password else "••••••••••••••") {
-                    reveal = !reveal
-                }
+                PasswordDetailRow(
+                    password = current.password,
+                    reveal = reveal,
+                    onReveal = { reveal = !reveal },
+                    onCopy = {
+                        copy(context, current.password)
+                        model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                    }
+                )
             }
             if (current.notes.isNotBlank()) item { DetailRow(Icons.Outlined.Description, "Bilješke", current.notes) }
             item {
@@ -1172,6 +1189,41 @@ private fun copy(context: Context, text: String) {
             else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
         }
     }, 30_000)
+}
+
+@Composable
+private fun PasswordDetailRow(
+    password: String,
+    reveal: Boolean,
+    onReveal: () -> Unit,
+    onCopy: () -> Unit
+) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF063A3A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.Lock, null, tint = Cyan)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Lozinka", color = Muted, fontSize = 13.sp)
+                Text(if (reveal) password else "••••••••••••••", color = Color.White, fontSize = 16.sp)
+            }
+            IconButton(onClick = onReveal) {
+                Icon(if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null, tint = Ice)
+            }
+            IconButton(onClick = onCopy) {
+                Icon(Icons.Outlined.ContentCopy, null, tint = Cyan)
+            }
+        }
+    }
 }
 
 @Composable
