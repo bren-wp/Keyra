@@ -36,6 +36,14 @@ extension Color {
     }
 }
 
+func formatCardExpiry(_ raw: String) -> String {
+    let digits = raw.filter(\.isNumber).prefix(6)
+    guard digits.count > 2 else { return String(digits) }
+    let month = digits.prefix(2)
+    let year = digits.dropFirst(2)
+    return "\(month)/\(year)"
+}
+
 func normalizedWebURL(_ raw: String) -> URL? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
@@ -2391,7 +2399,14 @@ struct AddEditView: View {
                             .onChange(of: field2) { _, value in
                                 field2 = String(value.filter(\.isNumber).prefix(19))
                             }
-                        KeyraField(title: "Vrijedi do", text: $field3)
+                        KeyraField(title: "Vrijedi do (MM/GG)", text: $field3)
+                            .keyboardType(.numberPad)
+                            .onChange(of: field3) { _, value in
+                                let formatted = formatCardExpiry(value)
+                                if formatted != value {
+                                    field3 = formatted
+                                }
+                            }
                         KeyraField(title: "Sigurnosni kod", text: $field4)
                             .keyboardType(.numberPad)
                             .onChange(of: field4) { _, value in
