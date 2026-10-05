@@ -3079,6 +3079,13 @@ struct DetailRow: View {
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
+    @State private var confirmImport = false
+
+    private func runProtectedImport() {
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+            store.importBackup()
+        }
+    }
 
     private func matches(_ values: String...) -> Bool {
         search.isEmpty || values.contains { $0.localizedCaseInsensitiveContains(search) }
@@ -3218,15 +3225,18 @@ struct SettingsView: View {
                     }
 
                     if matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija") {
-                        SettingRow(icon: "square.and.arrow.down", title: "Uvezi sigurnosnu kopiju", subtitle: "Vratite šifriranu kopiju iz međuspremnika.") {
+                        SettingRow(
+                            icon: "square.and.arrow.down",
+                            title: "Uvezi sigurnosnu kopiju",
+                            subtitle: "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
+                        ) {
                             Button {
-                                store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
-                                    store.importBackup()
-                                }
+                                confirmImport = true
                             } label: {
                                 Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi sigurnosnu kopiju")
                         }
                     }
 
@@ -3283,6 +3293,21 @@ struct SettingsView: View {
                 .padding(.bottom, 100)
             }
             .scrollDismissesKeyboard(.interactively)
+        }
+        .confirmationDialog(
+            "Uvesti sigurnosnu kopiju?",
+            isPresented: $confirmImport,
+            titleVisibility: .visible
+        ) {
+            Button("Uvezi i zamijeni", role: .destructive) {
+                runProtectedImport()
+            }
+            Button("Odustani", role: .cancel) {}
+        } message: {
+            Text(
+                "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
+                "Prije nastavka provjerite da je kopija ispravna."
+            )
         }
     }
 }
