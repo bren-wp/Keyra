@@ -879,7 +879,7 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     }
 }
 
-private fun securityIssueIds(items: List<VaultItem>): Set<String> {
+internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
     val passwordItems = items.filter {
         (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank()
     }
@@ -897,7 +897,7 @@ private fun securityIssueIds(items: List<VaultItem>): Set<String> {
     return duplicatedIds + weakIds
 }
 
-private fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
+internal fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
 
 @Composable
 private fun BrandHeader(
