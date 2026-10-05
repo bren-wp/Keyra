@@ -419,6 +419,12 @@ func securityIssueCount(_ items: [VaultItem]) -> Int {
     securityIssueIDs(items).count
 }
 
+func deviceAuthenticationAvailable() -> Bool {
+    let context = LAContext()
+    var error: NSError?
+    return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
+}
+
 final class KeyraStore: ObservableObject {
     private let auth = AuthStore()
     private let vault = EncryptedVault()
@@ -444,8 +450,11 @@ final class KeyraStore: ObservableObject {
         self.screen = setup ? .unlock : .onboarding
         self.vaultCategoryFilter = nil
         self.vaultTypeFilter = nil
-        self.biometricEnabled = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
-        self.sensitiveReauthEnabled = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
+        let authenticationAvailable = deviceAuthenticationAvailable()
+        let savedBiometric = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
+        let savedSensitiveReauth = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
+        self.biometricEnabled = savedBiometric && authenticationAvailable
+        self.sensitiveReauthEnabled = savedSensitiveReauth && savedBiometric && authenticationAvailable
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
@@ -656,6 +665,13 @@ final class KeyraStore: ObservableObject {
     }
 
     func toggleBiometric(_ enabled: Bool) {
+        if enabled && !deviceAuthenticationAvailable() {
+            biometricEnabled = false
+            sensitiveReauthEnabled = false
+            message = "Biometrija ili zaključavanje uređaja nisu dostupni. Najprije zaštitite uređaj."
+            return
+        }
+
         biometricEnabled = enabled
         if !enabled { sensitiveReauthEnabled = false }
         defaults.set(enabled, forKey: "biometric_enabled")
