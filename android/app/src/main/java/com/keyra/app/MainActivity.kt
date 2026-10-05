@@ -2735,20 +2735,54 @@ private fun SettingsScreen(
     requestBiometric: (String, () -> Unit) -> Unit
 ) {
     val context = LocalContext.current
+    var search by remember { mutableStateOf("") }
+
+    fun matches(vararg values: String): Boolean =
+        search.isBlank() || values.any { it.contains(search, ignoreCase = true) }
+
+    val accountVisible = matches(
+        "Biometrijsko otključavanje",
+        "Potvrda prije prikaza tajni",
+        "Automatsko zaključavanje",
+        "Provjera sigurnosti"
+    )
+    val dataVisible = matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+    val preferenceVisible = matches("Tamni način", "tamni izgled")
+    val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+
     Column(Modifier.fillMaxSize()) {
         BrandHeader("POSTAVKE I SIGURNOST") { model.open(Screen.SECURITY) }
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 4.dp),
+            placeholder = { Text("Pretražite postavke...") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            trailingIcon = if (search.isNotBlank()) {
+                {
+                    IconButton(onClick = { search = "" }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu")
+                    }
+                }
+            } else null,
+            singleLine = true,
+            colors = keyraFieldColors(),
+            shape = RoundedCornerShape(24.dp)
+        )
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 20.dp)
         ) {
-            item { SectionTitle("RAČUN I SIGURNOST") }
-            item {
+            if (accountVisible) item { SectionTitle("RAČUN I SIGURNOST") }
+            if (matches("Biometrijsko otključavanje", "biometrija")) item {
                 SettingRow(Icons.Outlined.Fingerprint, "Biometrijsko otključavanje", "Brz i siguran pristup trezoru.") {
                     Switch(model.biometricEnabled, model::toggleBiometric)
                 }
             }
-            item {
+            if (matches("Potvrda prije prikaza tajni", "osjetljive vrijednosti", "potvrda identiteta")) item {
                 SettingRow(
                     Icons.Outlined.Visibility,
                     "Potvrda prije prikaza tajni",
@@ -2761,7 +2795,7 @@ private fun SettingsScreen(
                     )
                 }
             }
-            item {
+            if (matches("Automatsko zaključavanje", "zaključavanje")) item {
                 SettingRow(
                     Icons.Outlined.Timer,
                     "Automatsko zaključavanje",
@@ -2772,7 +2806,7 @@ private fun SettingsScreen(
                     }
                 }
             }
-            item {
+            if (matches("Provjera sigurnosti", "slabe lozinke", "ponovljene lozinke")) item {
                 SettingRow(
                     Icons.Outlined.Security,
                     "Provjera sigurnosti",
@@ -2780,8 +2814,9 @@ private fun SettingsScreen(
                     onClick = { model.open(Screen.SECURITY) }
                 )
             }
-            item { SectionTitle("UPRAVLJANJE PODACIMA") }
-            item {
+
+            if (dataVisible) item { SectionTitle("UPRAVLJANJE PODACIMA") }
+            if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
                         if (model.sensitiveReauthEnabled && model.biometricEnabled) {
@@ -2794,24 +2829,38 @@ private fun SettingsScreen(
                     }) { Icon(Icons.Outlined.ContentCopy, null, tint = Cyan) }
                 }
             }
-            item {
+            if (matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Download, "Uvezi sigurnosnu kopiju", "Vratite šifriranu kopiju iz međuspremnika.") {
                     IconButton(onClick = { model.importBackup(context) }) { Icon(Icons.Outlined.Download, null, tint = Cyan) }
                 }
             }
-            item { SectionTitle("PREFERENCIJE") }
-            item {
+
+            if (preferenceVisible) item { SectionTitle("PREFERENCIJE") }
+            if (matches("Tamni način", "tamni izgled")) item {
                 SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") {
                     Text("Uvijek uključen", color = Cyan, fontSize = 12.sp)
                 }
             }
-            item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
-            item {
+
+            if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
+            if (matches("O aplikaciji Keyra", "verzija")) item {
+                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+            }
+            if (matches("Zaključaj trezor", "zaključavanje")) item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Zaključaj trezor")
+                }
+            }
+
+            if (search.isNotBlank() && !accountVisible && !dataVisible && !preferenceVisible && !privacyVisible) {
+                item {
+                    GlassCard {
+                        Icon(Icons.Outlined.SearchOff, contentDescription = null, tint = Cyan)
+                        Text("Nema rezultata", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Pokušajte s drugim pojmom za pretragu postavki.", color = Muted)
+                    }
                 }
             }
         }
