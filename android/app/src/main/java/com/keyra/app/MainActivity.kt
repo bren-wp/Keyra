@@ -172,11 +172,15 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun select(item: VaultItem) { selected = item; screen = Screen.DETAIL }
 
     fun createVault(password: String): Boolean {
-        if (password.length < 8) {
-            message = "Glavna lozinka mora imati najmanje 8 znakova."
+        if (password.length < 12) {
+            message = "Glavna lozinka mora imati najmanje 12 znakova."
             return false
         }
         auth.create(password)
+        prefs.edit()
+            .remove("unlock_failed_attempts")
+            .remove("unlock_lockout_until")
+            .apply()
         isSetup = true
         sessionPassword = password
         unlocked = true
@@ -188,10 +192,39 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun unlock(password: String): Boolean {
-        if (!auth.verify(password)) {
-            message = "Glavna lozinka nije ispravna."
+        val now = System.currentTimeMillis()
+        val lockoutUntil = prefs.getLong("unlock_lockout_until", 0L)
+        if (lockoutUntil > now) {
+            val seconds = ((lockoutUntil - now + 999L) / 1000L).coerceAtLeast(1L)
+            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za " + seconds + " s."
             return false
         }
+
+        if (!auth.verify(password)) {
+            val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
+            val penaltyMs = when {
+                attempts >= 10 -> 300_000L
+                attempts >= 7 -> 60_000L
+                attempts >= 5 -> 30_000L
+                else -> 0L
+            }
+            prefs.edit()
+                .putInt("unlock_failed_attempts", attempts)
+                .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
+                .apply()
+
+            message = if (penaltyMs > 0L) {
+                "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+            } else {
+                "Glavna lozinka nije ispravna."
+            }
+            return false
+        }
+
+        prefs.edit()
+            .remove("unlock_failed_attempts")
+            .remove("unlock_lockout_until")
+            .apply()
         sessionPassword = password
         loadVault()
         unlocked = true
