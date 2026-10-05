@@ -1901,3 +1901,22 @@ private fun keyraFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedLeadingIconColor = Ice,
     cursorColor = Cyan
 )
+
+
+private fun copy(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("Keyra", text)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        clip.description.extras = PersistableBundle().apply {
+            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+        }
+    }
+    clipboard.setPrimaryClip(clip)
+    Handler(Looper.getMainLooper()).postDelayed({
+        val current = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        if (current == text) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+    }, 30_000)
+}
