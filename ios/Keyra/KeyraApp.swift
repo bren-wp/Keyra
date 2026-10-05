@@ -401,6 +401,24 @@ enum PortableBackup {
     }
 }
 
+func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
+    let passwordItems = items.filter {
+        ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty
+    }
+    let duplicateIDs = Set(
+        Dictionary(grouping: passwordItems, by: { $0.password })
+            .values
+            .filter { $0.count > 1 }
+            .flatMap { $0.map(\.id) }
+    )
+    let weakIDs = Set(passwordItems.filter { !isStrongPassword($0.password) }.map(\.id))
+    return duplicateIDs.union(weakIDs)
+}
+
+func securityIssueCount(_ items: [VaultItem]) -> Int {
+    securityIssueIDs(items).count
+}
+
 final class KeyraStore: ObservableObject {
     private let auth = AuthStore()
     private let vault = EncryptedVault()
@@ -945,6 +963,10 @@ struct BrandHeader: View {
     @EnvironmentObject var store: KeyraStore
     let subtitle: String
 
+    private var notificationCount: Int {
+        securityIssueCount(store.items)
+    }
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             header(compact: false)
@@ -972,12 +994,29 @@ struct BrandHeader: View {
             Button {
                 store.open(.security)
             } label: {
-                Image(systemName: "bell")
-                    .foregroundStyle(.white)
-                    .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell")
+                        .foregroundStyle(.white)
+                        .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+
+                    if notificationCount > 0 {
+                        Text(notificationCount > 9 ? "9+" : "\(notificationCount)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(danger)
+                            .clipShape(Capsule())
+                            .offset(x: 4, y: -3)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Obavijesti")
+            .accessibilityLabel(
+                notificationCount > 0
+                    ? "Sigurnosna upozorenja: \(notificationCount)"
+                    : "Nema sigurnosnih upozorenja"
+            )
             Text("K")
                 .font(.system(size: compact ? 12 : 14, weight: .bold))
                 .frame(width: compact ? 36 : 42, height: compact ? 36 : 42)
@@ -3249,9 +3288,9 @@ struct SecurityCenterView: View {
         store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && isStrongPassword($0.password) && !duplicateIDs.contains($0.id) }
     }
 
-    private var score: Int {
+    private var score: Int? {
         let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
-        guard !passwordItems.isEmpty else { return 100 }
+        guard !passwordItems.isEmpty else { return nil }
         return Int((Double(strongItems.count) / Double(passwordItems.count)) * 100)
     }
 
@@ -3271,23 +3310,43 @@ struct SecurityCenterView: View {
                         Text("Ocjena sigurnosti")
                             .foregroundStyle(muted)
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text("\(score)")
+                            Text(score.map(String.init) ?? "—")
                                 .font(.system(size: 54, weight: .black))
-                                .foregroundStyle(score >= 80 ? good : warn)
+                                .foregroundStyle(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
                             Text("/100")
                                 .font(.headline)
                                 .foregroundStyle(muted)
                         }
-                        ProgressView(value: Double(score), total: 100)
-                            .tint(score >= 80 ? good : warn)
-                        Text(score >= 80 ? "Vaš trezor izgleda dobro zaštićen." : "Pregledajte stavke koje zahtijevaju pažnju.")
-                            .foregroundStyle(muted)
+                        ProgressView(value: Double(score ?? 0), total: 100)
+                            .tint(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
+                        Text({
+                            guard let score else {
+                                return "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
+                            }
+                            return score >= 80
+                                ? "Vaš trezor izgleda dobro zaštićen."
+                                : "Pregledajte stavke koje zahtijevaju pažnju."
+                        }())
+                        .foregroundStyle(muted)
                     }
 
-                    HStack(spacing: 10) {
-                        Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
-                        Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
-                        Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
+                            Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                            Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
+                                    .frame(width: 110)
+                                Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                                    .frame(width: 110)
+                                Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                                    .frame(width: 124)
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -3301,11 +3360,17 @@ struct SecurityCenterView: View {
                                         .foregroundStyle(duplicateIDs.contains(item.id) ? danger : warn)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.title).fontWeight(.bold).foregroundStyle(.white)
-                                        Text(
-                                            duplicateIDs.contains(item.id)
-                                            ? "Lozinka se koristi na više mjesta."
-                                            : "Lozinka nije dovoljno snažna i preporučuje se zamjena."
-                                        )
+                                        Text({
+                                            let duplicate = duplicateIDs.contains(item.id)
+                                            let weak = !isStrongPassword(item.password)
+                                            if duplicate && weak {
+                                                return "Lozinka je slaba i koristi se na više mjesta."
+                                            }
+                                            if duplicate {
+                                                return "Lozinka se koristi na više mjesta."
+                                            }
+                                            return "Lozinka nije dovoljno snažna i preporučuje se zamjena."
+                                        }())
                                         .font(.subheadline)
                                         .foregroundStyle(muted)
                                     }
