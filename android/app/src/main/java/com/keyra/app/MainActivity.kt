@@ -3920,6 +3920,7 @@ private fun SettingsScreen(
     val context = LocalContext.current
     var search by remember { mutableStateOf("") }
     var confirmImport by remember { mutableStateOf(false) }
+    var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
 
     val exportFileLauncher = rememberLauncherForActivityResult(
@@ -3975,11 +3976,46 @@ private fun SettingsScreen(
         "O aplikaciji Keyra",
         "Pravila privatnosti",
         "Privatnost",
+        "Izbriši sve lokalne podatke",
         "Zaključaj trezor",
         "sigurnost privatnost"
     )
 
     Column(Modifier.fillMaxSize()) {
+        if (confirmErase) {
+            AlertDialog(
+                onDismissRequest = { confirmErase = false },
+                icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
+                title = { Text("Izbrisati sve lokalne podatke?") },
+                text = {
+                    Text(
+                        "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                            "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmErase = false
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                                    model.eraseAllLocalData()
+                                }
+                            } else {
+                                model.eraseAllLocalData()
+                            }
+                        }
+                    ) {
+                        Text("Trajno izbriši", color = Danger)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmErase = false }) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
         pendingFileImport?.let { uri ->
             AlertDialog(
                 onDismissRequest = { pendingFileImport = null },
@@ -4210,6 +4246,14 @@ private fun SettingsScreen(
                             model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
                         }
                     }
+                )
+            }
+            if (matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset")) item {
+                SettingRow(
+                    Icons.Outlined.DeleteForever,
+                    "Izbriši sve lokalne podatke",
+                    "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja.",
+                    onClick = { confirmErase = true }
                 )
             }
             if (matches("Zaključaj trezor", "zaključavanje")) item {
