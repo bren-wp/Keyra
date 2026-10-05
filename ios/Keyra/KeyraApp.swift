@@ -1955,7 +1955,7 @@ struct VaultView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             filter = value
                         } label: {
@@ -2851,7 +2851,7 @@ struct AddEditView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi"], id: \.self) { value in
+                            ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator"], id: \.self) { value in
                                 Button {
                                     if original == nil {
                                         type = value
