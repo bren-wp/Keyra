@@ -39,6 +39,7 @@ Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi poda
 ✨ **Generator lozinki** — duljina do 64 znaka, vrste znakova i brzi presetovi jačine.  
 🔢 **TOTP / 2FA autentifikator** — vremenski kodovi kompatibilni s RFC 6238; podržani su Base32 tajne i `otpauth://totp` URI-jevi.  
 📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine; KEYRA2 kopije prenosive su između Androida i iOS-a.  
+☁️ **Privatni cloud bez Keyra računa** — .keyra kopija može se spremiti kroz sistemski odabir datoteka u podržane lokacije i cloud providere, uključujući Proton Drive kada ga sustav nudi. Keyra ne preuzima vjerodajnice cloud računa.  
 ☁️ **Privatni cloud backup** — .keyra datoteka može se spremiti ili otvoriti kroz sistemski Files/Document picker, uključujući kompatibilne privatne cloud providere bez predaje njihovih vjerodajnica Keyri.  
 📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
 🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.  
@@ -95,6 +96,12 @@ Na iOS-u se koristi standardni Files dokumentni tok. Na Androidu se koristi Stor
 
 Izravna automatska Proton Drive sinkronizacija nije ugrađena dok Protonov SDK za komercijalne/produkcijske third-party aplikacije ne bude službeno spreman. To izbjegava neslužbeno rukovanje Proton vjerodajnicama i nestabilne privatne API-je.
 
+## Privatni cloud i prijenos između uređaja
+
+Keyra nema vlastiti cloud račun, udaljeni trezor ni obavezni backend. Umjesto toga izrađuje **već šifriranu `.keyra` datoteku** i predaje je sistemskom odabiru datoteka. Korisnik može odabrati lokalnu lokaciju ili cloud provider koji je dostupan kroz Android/iOS sustav, primjerice Proton Drive kada je njegova aplikacija/provider dostupan.
+
+To znači da Keyra ne traži Proton, Apple ili druge cloud vjerodajnice. Cloud provider sinkronizira odabranu šifriranu datoteku prema vlastitim pravilima, dok Keyra pri uvozu datoteku najprije provjerava i dešifrira lokalno. Trenutačni model je namjerno **provider-neutralan**; nema skrivene pozadinske sinkronizacije ni neobjavljenog Proton API-ja.
+
 ## Postavke i sigurnost
 
 Keyra prikazuje samo dostupne mogućnosti: biometrijsko otključavanje, dodatnu potvrdu identiteta, automatsko zaključavanje, provjeru sigurnosti, šifriranu sigurnosnu kopiju i ručno zaključavanje trezora. Zaštita uređaja ne može se uključiti ako platforma nema dostupnu biometriju ili zaključavanje uređaja. Tamni Keyra prikaz dio je stalnog vizualnog identiteta.
@@ -108,6 +115,8 @@ Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogu�
 ## Sigurnost podataka
 
 - sadržaj trezora šifrira se prije trajnog spremanja
+- Android aplikacija ne traži INTERNET dozvolu; cloud prijenos koristi korisnički odabrani sistemski file provider
+- aplikacija nema oglase ni analitički SDK u trenutnoj bazi koda
 - ključ trezora štiti Android Keystore ili Apple Keychain
 - sigurnosna kopija dodatno se šifrira glavnom lozinkom
 - KEYRA2 format sigurnosne kopije koristi isti prijenosni format na Androidu i iOS-u
