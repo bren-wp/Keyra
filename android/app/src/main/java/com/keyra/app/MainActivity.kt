@@ -638,6 +638,21 @@ private class CryptoStore {
     }
 }
 
+internal fun normalizePortableUpdatedAt(
+    raw: Double,
+    fallback: Long = System.currentTimeMillis()
+): Long {
+    if (!raw.isFinite() || raw <= 0.0) return fallback
+
+    // Legacy iOS JSONEncoder dates are seconds since 2001-01-01.
+    // Current portable Keyra backups use Unix epoch milliseconds.
+    return if (raw < 100_000_000_000.0) {
+        ((raw + 978_307_200.0) * 1000.0).toLong()
+    } else {
+        raw.toLong()
+    }
+}
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore()
 
@@ -715,7 +730,9 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
                         favorite = o.optBoolean("favorite", false),
                         type = inferredType,
                         fields = fields,
-                        updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+                        updatedAt = normalizePortableUpdatedAt(
+                            o.optDouble("updatedAt", Double.NaN)
+                        )
                     )
                 )
             }
