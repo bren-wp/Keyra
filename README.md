@@ -37,7 +37,7 @@ Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi poda
 📋 **Zaštićeni međuspremnik** — osjetljive kopirane vrijednosti automatski istječu.  
 🔎 **Provjera sigurnosti** — prepoznaje slabe i ponovno korištene lozinke.  
 ✨ **Generator lozinki** — duljina do 64 znaka, vrste znakova i brzi presetovi jačine.  
-📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine.  
+📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine; KEYRA2 kopije prenosive su između Androida i iOS-a.  
 📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
 🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.
 
@@ -78,7 +78,7 @@ Kategorije **Osobno**, **Posao**, **Financije**, **Društvene mreže**, **Kupovi
 
 ## Postavke i sigurnost
 
-Keyra prikazuje samo dostupne mogućnosti: biometrijsko otključavanje, dodatnu potvrdu identiteta, automatsko zaključavanje, provjeru sigurnosti, šifriranu sigurnosnu kopiju i ručno zaključavanje trezora. Tamni Keyra prikaz dio je stalnog vizualnog identiteta.
+Keyra prikazuje samo dostupne mogućnosti: biometrijsko otključavanje, dodatnu potvrdu identiteta, automatsko zaključavanje, provjeru sigurnosti, šifriranu sigurnosnu kopiju i ručno zaključavanje trezora. Zaštita uređaja ne može se uključiti ako platforma nema dostupnu biometriju ili zaključavanje uređaja. Tamni Keyra prikaz dio je stalnog vizualnog identiteta.
 
 Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogućuje. Na iOS-u Keyra skriva sadržaj kada aplikacija nije aktivna te tijekom aktivnog snimanja zaslona.
 
@@ -91,6 +91,9 @@ Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogu�
 - sadržaj trezora šifrira se prije trajnog spremanja
 - ključ trezora štiti Android Keystore ili Apple Keychain
 - sigurnosna kopija dodatno se šifrira glavnom lozinkom
+- KEYRA2 format sigurnosne kopije koristi isti prijenosni format na Androidu i iOS-u
+- podržan je uvoz postojećih KEYRA1 i ranijih KEYRA2 kopija s obje platforme
+- uvoz koji zamjenjuje trenutačni trezor traži izričitu potvrdu
 - oštećena ili prevelika sigurnosna kopija ne zamjenjuje postojeći trezor
 - neuspjelo spremanje ne mijenja prikazano stanje kao da je radnja uspjela
 - osjetljive vrijednosti ne zapisuju se u aplikacijske logove
