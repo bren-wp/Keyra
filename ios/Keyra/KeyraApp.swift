@@ -1997,6 +1997,7 @@ struct DetailView: View {
     @Environment(\.openURL) private var openURL
     @State private var reveal = false
     @State private var revealSensitive = false
+    @State private var confirmDelete = false
 
     var body: some View {
         if let item = store.selected {
@@ -2201,7 +2202,7 @@ struct DetailView: View {
                             .overlay(Capsule().stroke(ice.opacity(0.5), lineWidth: 1))
 
                             Button {
-                                store.deleteSelected()
+                                confirmDelete = true
                             } label: {
                                 Label("Izbriši", systemImage: "trash")
                                     .frame(maxWidth: .infinity)
@@ -2214,6 +2215,18 @@ struct DetailView: View {
                     }
                     .padding(18)
                 }
+            }
+            .confirmationDialog(
+                "Izbrisati stavku?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Izbriši", role: .destructive) {
+                    store.deleteSelected()
+                }
+                Button("Odustani", role: .cancel) {}
+            } message: {
+                Text("Ova radnja ne može se poništiti.")
             }
         }
     }
