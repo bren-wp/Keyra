@@ -4240,7 +4240,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
                     "Pravila privatnosti",
-                    "Pročitajte kako Keyra obrađuje podatke i što se nikada ne šalje razvojnom programeru.",
+                    "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru.",
                     onClick = {
                         if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
                             model.message = "Pravila privatnosti trenutno nije moguće otvoriti."

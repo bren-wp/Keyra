@@ -4241,7 +4241,7 @@ struct SettingsView: View {
                             SettingRow(
                                 icon: "hand.raised.fill",
                                 title: "Pravila privatnosti",
-                                subtitle: "Pročitajte kako Keyra obrađuje podatke i što se nikada ne šalje razvojnom programeru."
+                                subtitle: "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru."
                             ) {
                                 Image(systemName: "arrow.up.right").foregroundStyle(ice)
                             }
