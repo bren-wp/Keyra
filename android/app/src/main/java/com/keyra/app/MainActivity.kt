@@ -2951,6 +2951,9 @@ private fun AddScreen(model: KeyraViewModel) {
                             onClick = {
                                 field1 = parsed.issuer
                                 field2 = parsed.account
+                                if (title.isBlank()) {
+                                    title = parsed.issuer.ifBlank { parsed.account }
+                                }
                                 field3 = parsed.secret
                                 totpAlgorithm = parsed.algorithm
                                 totpDigits = parsed.digits
