@@ -100,7 +100,9 @@ class MainActivity : FragmentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             KeyraTheme {
-                KeyraRoot(model = model, requestBiometric = { authenticateBiometric() })
+                KeyraRoot(model = model, requestBiometric = { reason, onSuccess ->
+                    authenticateBiometric(reason, onSuccess)
+                })
             }
         }
     }
@@ -115,7 +117,7 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
-    private fun authenticateBiometric() {
+    private fun authenticateBiometric(reason: String, onSuccess: () -> Unit) {
         val allowed = BiometricManager.from(this).canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or
                 BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -129,7 +131,7 @@ class MainActivity : FragmentActivity() {
             ContextCompat.getMainExecutor(this),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    model.unlockFromBiometric()
+                    onSuccess()
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     model.message = errString.toString()
@@ -138,8 +140,8 @@ class MainActivity : FragmentActivity() {
         )
         prompt.authenticate(
             BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Otključajte Keyru")
-                .setSubtitle("Potvrdite identitet za pristup trezoru.")
+                .setTitle("Keyra")
+                .setSubtitle(reason)
                 .setAllowedAuthenticators(
                     BiometricManager.Authenticators.BIOMETRIC_STRONG or
                         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -161,6 +163,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var selected by mutableStateOf<VaultItem?>(null)
     var message by mutableStateOf<String?>(null)
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
+    var sensitiveReauthEnabled by mutableStateOf(prefs.getBoolean("sensitive_reauth_enabled", true))
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
@@ -185,7 +188,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         sessionPassword = password
         unlocked = true
         items.clear()
-        items.addAll(seedItems())
         store.save(items)
         screen = Screen.VAULT
         return true
@@ -299,7 +301,16 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleBiometric(value: Boolean) {
         biometricEnabled = value
-        prefs.edit().putBoolean("biometric_enabled", value).apply()
+        if (!value) sensitiveReauthEnabled = false
+        prefs.edit()
+            .putBoolean("biometric_enabled", value)
+            .putBoolean("sensitive_reauth_enabled", sensitiveReauthEnabled)
+            .apply()
+    }
+
+    fun toggleSensitiveReauth(value: Boolean) {
+        sensitiveReauthEnabled = value && biometricEnabled
+        prefs.edit().putBoolean("sensitive_reauth_enabled", sensitiveReauthEnabled).apply()
     }
 
     fun cycleAutoLock() {
@@ -343,17 +354,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         items.addAll(store.load())
     }
 
-    private fun seedItems() = listOf(
-        VaultItem(title="Google", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://accounts.google.com", notes="Primjer prijave", category="Osobno", favorite=true, type="Prijava"),
-        VaultItem(title="Apple ID", username="primjer@keyra.app", password="Appl3!Keyra#2026", website="https://account.apple.com", category="Osobno", type="Prijava"),
-        VaultItem(title="GitHub", username="primjer", password="Git#Keyra!90210", website="https://github.com", category="Posao", type="Prijava"),
-        VaultItem(title="Kućni Wi‑Fi", username="Dnevni boravak", password="Wifi!Keyra#8821", category="Osobno", type="Wi-Fi", fields=mapOf("Naziv mreže" to "Keyra Home", "Vrsta zaštite" to "WPA3")),
-        VaultItem(title="Netflix", username="primjer@keyra.app", password="K3yra!Google#2026", website="https://netflix.com", category="Zabava", type="Prijava"),
-        VaultItem(title="Sigurne bilješke", notes="Ovdje možete spremati važne privatne bilješke.", category="Osobno", type="Bilješka"),
-        VaultItem(title="Putna kartica", category="Putovanja", type="Kartica", fields=mapOf("Vlasnik kartice" to "Primjer Korisnik", "Broj kartice" to "4111111111111111", "Vrijedi do" to "12/30", "Sigurnosni kod" to "123")),
-        VaultItem(title="Osobni dokument", category="Osobno", type="Identitet", fields=mapOf("Puno ime" to "Primjer Korisnik", "Broj dokumenta" to "ID-KEYRA-2026", "Datum isteka" to "31. 12. 2030."))
-    )
-}
+
 
 private class AuthStore(private val prefs: android.content.SharedPreferences) {
     companion object {
@@ -591,7 +592,10 @@ private fun KeyraTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun KeyraRoot(model: KeyraViewModel, requestBiometric: () -> Unit) {
+private fun KeyraRoot(
+    model: KeyraViewModel,
+    requestBiometric: (String, () -> Unit) -> Unit
+) {
     var splash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         delay(850)
@@ -606,8 +610,8 @@ private fun KeyraRoot(model: KeyraViewModel, requestBiometric: () -> Unit) {
             Screen.COLLECTIONS -> MainScaffold(model, Screen.COLLECTIONS) { CollectionsScreen(model) }
             Screen.GENERATOR -> MainScaffold(model, Screen.GENERATOR) { GeneratorScreen(model) }
             Screen.ADD -> AddScreen(model)
-            Screen.DETAIL -> DetailScreen(model)
-            Screen.SETTINGS -> MainScaffold(model, Screen.SETTINGS) { SettingsScreen(model) }
+            Screen.DETAIL -> DetailScreen(model, requestBiometric)
+            Screen.SETTINGS -> MainScaffold(model, Screen.SETTINGS) { SettingsScreen(model, requestBiometric) }
             Screen.SECURITY -> MainScaffold(model, Screen.SETTINGS) { SecurityScreen(model) }
         }
         model.message?.let { msg ->
@@ -734,7 +738,10 @@ private fun FeatureCard(icon: ImageVector, title: String, subtitle: String) {
 }
 
 @Composable
-private fun UnlockScreen(model: KeyraViewModel, requestBiometric: () -> Unit) {
+private fun UnlockScreen(
+    model: KeyraViewModel,
+    requestBiometric: (String, () -> Unit) -> Unit
+) {
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
@@ -782,7 +789,11 @@ private fun UnlockScreen(model: KeyraViewModel, requestBiometric: () -> Unit) {
                 HorizontalDivider(color = Muted.copy(alpha=.25f))
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
-                    onClick = requestBiometric,
+                    onClick = {
+                        requestBiometric("Potvrdite identitet za pristup trezoru.") {
+                            model.unlockFromBiometric()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.6f))
                 ) {
@@ -868,6 +879,17 @@ private fun RowScope.NavItem(icon: ImageVector, label: String, selected: Boolean
     )
 }
 
+private fun isStrongPassword(password: String): Boolean {
+    if (password.length < 14) return false
+    val classes = listOf(
+        password.any(Char::isUpperCase),
+        password.any(Char::isLowerCase),
+        password.any(Char::isDigit),
+        password.any { !it.isLetterOrDigit() }
+    ).count { it }
+    return classes >= 3
+}
+
 @Composable
 private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
@@ -893,7 +915,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .sortedByDescending { it.updatedAt }
 
     val passwordItems = model.items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
-    val weak = passwordItems.count { it.password.isNotBlank() && it.password.length < 12 }
+    val weak = passwordItems.count { it.password.isNotBlank() && !isStrongPassword(it.password) }
     val duplicated = passwordItems.groupBy { it.password }
         .filter { it.key.isNotBlank() && it.value.size > 1 }
         .values.flatten().map { it.id }.toSet()
@@ -976,8 +998,37 @@ private fun VaultScreen(model: KeyraViewModel) {
             }
             if (displayed.isEmpty()) {
                 item {
-                    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        Text("Nema stavki za prikaz.", color = Muted)
+                    GlassCard {
+                        Icon(
+                            if (model.items.isEmpty()) Icons.Outlined.AddCircleOutline else Icons.Outlined.SearchOff,
+                            null,
+                            tint = Cyan,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            if (model.items.isEmpty()) "Vaš trezor je spreman" else "Nema rezultata",
+                            color = Color.White,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (model.items.isEmpty())
+                                "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                            else
+                                "Promijenite pretragu ili odaberite drugi filtar.",
+                            color = Muted
+                        )
+                        if (model.items.isEmpty()) {
+                            Button(
+                                onClick = model::addNew,
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Icon(Icons.Outlined.Add, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Dodaj prvu stavku", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -1000,12 +1051,12 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
     val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
     val stateColor = when {
         duplicated -> Danger
-        isPasswordItem && item.password.isNotBlank() && item.password.length < 12 -> Warn
+        isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> Warn
         else -> Good
     }
     val state = when {
         duplicated -> "Ponovno korištena"
-        isPasswordItem && item.password.isNotBlank() && item.password.length < 12 -> "Potrebno ažuriranje"
+        isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> "Potrebno ažuriranje"
         item.type == "Bilješka" -> "Zaštićena"
         item.type == "Kartica" -> "Zaštićena"
         item.type == "Identitet" -> "Zaštićen"
@@ -1205,6 +1256,26 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     var password by remember { mutableStateOf(generatePassword(16, true, true, true, true)) }
     fun refresh() { password = generatePassword(length.toInt(), upper, lower, numbers, symbols) }
 
+    val poolSize = (if (upper) 26 else 0) +
+        (if (lower) 26 else 0) +
+        (if (numbers) 10 else 0) +
+        (if (symbols) 15 else 0)
+    val entropyBits = if (poolSize > 1) {
+        (length * (kotlin.math.ln(poolSize.toDouble()) / kotlin.math.ln(2.0))).toInt()
+    } else 0
+    val strengthProgress = (entropyBits / 128f).coerceIn(0.08f, 1f)
+    val strengthLabel = when {
+        entropyBits >= 100 -> "Vrlo snažna"
+        entropyBits >= 75 -> "Snažna"
+        entropyBits >= 50 -> "Srednja"
+        else -> "Slaba"
+    }
+    val strengthColor = when {
+        entropyBits >= 75 -> Good
+        entropyBits >= 50 -> Warn
+        else -> Danger
+    }
+
     Column(Modifier.fillMaxSize()) {
         BrandHeader("Generator lozinki")
         LazyColumn(
@@ -1219,8 +1290,16 @@ private fun GeneratorScreen(model: KeyraViewModel) {
                     Spacer(Modifier.height(18.dp))
                     Text(password, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(progress = { 0.9f }, modifier = Modifier.fillMaxWidth(), color = Cyan, trackColor = Color(0xFF164C53))
-                    Text("Vrlo snažna", color = Good, fontWeight = FontWeight.Bold)
+                    LinearProgressIndicator(
+                        progress = { strengthProgress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = strengthColor,
+                        trackColor = Color(0xFF164C53)
+                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(strengthLabel, color = strengthColor, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text("~" + entropyBits + " bita entropije", color = Muted, fontSize = 12.sp)
+                    }
                 }
             }
             item {
@@ -1531,11 +1610,22 @@ private fun KeyraTextField(value: String, onValue: (String) -> Unit, label: Stri
 }
 
 @Composable
-private fun DetailScreen(model: KeyraViewModel) {
+private fun DetailScreen(
+    model: KeyraViewModel,
+    requestBiometric: (String, () -> Unit) -> Unit
+) {
     val current = model.selected ?: return
     var reveal by remember(current.id) { mutableStateOf(false) }
     var revealCard by remember(current.id) { mutableStateOf(false) }
     val context = LocalContext.current
+
+    fun guarded(reason: String, action: () -> Unit) {
+        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+            requestBiometric(reason, action)
+        } else {
+            action()
+        }
+    }
 
     val titleIcon = when (current.type) {
         "Bilješka" -> Icons.Outlined.Description
@@ -1575,8 +1665,10 @@ private fun DetailScreen(model: KeyraViewModel) {
                 }
                 if (current.username.isNotBlank()) item {
                     DetailRow(Icons.Outlined.Person, "Korisničko ime / e-pošta", current.username) {
-                        copy(context, current.username)
-                        model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                        guarded("Potvrdite identitet za kopiranje korisničkog imena.") {
+                            copy(context, current.username)
+                            model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                        }
                     }
                 }
             }
@@ -1587,8 +1679,10 @@ private fun DetailScreen(model: KeyraViewModel) {
                 }
                 if (current.username.isNotBlank()) item {
                     DetailRow(Icons.Outlined.Person, "Korisničko ime", current.username) {
-                        copy(context, current.username)
-                        model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                        guarded("Potvrdite identitet za kopiranje korisničkog imena.") {
+                            copy(context, current.username)
+                            model.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                        }
                     }
                 }
                 current.fields["Vrsta zaštite"]?.takeIf { it.isNotBlank() }?.let { security ->
@@ -1600,10 +1694,15 @@ private fun DetailScreen(model: KeyraViewModel) {
                 PasswordDetailRow(
                     password = current.password,
                     reveal = reveal,
-                    onReveal = { reveal = !reveal },
+                    onReveal = {
+                        if (reveal) reveal = false
+                        else guarded("Potvrdite identitet za prikaz lozinke.") { reveal = true }
+                    },
                     onCopy = {
-                        copy(context, current.password)
-                        model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                        guarded("Potvrdite identitet za kopiranje lozinke.") {
+                            copy(context, current.password)
+                            model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                        }
                     }
                 )
             }
@@ -1620,10 +1719,15 @@ private fun DetailScreen(model: KeyraViewModel) {
                             value = value,
                             reveal = revealCard,
                             hidden = "•••• •••• •••• " + value.takeLast(4),
-                            onReveal = { revealCard = !revealCard },
+                            onReveal = {
+                                if (revealCard) revealCard = false
+                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                            },
                             onCopy = {
-                                copy(context, value)
-                                model.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                                guarded("Potvrdite identitet za kopiranje broja kartice.") {
+                                    copy(context, value)
+                                    model.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                                }
                             }
                         )
                     }
@@ -1639,10 +1743,15 @@ private fun DetailScreen(model: KeyraViewModel) {
                             value = value,
                             reveal = revealCard,
                             hidden = "•••",
-                            onReveal = { revealCard = !revealCard },
+                            onReveal = {
+                                if (revealCard) revealCard = false
+                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                            },
                             onCopy = {
-                                copy(context, value)
-                                model.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                                guarded("Potvrdite identitet za kopiranje sigurnosnog koda.") {
+                                    copy(context, value)
+                                    model.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                                }
                             }
                         )
                     }
@@ -1661,10 +1770,15 @@ private fun DetailScreen(model: KeyraViewModel) {
                             value = value,
                             reveal = revealCard,
                             hidden = "••••" + value.takeLast(4),
-                            onReveal = { revealCard = !revealCard },
+                            onReveal = {
+                                if (revealCard) revealCard = false
+                                else guarded("Potvrdite identitet za prikaz osjetljivog podatka.") { revealCard = true }
+                            },
                             onCopy = {
-                                copy(context, value)
-                                model.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                                guarded("Potvrdite identitet za kopiranje broja dokumenta.") {
+                                    copy(context, value)
+                                    model.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                                }
                             }
                         )
                     }
@@ -1801,7 +1915,10 @@ private fun DetailRow(icon: ImageVector, label: String, value: String, action: (
 }
 
 @Composable
-private fun SettingsScreen(model: KeyraViewModel) {
+private fun SettingsScreen(
+    model: KeyraViewModel,
+    requestBiometric: (String, () -> Unit) -> Unit
+) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize()) {
         BrandHeader("POSTAVKE I SIGURNOST")
@@ -1814,6 +1931,19 @@ private fun SettingsScreen(model: KeyraViewModel) {
             item {
                 SettingRow(Icons.Outlined.Fingerprint, "Biometrijsko otključavanje", "Brz i siguran pristup trezoru.") {
                     Switch(model.biometricEnabled, model::toggleBiometric)
+                }
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Visibility,
+                    "Potvrda prije prikaza tajni",
+                    "Tražite biometriju ili zaključavanje uređaja prije prikaza i kopiranja osjetljivih podataka."
+                ) {
+                    Switch(
+                        checked = model.sensitiveReauthEnabled,
+                        onCheckedChange = model::toggleSensitiveReauth,
+                        enabled = model.biometricEnabled
+                    )
                 }
             }
             item {
@@ -1838,7 +1968,15 @@ private fun SettingsScreen(model: KeyraViewModel) {
             item { SectionTitle("UPRAVLJANJE PODACIMA") }
             item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
-                    IconButton(onClick = { model.exportBackup(context) }) { Icon(Icons.Outlined.ContentCopy, null, tint = Cyan) }
+                    IconButton(onClick = {
+                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
+                                model.exportBackup(context)
+                            }
+                        } else {
+                            model.exportBackup(context)
+                        }
+                    }) { Icon(Icons.Outlined.ContentCopy, null, tint = Cyan) }
                 }
             }
             item {
@@ -1849,7 +1987,7 @@ private fun SettingsScreen(model: KeyraViewModel) {
             item { SectionTitle("PREFERENCIJE") }
             item { SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") }
             item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.2.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
+            item { SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.3.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.") }
             item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Logout, null)
@@ -1904,8 +2042,8 @@ private fun SecurityScreen(model: KeyraViewModel) {
         .groupBy { it.password }
         .filterValues { it.size > 1 }
     val duplicatedIds = duplicatedGroups.values.flatten().map { it.id }.toSet()
-    val weak = passwordItems.filter { it.password.length < 12 }
-    val strong = passwordItems.filter { it.password.length >= 12 && it.id !in duplicatedIds }
+    val weak = passwordItems.filter { !isStrongPassword(it.password) }
+    val strong = passwordItems.filter { isStrongPassword(it.password) && it.id !in duplicatedIds }
     val score = if (passwordItems.isEmpty()) 100 else {
         ((strong.size.toFloat() / passwordItems.size.coerceAtLeast(1)) * 100).toInt()
     }
