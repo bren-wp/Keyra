@@ -679,7 +679,7 @@ private fun BrandHeader(subtitle: String) {
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
     Column(
-        Modifier.fillMaxSize().padding(22.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(24.dp))
@@ -698,7 +698,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
         FeatureCard(Icons.Outlined.Lock, "Potpuno šifrirano", "Vaši podaci ostaju na vašem uređaju.")
         FeatureCard(Icons.Outlined.Fingerprint, "Privatnost u osnovi", "Stvoreno za vaš mir.")
         FeatureCard(Icons.Outlined.PhoneAndroid, "Radi svugdje", "Besprijekorno na Androidu i iOS-u.")
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(24.dp))
         Button(
             onClick = model::startCreate,
             modifier = Modifier.fillMaxWidth().height(58.dp),
