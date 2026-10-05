@@ -969,14 +969,14 @@ private fun OnboardingScreen(model: KeyraViewModel) {
 
                 Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
                 Text(
-                    "Sve važno. Jedan siguran trezor.",
+                    "Sigurniji način upravljanja lozinkama",
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White,
                     fontSize = if (compact) 25.sp else 31.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    "Lozinke, bilješke, kartice, identiteti i Wi‑Fi na jednom mjestu.",
+                    "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.",
                     modifier = Modifier.fillMaxWidth(),
                     color = Muted,
                     fontSize = if (compact) 14.sp else 16.sp
@@ -986,19 +986,19 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 FeatureCard(
                     Icons.Outlined.Lock,
                     "Potpuno šifrirano",
-                    "Vaši podaci ostaju zaštićeni.",
+                    "Vaši podaci ostaju na vašem uređaju.",
                     compact
                 )
                 FeatureCard(
                     Icons.Outlined.Fingerprint,
                     "Privatnost u osnovi",
-                    "Brzo otključavanje uz potvrdu identiteta.",
+                    "Stvoreno za vaš mir.",
                     compact
                 )
                 FeatureCard(
                     Icons.Outlined.PhoneAndroid,
-                    "Spremno za svaki ekran",
-                    "Pregledno na telefonu i tabletu.",
+                    "Radi svugdje",
+                    "Pregledno na Androidu i iOS-u.",
                     compact
                 )
                 Spacer(Modifier.height(12.dp))
