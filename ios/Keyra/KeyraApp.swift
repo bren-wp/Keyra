@@ -958,7 +958,7 @@ struct BrandHeader: View {
             }
             Spacer(minLength: 4)
             Button {
-                store.message = "Nema novih sigurnosnih upozorenja."
+                store.open(.security)
             } label: {
                 Image(systemName: "bell")
                     .foregroundStyle(.white)
