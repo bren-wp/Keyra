@@ -2363,7 +2363,9 @@ private fun DetailScreen(
                     TextButton(
                         onClick = {
                             confirmDelete = false
-                            model.deleteSelected()
+                            guarded("Potvrdite identitet za brisanje stavke.") {
+                                model.deleteSelected()
+                            }
                         }
                     ) { Text("Izbriši", color = Danger) }
                 },
@@ -2831,7 +2833,15 @@ private fun SettingsScreen(
             }
             if (matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Download, "Uvezi sigurnosnu kopiju", "Vratite šifriranu kopiju iz međuspremnika.") {
-                    IconButton(onClick = { model.importBackup(context) }) { Icon(Icons.Outlined.Download, null, tint = Cyan) }
+                    IconButton(onClick = {
+                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
+                                model.importBackup(context)
+                            }
+                        } else {
+                            model.importBackup(context)
+                        }
+                    }) { Icon(Icons.Outlined.Download, null, tint = Cyan) }
                 }
             }
 
