@@ -28,9 +28,9 @@ Ako provider nije izložen kroz DocumentsUI, korisnik i dalje može spremiti lok
 
 ## Zašto nema direktnog Proton login/sync koda
 
-Proton Drive SDK je u 2026. javno dostupan, ali Proton navodi da još nije spreman za commercial/production third-party aplikacije i da su Kotlin/Swift integracije još u razvoju. Ugradnja privatnih Proton API-ja ili skupljanje Proton korisničkog imena/lozinke unutar Keyre u ovoj fazi bila bi lošija sigurnosna i produkcijska odluka.
+Protonovi službeni materijali u 2026. opisuju Drive SDK kao zajedničku osnovu koja pokreće njihove Drive aplikacije te navode da će s vremenom olakšati integracije vanjskim alatima. Trenutačna javna dokumentacija ne daje Keyri stabilan, službeno dokumentiran third-party produkcijski login/storage tok koji bi bilo razumno ugraditi izravno. Ugradnja privatnih Proton API-ja ili skupljanje Proton korisničkog imena/lozinke unutar Keyre zato se namjerno izbjegava.
 
-Zato Keyra trenutačno koristi provider-neutralan sistemski file flow. Direktna automatska Proton sinkronizacija može se razmotriti kada Proton službeno proglasi SDK spremnim za third-party production use i kada postoji podržan authentication/session flow.
+Zato Keyra trenutačno koristi provider-neutralan sistemski file flow. Direktna automatska Proton sinkronizacija može se razmotriti kada Proton javno dokumentira podržan third-party authentication/session i file-storage API/SDK s uvjetima prikladnima za produkcijsku mobilnu aplikaciju.
 
 ## Buduća prava sinkronizacija
 
