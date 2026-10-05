@@ -28,5 +28,6 @@ Stvarne lozinke, pristupne ključeve i privatne sigurnosne kopije nemojte prilag
 - zamjena postojećeg trezora uvozom traži izričitu korisničku potvrdu
 - oštećena sigurnosna kopija ne zamjenjuje postojeći trezor
 - trezor se zaključava prema odabranoj politici automatskog zaključavanja
+- korisnik može pokrenuti potpuno lokalno brisanje trezora, auth podataka, postavki i uređajnog kriptografskog ključa
 
 Sigurnosne tvrdnje odnose se na implementirani model zaštite i ne znače da je bilo koji softver apsolutno neprobojan.
