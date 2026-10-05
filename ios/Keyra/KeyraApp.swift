@@ -1938,6 +1938,30 @@ struct GeneratorView: View {
         password = PasswordTools.generate(length: Int(length), upper: upper, lower: lower, numbers: numbers, symbols: symbols)
     }
 
+    private func updateCharacterSet(_ name: String, enabled: Bool) {
+        let activeCount = [upper, lower, numbers, symbols].filter { $0 }.count
+        let currentValue: Bool
+        switch name {
+        case "upper": currentValue = upper
+        case "lower": currentValue = lower
+        case "numbers": currentValue = numbers
+        default: currentValue = symbols
+        }
+
+        if currentValue && !enabled && activeCount <= 1 {
+            store.message = "Generator mora koristiti barem jednu vrstu znakova."
+            return
+        }
+
+        switch name {
+        case "upper": upper = enabled
+        case "lower": lower = enabled
+        case "numbers": numbers = enabled
+        default: symbols = enabled
+        }
+        refresh()
+    }
+
     private var entropyBits: Int {
         let pool = (upper ? 26 : 0) + (lower ? 26 : 0) + (numbers ? 10 : 0) + (symbols ? 15 : 0)
         guard pool > 1 else { return 0 }
@@ -2026,38 +2050,29 @@ struct GeneratorView: View {
 
                     GlassCard {
                         Text("Vrste znakova").font(.headline).foregroundStyle(.white)
-                        GeneratorToggle(title: "Velika slova (A–Z)", value: $upper, refresh: refresh)
-                        GeneratorToggle(title: "Mala slova (a–z)", value: $lower, refresh: refresh)
-                        GeneratorToggle(title: "Brojevi (0–9)", value: $numbers, refresh: refresh)
-                        GeneratorToggle(title: "Simboli (!@#...)", value: $symbols, refresh: refresh)
+                        GeneratorToggle(title: "Velika slova (A–Z)", value: upper) {
+                            updateCharacterSet("upper", enabled: $0)
+                        }
+                        GeneratorToggle(title: "Mala slova (a–z)", value: lower) {
+                            updateCharacterSet("lower", enabled: $0)
+                        }
+                        GeneratorToggle(title: "Brojevi (0–9)", value: numbers) {
+                            updateCharacterSet("numbers", enabled: $0)
+                        }
+                        GeneratorToggle(title: "Simboli (!@#...)", value: symbols) {
+                            updateCharacterSet("symbols", enabled: $0)
+                        }
                     }
 
-                    HStack(spacing: 10) {
-                        Button {
-                            SecureClipboard.copy(password)
-                            store.message = "Lozinka je kopirana i automatski će se ukloniti."
-                        } label: {
-                            Label("Kopiraj lozinku", systemImage: "doc.on.doc")
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            generatorCopyButton
+                            generatorRefreshButton
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                        .overlay(Capsule().stroke(cyan.opacity(0.7), lineWidth: 1))
-
-                        Button {
-                            refresh()
-                        } label: {
-                            Label("Generiraj novu", systemImage: "arrow.triangle.2.circlepath")
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
+                        VStack(spacing: 8) {
+                            generatorRefreshButton
+                            generatorCopyButton
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(midnight)
-                        .background(cyan)
-                        .clipShape(Capsule())
                     }
                 }
                 .padding(18)
@@ -2065,18 +2080,53 @@ struct GeneratorView: View {
             }
         }
     }
+
+    private var generatorCopyButton: some View {
+        Button {
+            SecureClipboard.copy(password)
+            store.message = "Lozinka je kopirana i automatski će se ukloniti."
+        } label: {
+            Label("Kopiraj lozinku", systemImage: "doc.on.doc")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .overlay(Capsule().stroke(cyan.opacity(0.7), lineWidth: 1))
+    }
+
+    private var generatorRefreshButton: some View {
+        Button {
+            refresh()
+        } label: {
+            Label("Generiraj novu", systemImage: "arrow.triangle.2.circlepath")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(midnight)
+        .background(cyan)
+        .clipShape(Capsule())
+    }
 }
 
 struct GeneratorToggle: View {
     let title: String
-    @Binding var value: Bool
-    let refresh: () -> Void
+    let value: Bool
+    let onChange: (Bool) -> Void
 
     var body: some View {
-        Toggle(title, isOn: $value)
-            .tint(cyan)
-            .foregroundStyle(.white)
-            .onChange(of: value) { _, _ in refresh() }
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { value },
+                set: onChange
+            )
+        )
+        .tint(cyan)
+        .foregroundStyle(.white)
     }
 }
 
