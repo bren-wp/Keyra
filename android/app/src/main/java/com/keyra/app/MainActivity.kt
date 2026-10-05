@@ -3099,6 +3099,17 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var search by remember { mutableStateOf("") }
+    var confirmImport by remember { mutableStateOf(false) }
+
+    fun runProtectedImport() {
+        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
+                model.importBackup(context)
+            }
+        } else {
+            model.importBackup(context)
+        }
+    }
 
     fun matches(vararg values: String): Boolean =
         search.isBlank() || values.any { it.contains(search, ignoreCase = true) }
@@ -3114,6 +3125,42 @@ private fun SettingsScreen(
     val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
 
     Column(Modifier.fillMaxSize()) {
+        if (confirmImport) {
+            AlertDialog(
+                onDismissRequest = { confirmImport = false },
+                icon = {
+                    Icon(
+                        Icons.Outlined.Warning,
+                        contentDescription = null,
+                        tint = Warn
+                    )
+                },
+                title = { Text("Uvesti sigurnosnu kopiju?") },
+                text = {
+                    Text(
+                        "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
+                            "Prije nastavka provjerite da je kopija ispravna."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmImport = false
+                            runProtectedImport()
+                        }
+                    ) {
+                        Text("Uvezi i zamijeni", color = Warn)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmImport = false }) {
+                        Text("Odustani")
+                    }
+                },
+                containerColor = Slate
+            )
+        }
+
         BrandHeader("POSTAVKE I SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         OutlinedTextField(
             value = search,
@@ -3193,16 +3240,18 @@ private fun SettingsScreen(
                 }
             }
             if (matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija")) item {
-                SettingRow(Icons.Outlined.Download, "Uvezi sigurnosnu kopiju", "Vratite šifriranu kopiju iz međuspremnika.") {
-                    IconButton(onClick = {
-                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
-                            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
-                                model.importBackup(context)
-                            }
-                        } else {
-                            model.importBackup(context)
-                        }
-                    }) { Icon(Icons.Outlined.Download, null, tint = Cyan) }
+                SettingRow(
+                    Icons.Outlined.Download,
+                    "Uvezi sigurnosnu kopiju",
+                    "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
+                ) {
+                    IconButton(onClick = { confirmImport = true }) {
+                        Icon(
+                            Icons.Outlined.Download,
+                            contentDescription = "Uvezi sigurnosnu kopiju",
+                            tint = Cyan
+                        )
+                    }
                 }
             }
 
