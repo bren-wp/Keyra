@@ -4163,7 +4163,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudUpload,
                     "Spremi šifriranu kopiju",
-                    "Spremite .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
+                    "Spremite već šifriranu .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
                 ) {
                     IconButton(onClick = {
                         exportFileLauncher.launch("Keyra-backup.keyra")

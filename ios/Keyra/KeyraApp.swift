@@ -4151,7 +4151,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "externaldrive.badge.plus",
                             title: "Spremi šifriranu kopiju",
-                            subtitle: "Spremite .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
+                            subtitle: "Spremite već šifriranu .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
                         ) {
                             Button {
                                 prepareBackupExport()
