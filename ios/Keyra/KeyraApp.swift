@@ -17,6 +17,13 @@ private let good = Color(hex: 0x22E3B0)
 private let warn = Color(hex: 0xFFC247)
 private let danger = Color(hex: 0xFF5B6E)
 
+extension View {
+    func keyraPageWidth(_ width: CGFloat = 900) -> some View {
+        frame(maxWidth: width)
+            .frame(maxWidth: .infinity)
+    }
+}
+
 extension Color {
     init(hex: UInt32) {
         self.init(
@@ -519,15 +526,15 @@ struct RootView: View {
                 SplashView()
             } else {
                 switch store.screen {
-                case .onboarding: OnboardingView()
-                case .unlock: UnlockView()
-                case .vault: VaultView()
-                case .collections: CollectionsView()
-                case .generator: GeneratorView()
-                case .add: AddEditView(store: store)
-                case .detail: DetailView()
-                case .settings: SettingsView()
-                case .security: SecurityCenterView()
+                case .onboarding: OnboardingView().keyraPageWidth(680)
+                case .unlock: UnlockView().keyraPageWidth(620)
+                case .vault: VaultView().keyraPageWidth()
+                case .collections: CollectionsView().keyraPageWidth()
+                case .generator: GeneratorView().keyraPageWidth(760)
+                case .add: AddEditView(store: store).keyraPageWidth(760)
+                case .detail: DetailView().keyraPageWidth(760)
+                case .settings: SettingsView().keyraPageWidth(760)
+                case .security: SecurityCenterView().keyraPageWidth(760)
                 }
 
                 if [.vault, .collections, .generator, .settings, .security].contains(store.screen) {
@@ -645,23 +652,31 @@ struct KeyraMark: View {
 
 struct SplashView: View {
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [midnight, Color(hex: 0x071B36), midnight], startPoint: .top, endPoint: .bottom)
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 620 || proxy.size.width < 340
+            ZStack {
+                LinearGradient(
+                    colors: [midnight, Color(hex: 0x071B36), midnight],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
                 .ignoresSafeArea()
-            VStack(spacing: 18) {
-                KeyraMark(size: 132)
-                Text("Keyra")
-                    .font(.system(size: 58, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("SIGURNI UPRAVITELJ LOZINKI")
-                    .font(.system(size: 13, weight: .medium))
-                    .tracking(3)
-                    .foregroundStyle(muted)
-                Text("VAŠI KLJUČEVI. VAŠI PODACI. UVIJEK VAŠI.")
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(1.8)
-                    .foregroundStyle(ice)
-                    .padding(.top, 10)
+
+                VStack(spacing: compact ? 10 : 14) {
+                    KeyraMark(size: compact ? 94 : 118)
+                    Text("Keyra")
+                        .font(.system(size: compact ? 46 : 54, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("SIGURNI UPRAVITELJ LOZINKI")
+                        .font(.system(size: compact ? 10 : 11, weight: .medium))
+                        .tracking(compact ? 1.8 : 2.4)
+                        .foregroundStyle(muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+                .padding(.horizontal, 24)
             }
         }
     }
@@ -671,27 +686,39 @@ struct BrandHeader: View {
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 14) {
-            KeyraMark(size: 56)
+        ViewThatFits(in: .horizontal) {
+            header(compact: false)
+            header(compact: true)
+        }
+    }
+
+    @ViewBuilder
+    private func header(compact: Bool) -> some View {
+        HStack(spacing: compact ? 8 : 12) {
+            KeyraMark(size: compact ? 42 : 50)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Keyra")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .font(.system(size: compact ? 27 : 31, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .tracking(3)
+                    .font(.system(size: compact ? 9 : 10, weight: .medium))
+                    .tracking(compact ? 1.2 : 2)
                     .foregroundStyle(muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
-            Spacer()
+            Spacer(minLength: 4)
             Image(systemName: "bell")
                 .foregroundStyle(.white)
+                .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
             Text("K")
-                .fontWeight(.bold)
-                .frame(width: 48, height: 48)
+                .font(.system(size: compact ? 12 : 14, weight: .bold))
+                .frame(width: compact ? 36 : 42, height: compact ? 36 : 42)
                 .overlay(Circle().stroke(cyan, lineWidth: 1))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, compact ? 12 : 18)
+        .padding(.vertical, compact ? 7 : 10)
     }
 }
 
@@ -711,25 +738,34 @@ struct FeatureCard: View {
     let icon: String
     let title: String
     let subtitle: String
+    var compact = false
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: compact ? 10 : 14) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(compact ? .headline : .title2)
                 .foregroundStyle(cyan)
-                .frame(width: 48, height: 48)
+                .frame(width: compact ? 40 : 48, height: compact ? 40 : 48)
                 .background(Color(hex: 0x0A2D3C))
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline).foregroundStyle(muted)
+                .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 15))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(compact ? .subheadline.bold() : .headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(subtitle)
+                    .font(compact ? .caption : .subheadline)
+                    .foregroundStyle(muted)
+                    .lineLimit(compact ? 1 : 2)
+                    .minimumScaleFactor(0.8)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(compact ? 10 : 14)
         .background(slate.opacity(0.92))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(cyan.opacity(0.34), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: compact ? 17 : 20).stroke(cyan.opacity(0.34), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 17 : 20))
     }
 }
 
@@ -737,54 +773,80 @@ struct OnboardingView: View {
     @EnvironmentObject var store: KeyraStore
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                KeyraMark(size: 94).padding(.top, 26)
-                Text("Keyra")
-                    .font(.system(size: 48, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("SIGURNI UPRAVITELJ LOZINKI")
-                    .font(.system(size: 12))
-                    .tracking(2)
-                    .foregroundStyle(muted)
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 720 || proxy.size.width < 360
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sigurniji način")
-                        .font(.system(size: 34, weight: .black))
-                        .foregroundStyle(.white)
-                    Text("upravljanja lozinkama")
-                        .font(.system(size: 34, weight: .black))
-                        .foregroundStyle(cyan)
-                    Text("Čuvajte svoje lozinke, pristupne ključeve i osjetljive podatke na jednom sigurnom mjestu.")
-                        .font(.body)
-                        .foregroundStyle(muted)
-                        .padding(.top, 8)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: compact ? 7 : 11) {
+                        KeyraMark(size: compact ? 64 : 82)
+                            .padding(.top, compact ? 8 : 18)
+
+                        Text("Keyra")
+                            .font(.system(size: compact ? 34 : 42, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Text("SIGURNI UPRAVITELJ LOZINKI")
+                            .font(.system(size: compact ? 9 : 11))
+                            .tracking(compact ? 1.4 : 2)
+                            .foregroundStyle(muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        VStack(alignment: .leading, spacing: compact ? 5 : 8) {
+                            Text("Sve važno. Jedan siguran trezor.")
+                                .font(.system(size: compact ? 25 : 31, weight: .black))
+                                .foregroundStyle(.white)
+                                .minimumScaleFactor(0.8)
+                            Text("Lozinke, bilješke, kartice, identiteti i Wi‑Fi na jednom mjestu.")
+                                .font(compact ? .subheadline : .body)
+                                .foregroundStyle(muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, compact ? 6 : 12)
+
+                        FeatureCard(
+                            icon: "lock.fill",
+                            title: "Potpuno šifrirano",
+                            subtitle: "Vaši podaci ostaju zaštićeni.",
+                            compact: compact
+                        )
+                        FeatureCard(
+                            icon: "faceid",
+                            title: "Privatnost u osnovi",
+                            subtitle: "Brz pristup uz potvrdu identiteta.",
+                            compact: compact
+                        )
+                        FeatureCard(
+                            icon: "rectangle.on.rectangle",
+                            title: "Spremno za svaki ekran",
+                            subtitle: "Pregledno na telefonu i tabletu.",
+                            compact: compact
+                        )
+                    }
+                    .padding(.horizontal, compact ? 16 : 22)
+                    .padding(.bottom, 8)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 16)
-
-                FeatureCard(icon: "lock.fill", title: "Potpuno šifrirano", subtitle: "Vaši podaci ostaju na vašem uređaju.")
-                FeatureCard(icon: "fingerprint", title: "Privatnost u osnovi", subtitle: "Stvoreno za vaš mir.")
-                FeatureCard(icon: "iphone", title: "Radi svugdje", subtitle: "Besprijekorno na Androidu i iOS-u.")
 
                 Button {
                     store.startCreate()
                 } label: {
                     HStack {
-                        Text("Izradi trezor").fontWeight(.bold)
+                        Text("Kreni").fontWeight(.bold)
                         Image(systemName: "arrow.right")
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 56)
+                    .frame(height: compact ? 50 : 56)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(midnight)
                 .background(cyan)
                 .clipShape(Capsule())
-                .padding(.top, 14)
+                .padding(.horizontal, compact ? 16 : 22)
+                .padding(.top, 8)
+                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
             }
-            .padding(.horizontal, 22)
-            .padding(.bottom, 24)
         }
     }
 }
@@ -798,11 +860,13 @@ struct UnlockView: View {
     private var creating: Bool { !store.isSetup }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                KeyraMark(size: 90).padding(.top, 30)
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 700 || proxy.size.width < 360
+            ScrollView {
+            VStack(spacing: compact ? 11 : 16) {
+                KeyraMark(size: compact ? 66 : 84).padding(.top, compact ? 10 : 24)
                 Text("Keyra")
-                    .font(.system(size: 48, weight: .black, design: .rounded))
+                    .font(.system(size: compact ? 36 : 44, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                 Text("SIGURNI UPRAVITELJ LOZINKI")
                     .font(.system(size: 12))
@@ -811,7 +875,7 @@ struct UnlockView: View {
 
                 GlassCard {
                     Text(creating ? "Izradite trezor" : "Otključajte trezor")
-                        .font(.system(size: 31, weight: .black))
+                        .font(.system(size: compact ? 26 : 31, weight: .black))
                         .foregroundStyle(.white)
                     Text(creating ? "Postavite glavnu lozinku kojom ćete otključavati svoj trezor." : "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.")
                         .foregroundStyle(muted)
@@ -858,7 +922,8 @@ struct UnlockView: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(compact ? 16 : 24)
+            }
         }
     }
 }
@@ -897,18 +962,20 @@ struct BottomBar: View {
     @EnvironmentObject var store: KeyraStore
 
     var body: some View {
-        HStack {
+        HStack(spacing: 2) {
             BottomItem(icon: "house", title: "Trezor", screen: .vault)
             BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
             BottomItem(icon: "square.grid.2x2", title: "Kolekcije", screen: .collections)
             BottomItem(icon: "gearshape", title: "Postavke", screen: .settings)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(slate.opacity(0.97))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(ice.opacity(0.25), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .padding(.horizontal, 14)
-        .padding(.bottom, 4)
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(ice.opacity(0.25), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 3)
+        .frame(maxWidth: 820)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -916,13 +983,16 @@ struct BottomBar: View {
         Button {
             store.open(screen)
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.title3)
-                Text(title).font(.caption)
+                    .font(.system(size: 19, weight: .semibold))
+                Text(title)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
             .foregroundStyle(store.screen == screen ? cyan : muted)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 42)
         }
         .buttonStyle(.plain)
     }
@@ -1024,12 +1094,22 @@ struct VaultView: View {
                 .padding(.vertical, 10)
             }
 
-            HStack(spacing: 10) {
-                Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
-                Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger)
-                Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
+                    Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger)
+                    Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan).frame(width: 112)
+                        Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger).frame(width: 112)
+                        Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo).frame(width: 124)
+                    }
+                }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 14)
 
             HStack {
                 Text("Vaše stavke")
@@ -1289,7 +1369,10 @@ struct CollectionsView: View {
             }
 
             ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 150, maximum: 280), spacing: 10)],
+                    spacing: 10
+                ) {
                     ForEach(categories.indices, id: \.self) { index in
                         let name = categories[index].0
                         let accent = categories[index].1
@@ -1407,10 +1490,11 @@ struct GeneratorView: View {
                         Text("Izradite snažne, jedinstvene lozinke u nekoliko sekundi.")
                             .foregroundStyle(muted)
                         Text(password)
-                            .font(.system(size: 26, weight: .bold, design: .monospaced))
+                            .font(.system(size: 22, weight: .bold, design: .monospaced))
                             .foregroundStyle(.white)
-                            .minimumScaleFactor(0.65)
-                            .lineLimit(1)
+                            .lineLimit(3)
+                            .minimumScaleFactor(0.75)
+                            .fixedSize(horizontal: false, vertical: true)
                         ProgressView(value: strengthProgress)
                             .tint(strengthColor)
                         HStack {
@@ -2174,7 +2258,7 @@ struct SettingsView: View {
                     SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.")
 
                     SectionLabel("SIGURNOST I PRIVATNOST")
-                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.3.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
 
                     Button {
                         store.lock()
