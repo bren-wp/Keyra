@@ -76,7 +76,7 @@ private val Good = Color(0xFF22E3B0)
 private val Warn = Color(0xFFFFC247)
 private val Danger = Color(0xFFFF5B6E)
 
-enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS }
+enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
     val id: String = UUID.randomUUID().toString(),
@@ -1212,7 +1212,14 @@ private fun SettingsScreen(model: KeyraViewModel) {
                     Switch(model.biometricEnabled, model::toggleBiometric)
                 }
             }
-            item { SettingRow(Icons.Outlined.Security, "Provjera sigurnosti", "Pronađite slabe i ponovljene lozinke.") }
+            item {
+                SettingRow(
+                    Icons.Outlined.Security,
+                    "Provjera sigurnosti",
+                    "Pronađite slabe i ponovljene lozinke.",
+                    onClick = { model.open(Screen.SECURITY) }
+                )
+            }
             item { SectionTitle("UPRAVLJANJE PODACIMA") }
             item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
@@ -1245,8 +1252,19 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun SettingRow(icon: ImageVector, title: String, subtitle: String, trailing: (@Composable () -> Unit)? = null) {
-    Surface(shape = RoundedCornerShape(20.dp), color = Slate, border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))) {
+private fun SettingRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Surface(
+        modifier = Modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        shape = RoundedCornerShape(20.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
+    ) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0B3551)), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = Cyan)
@@ -1257,6 +1275,107 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, trail
                 Text(subtitle, color = Muted, fontSize = 13.sp)
             }
             trailing?.invoke()
+            if (onClick != null && trailing == null) {
+                Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecurityScreen(model: KeyraViewModel) {
+    val duplicatedGroups = model.items
+        .filter { it.password.isNotBlank() }
+        .groupBy { it.password }
+        .filterValues { it.size > 1 }
+    val duplicatedIds = duplicatedGroups.values.flatten().map { it.id }.toSet()
+    val weak = model.items.filter { it.password.isNotBlank() && it.password.length < 12 }
+    val strong = model.items.filter {
+        it.password.length >= 12 && it.id !in duplicatedIds
+    }
+    val score = if (model.items.none { it.password.isNotBlank() }) 100 else {
+        val passwordItems = model.items.count { it.password.isNotBlank() }
+        ((strong.size.toFloat() / passwordItems.coerceAtLeast(1)) * 100).toInt()
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        BrandHeader("SIGURNOST")
+        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 22.dp)
+        ) {
+            item {
+                GlassCard {
+                    Text("Ocjena sigurnosti", color = Muted, fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text("$score", color = if (score >= 80) Good else Warn, fontSize = 54.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("/100", color = Muted, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
+                    }
+                    LinearProgressIndicator(
+                        progress = { score / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (score >= 80) Good else Warn,
+                        trackColor = Color(0xFF203449)
+                    )
+                    Text(
+                        if (score >= 80) "Vaš trezor izgleda dobro zaštićen."
+                        else "Pregledajte stavke koje zahtijevaju pažnju.",
+                        color = Muted
+                    )
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.weight(1f))
+                    SummaryCard(weak.size.toString(), "Slabe", Warn, Modifier.weight(1f))
+                    SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.weight(1f))
+                }
+            }
+            item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
+            items((weak + model.items.filter { it.id in duplicatedIds }).distinctBy { it.id }) { issue ->
+                val duplicate = issue.id in duplicatedIds
+                Surface(
+                    Modifier.fillMaxWidth().clickable { model.select(issue) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Slate,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, (if (duplicate) Danger else Warn).copy(alpha=.55f))
+                ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (duplicate) Icons.Outlined.ContentCopy else Icons.Outlined.Warning,
+                            null,
+                            tint = if (duplicate) Danger else Warn
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (duplicate) "Lozinka se koristi na više mjesta."
+                                else "Lozinka je prekratka i preporučuje se zamjena.",
+                                color = Muted,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+                    }
+                }
+            }
+            if (weak.isEmpty() && duplicatedIds.isEmpty()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Good.copy(alpha=.10f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha=.55f))
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.VerifiedUser, null, tint = Good)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Nisu pronađene slabe ili ponovljene lozinke.", color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }
