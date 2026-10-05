@@ -166,6 +166,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var screen by mutableStateOf(if (isSetup) Screen.UNLOCK else Screen.ONBOARDING)
     var selected by mutableStateOf<VaultItem?>(null)
     var message by mutableStateOf<String?>(null)
+    var vaultCategoryFilter by mutableStateOf<String?>(null)
+    var vaultTypeFilter by mutableStateOf<String?>(null)
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
     var sensitiveReauthEnabled by mutableStateOf(prefs.getBoolean("sensitive_reauth_enabled", true))
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
@@ -173,7 +175,25 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     private var backgroundAt: Long? = null
 
     fun startCreate() { screen = Screen.UNLOCK }
-    fun open(screen: Screen) { this.screen = screen }
+
+    fun open(screen: Screen) {
+        if (screen == Screen.VAULT) {
+            vaultCategoryFilter = null
+            vaultTypeFilter = null
+        }
+        this.screen = screen
+    }
+
+    fun openCategory(category: String, type: String) {
+        vaultCategoryFilter = category
+        vaultTypeFilter = type
+        screen = Screen.VAULT
+    }
+
+    fun clearVaultCategoryFilter() {
+        vaultCategoryFilter = null
+    }
+
     fun addNew() { selected = null; screen = Screen.ADD }
     fun editSelected() { if (selected != null) screen = Screen.ADD }
     fun select(item: VaultItem) { selected = item; screen = Screen.DETAIL }
@@ -1153,7 +1173,7 @@ private fun isStrongPassword(password: String): Boolean {
 @Composable
 private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("Sve") }
+    var filter by remember { mutableStateOf(model.vaultTypeFilter ?: "Sve") }
     var newestFirst by remember { mutableStateOf(true) }
 
     val displayed = model.items
@@ -1171,7 +1191,8 @@ private fun VaultScreen(model: KeyraViewModel) {
                 append(it.category); append(' ')
                 append(it.fields.values.joinToString(" "))
             }
-            typeMatch && (search.isBlank() || haystack.contains(search, true))
+            val categoryMatch = model.vaultCategoryFilter == null || it.category == model.vaultCategoryFilter
+            typeMatch && categoryMatch && (search.isBlank() || haystack.contains(search, true))
         }
         .let { list ->
             if (newestFirst) list.sortedByDescending { it.updatedAt }
@@ -1228,6 +1249,37 @@ private fun VaultScreen(model: KeyraViewModel) {
                         )
                     }
                 )
+            }
+        }
+
+        model.vaultCategoryFilter?.let { category ->
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Cyan.copy(alpha = .12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .55f))
+                ) {
+                    Row(
+                        Modifier.padding(start = 11.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Kategorija: $category", color = Cyan, fontSize = 12.sp)
+                        IconButton(
+                            onClick = model::clearVaultCategoryFilter,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = "Ukloni filtar",
+                                tint = Cyan,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1524,7 +1576,10 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                         group.forEach { (name, accent) ->
                             val count = collectionItems.count { it.category == name }
                             Surface(
-                                Modifier.weight(1f).height(if (narrow) 74.dp else 88.dp),
+                                Modifier
+                                    .weight(1f)
+                                    .height(if (narrow) 74.dp else 88.dp)
+                                    .clickable { model.openCategory(name, type) },
                                 shape = RoundedCornerShape(20.dp),
                                 color = accent.copy(alpha=.13f),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha=.8f))
