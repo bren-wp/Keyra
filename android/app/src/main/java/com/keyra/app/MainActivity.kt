@@ -389,6 +389,29 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
+    fun toggleSelectedFavorite() {
+        val target = selected ?: return
+        val updated = target.copy(
+            favorite = !target.favorite,
+            updatedAt = System.currentTimeMillis()
+        )
+        val next = items.map { if (it.id == target.id) updated else it }
+
+        runCatching { store.save(next) }
+            .onSuccess {
+                items.clear()
+                items.addAll(next)
+                selected = updated
+                message = if (updated.favorite)
+                    "Stavka je dodana u favorite."
+                else
+                    "Stavka je uklonjena iz favorita."
+            }
+            .onFailure {
+                message = "Promjenu favorita nije moguće spremiti."
+            }
+    }
+
     fun deleteSelected() {
         val target = selected ?: return
         val next = items.filterNot { it.id == target.id }
