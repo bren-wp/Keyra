@@ -54,7 +54,17 @@ struct VaultItem: Identifiable, Codable, Equatable {
     var notes = ""
     var category = "Osobno"
     var favorite = false
+    var type: String? = "Prijava"
+    var fields: [String: String]? = nil
     var updatedAt = Date()
+
+    var kind: String {
+        if let type, !type.isEmpty { return type }
+        if password.isEmpty && website.isEmpty && username.isEmpty && !notes.isEmpty { return "Bilješka" }
+        return "Prijava"
+    }
+
+    var extraFields: [String: String] { fields ?? [:] }
 }
 
 enum KeyraError: Error {
@@ -392,12 +402,14 @@ final class KeyraStore: ObservableObject {
 
     private func seedItems() -> [VaultItem] {
         [
-            VaultItem(title: "Google", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://accounts.google.com", notes: "Primjer prijave", category: "Osobno", favorite: true),
-            VaultItem(title: "Apple ID", username: "primjer@keyra.app", password: "Appl3!Keyra#2026", website: "https://account.apple.com", category: "Osobno"),
-            VaultItem(title: "GitHub", username: "primjer", password: "Git#Keyra!90210", website: "https://github.com", category: "Posao"),
-            VaultItem(title: "Home Wi‑Fi", username: "Dnevni boravak", password: "Wifi!Keyra#8821", category: "Osobno"),
-            VaultItem(title: "Netflix", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://netflix.com", category: "Zabava"),
-            VaultItem(title: "Sigurne bilješke", notes: "Ovdje možete spremati važne privatne bilješke.", category: "Osobno")
+            VaultItem(title: "Google", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://accounts.google.com", notes: "Primjer prijave", category: "Osobno", favorite: true, type: "Prijava"),
+            VaultItem(title: "Apple ID", username: "primjer@keyra.app", password: "Appl3!Keyra#2026", website: "https://account.apple.com", category: "Osobno", type: "Prijava"),
+            VaultItem(title: "GitHub", username: "primjer", password: "Git#Keyra!90210", website: "https://github.com", category: "Posao", type: "Prijava"),
+            VaultItem(title: "Kućni Wi‑Fi", username: "Dnevni boravak", password: "Wifi!Keyra#8821", category: "Osobno", type: "Wi-Fi", fields: ["Naziv mreže": "Keyra Home", "Vrsta zaštite": "WPA3"]),
+            VaultItem(title: "Netflix", username: "primjer@keyra.app", password: "K3yra!Google#2026", website: "https://netflix.com", category: "Zabava", type: "Prijava"),
+            VaultItem(title: "Sigurne bilješke", notes: "Ovdje možete spremati važne privatne bilješke.", category: "Osobno", type: "Bilješka"),
+            VaultItem(title: "Putna kartica", category: "Putovanja", type: "Kartica", fields: ["Vlasnik kartice": "Primjer Korisnik", "Broj kartice": "4111111111111111", "Vrijedi do": "12/30", "Sigurnosni kod": "123"]),
+            VaultItem(title: "Osobni dokument", category: "Osobno", type: "Identitet", fields: ["Puno ime": "Primjer Korisnik", "Broj dokumenta": "ID-KEYRA-2026", "Datum isteka": "31. 12. 2030."])
         ]
     }
 }
@@ -829,17 +841,38 @@ struct VaultView: View {
     @State private var search = ""
     @State private var filter = "Sve"
 
+    private var passwordItems: [VaultItem] {
+        store.items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
+    }
+
     private var duplicates: Set<UUID> {
-        let grouped = Dictionary(grouping: store.items.filter { !$0.password.isEmpty }, by: { $0.password })
+        let grouped = Dictionary(grouping: passwordItems.filter { !$0.password.isEmpty }, by: { $0.password })
         return Set(grouped.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
     }
 
     private var filtered: [VaultItem] {
-        store.items.filter { item in
-            let filterOK = filter == "Sve" || item.category == filter || (filter == "Favoriti" && item.favorite)
-            let searchOK = search.isEmpty || item.title.localizedCaseInsensitiveContains(search) || item.username.localizedCaseInsensitiveContains(search)
-            return filterOK && searchOK
-        }
+        store.items
+            .filter { item in
+                let typeOK: Bool
+                switch filter {
+                case "Sve": typeOK = true
+                case "Favoriti": typeOK = item.favorite
+                default: typeOK = item.kind == filter
+                }
+
+                let haystack = [
+                    item.title,
+                    item.username,
+                    item.website,
+                    item.notes,
+                    item.category,
+                    item.extraFields.values.joined(separator: " ")
+                ].joined(separator: " ")
+
+                let searchOK = search.isEmpty || haystack.localizedCaseInsensitiveContains(search)
+                return typeOK && searchOK
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     var body: some View {
@@ -850,6 +883,7 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
+                Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
             }
             .padding()
             .background(slate)
@@ -859,15 +893,39 @@ struct VaultView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Sve","Osobno","Posao","Zabava","Favoriti"], id: \.self) { value in
-                        Button(value) { filter = value }
-                            .buttonStyle(.plain)
+                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                        Button {
+                            filter = value
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: {
+                                    switch value {
+                                    case "Prijava": return "lock.fill"
+                                    case "Bilješka": return "doc.text"
+                                    case "Kartica": return "creditcard"
+                                    case "Identitet": return "person.text.rectangle"
+                                    case "Wi-Fi": return "wifi"
+                                    case "Favoriti": return "star"
+                                    default: return "square.grid.2x2"
+                                    }
+                                }())
+                                Text({
+                                    switch value {
+                                    case "Prijava": return "Prijave"
+                                    case "Bilješka": return "Bilješke"
+                                    case "Kartica": return "Kartice"
+                                    default: return value
+                                    }
+                                }())
+                            }
                             .foregroundStyle(filter == value ? midnight : .white)
-                            .padding(.horizontal, 15)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 9)
                             .background(filter == value ? cyan : slate)
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(ice.opacity(0.25), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 18)
@@ -876,7 +934,7 @@ struct VaultView: View {
 
             HStack(spacing: 10) {
                 Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
-                Summary(value: "\(store.items.filter { !$0.password.isEmpty && $0.password.count < 12 }.count)", label: "Slabe", accent: danger)
+                Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && $0.password.count < 12 }.count)", label: "Slabe", accent: danger)
                 Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
             }
             .padding(.horizontal, 18)
@@ -886,6 +944,9 @@ struct VaultView: View {
                     .font(.system(size: 28, weight: .black))
                     .foregroundStyle(.white)
                 Spacer()
+                Text("Poredaj po nedavnim")
+                    .font(.caption)
+                    .foregroundStyle(muted)
                 Button { store.addNew() } label: {
                     Image(systemName: "plus")
                         .font(.title2.bold())
@@ -939,26 +1000,75 @@ struct VaultRow: View {
     let item: VaultItem
     let duplicated: Bool
 
+    private var isPasswordItem: Bool { item.kind == "Prijava" || item.kind == "Wi-Fi" }
+
     private var state: (String, Color) {
         if duplicated { return ("Ponovno korištena", danger) }
-        if !item.password.isEmpty && item.password.count < 12 { return ("Ažurirajte", warn) }
-        return ("Snažna", good)
+        if isPasswordItem && !item.password.isEmpty && item.password.count < 12 { return ("Potrebno ažuriranje", warn) }
+        switch item.kind {
+        case "Bilješka", "Kartica": return ("Zaštićena", good)
+        case "Identitet": return ("Zaštićen", good)
+        default: return ("Snažna", good)
+        }
+    }
+
+    private var icon: String {
+        switch item.kind {
+        case "Bilješka": return "doc.text.fill"
+        case "Kartica": return "creditcard.fill"
+        case "Identitet": return "person.text.rectangle.fill"
+        case "Wi-Fi": return "wifi"
+        default: return "lock.fill"
+        }
+    }
+
+    private var accent: Color {
+        switch item.kind {
+        case "Bilješka": return indigo
+        case "Kartica": return warn
+        case "Identitet": return Color(hex: 0xB48CFF)
+        case "Wi-Fi": return Color(hex: 0x22BDF7)
+        default: return cyan
+        }
+    }
+
+    private var subtitle: String {
+        switch item.kind {
+        case "Kartica":
+            if let number = item.extraFields["Broj kartice"], !number.isEmpty {
+                return "•••• " + String(number.suffix(4))
+            }
+            return item.category
+        case "Identitet":
+            return item.extraFields["Puno ime"]?.isEmpty == false ? item.extraFields["Puno ime"]! : item.category
+        case "Wi-Fi":
+            if let network = item.extraFields["Naziv mreže"], !network.isEmpty { return network }
+            return item.username.isEmpty ? item.category : item.username
+        case "Bilješka":
+            return item.category
+        default:
+            if !item.username.isEmpty { return item.username }
+            if !item.website.isEmpty { return item.website }
+            return item.category
+        }
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(String(item.title.prefix(1)).uppercased())
+            Image(systemName: icon)
                 .font(.title3.bold())
-                .foregroundStyle(cyan)
+                .foregroundStyle(accent)
                 .frame(width: 48, height: 48)
-                .background(Color(hex: 0x0B3551))
+                .background(accent.opacity(0.16))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).font(.headline).foregroundStyle(.white)
-                Text(item.username.isEmpty ? item.category : item.username)
-                    .font(.subheadline).foregroundStyle(muted)
+                Text(subtitle).font(.subheadline).foregroundStyle(muted).lineLimit(1)
             }
+
             Spacer()
+
             Text(state.0)
                 .font(.caption)
                 .foregroundStyle(state.1)
@@ -977,21 +1087,36 @@ struct VaultRow: View {
 
 struct CollectionsView: View {
     @EnvironmentObject var store: KeyraStore
+    @State private var search = ""
+    @State private var selectedType = "Prijava"
 
-    let categories: [(String, Color)] = [
-        ("Osobno", Color(hex: 0x00AEE8)),
-        ("Posao", indigo),
-        ("Financije", Color(hex: 0x00D8A1)),
-        ("Društvene mreže", Color(hex: 0xFF3A7A)),
-        ("Kupovina", Color(hex: 0xFFC026)),
-        ("Putovanja", Color(hex: 0x00B8FF)),
-        ("Zdravlje", Color(hex: 0x9C6CFF)),
-        ("Ostalo", muted)
+    let categories: [(String, Color, String)] = [
+        ("Osobno", Color(hex: 0x00AEE8), "person.fill"),
+        ("Posao", indigo, "briefcase.fill"),
+        ("Financije", Color(hex: 0x00D8A1), "creditcard.fill"),
+        ("Društvene mreže", Color(hex: 0xFF3A7A), "person.2.fill"),
+        ("Kupovina", Color(hex: 0xFFC026), "cart.fill"),
+        ("Putovanja", Color(hex: 0x00B8FF), "airplane"),
+        ("Zdravlje", Color(hex: 0x9C6CFF), "heart.fill"),
+        ("Ostalo", muted, "square.grid.2x2")
     ]
+
+    private var recentNotes: [VaultItem] {
+        Array(
+            store.items
+                .filter {
+                    $0.kind == "Bilješka" &&
+                    (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.notes.localizedCaseInsensitiveContains(search))
+                }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(3)
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             BrandHeader(subtitle: "MOJ TREZOR")
+
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Kolekcije")
@@ -1004,15 +1129,64 @@ struct CollectionsView: View {
             }
             .padding(.horizontal, 18)
 
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(ice)
+                TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
+                    .foregroundStyle(.white)
+                Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+            }
+            .padding()
+            .background(slate)
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(ice.opacity(0.35), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                        Button {
+                            selectedType = value
+                        } label: {
+                            Text({
+                                switch value {
+                                case "Prijava": return "Lozinke"
+                                case "Bilješka": return "Bilješke"
+                                case "Kartica": return "Kartice"
+                                default: return value
+                                }
+                            }())
+                            .foregroundStyle(selectedType == value ? midnight : .white)
+                            .padding(.horizontal, 15)
+                            .padding(.vertical, 9)
+                            .background(selectedType == value ? cyan : slate)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+            }
+
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     ForEach(categories.indices, id: \.self) { index in
                         let name = categories[index].0
                         let accent = categories[index].1
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(name).font(.headline).foregroundStyle(.white)
-                            Text("\(store.items.filter { $0.category == name }.count) stavki")
-                                .font(.subheadline).foregroundStyle(muted)
+                        let icon = categories[index].2
+                        HStack(spacing: 10) {
+                            Image(systemName: icon)
+                                .foregroundStyle(accent)
+                                .frame(width: 44, height: 44)
+                                .background(accent.opacity(0.18))
+                                .clipShape(RoundedRectangle(cornerRadius: 13))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(name).font(.headline).foregroundStyle(.white)
+                                Text("\(store.items.filter { $0.category == name }.count) stavki")
+                                    .font(.subheadline).foregroundStyle(muted)
+                            }
+                            Spacer()
                         }
                         .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
                         .padding(16)
@@ -1021,7 +1195,7 @@ struct CollectionsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                     }
                 }
-                .padding(18)
+                .padding(.horizontal, 18)
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Nedavne bilješke")
@@ -1029,18 +1203,37 @@ struct CollectionsView: View {
                         .foregroundStyle(.white)
                     Text("Vaše najnovije bilješke i sigurne informacije.")
                         .foregroundStyle(muted)
-                    ForEach(store.items.filter { !$0.notes.isEmpty }.prefix(3)) { item in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.title).fontWeight(.bold).foregroundStyle(.white)
-                            Text(item.notes).lineLimit(1).foregroundStyle(muted)
+
+                    ForEach(recentNotes) { item in
+                        Button {
+                            store.select(item)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "doc.text.fill")
+                                    .foregroundStyle(indigo)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title).fontWeight(.bold).foregroundStyle(.white)
+                                    Text(item.notes).lineLimit(1).foregroundStyle(muted)
+                                }
+                                Spacer()
+                                Image(systemName: "ellipsis").foregroundStyle(muted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(slate)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(slate)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .buttonStyle(.plain)
+                    }
+
+                    if recentNotes.isEmpty {
+                        Text("Još nema sigurnih bilješki.")
+                            .foregroundStyle(muted)
+                            .padding(.vertical, 18)
                     }
                 }
                 .padding(.horizontal, 18)
+                .padding(.top, 12)
                 .padding(.bottom, 100)
             }
         }
@@ -1140,6 +1333,11 @@ struct AddEditView: View {
     @State private var notes: String
     @State private var category: String
     @State private var favorite: Bool
+    @State private var type: String
+    @State private var field1: String
+    @State private var field2: String
+    @State private var field3: String
+    @State private var field4: String
     @State private var reveal = false
 
     private let original: VaultItem?
@@ -1155,6 +1353,31 @@ struct AddEditView: View {
         _notes = State(initialValue: item?.notes ?? "")
         _category = State(initialValue: item?.category ?? "Osobno")
         _favorite = State(initialValue: item?.favorite ?? false)
+        _type = State(initialValue: item?.kind ?? "Prijava")
+
+        let extra = item?.extraFields ?? [:]
+        switch item?.kind {
+        case "Kartica":
+            _field1 = State(initialValue: extra["Vlasnik kartice"] ?? "")
+            _field2 = State(initialValue: extra["Broj kartice"] ?? "")
+            _field3 = State(initialValue: extra["Vrijedi do"] ?? "")
+            _field4 = State(initialValue: extra["Sigurnosni kod"] ?? "")
+        case "Identitet":
+            _field1 = State(initialValue: extra["Puno ime"] ?? "")
+            _field2 = State(initialValue: extra["Broj dokumenta"] ?? "")
+            _field3 = State(initialValue: extra["Datum isteka"] ?? "")
+            _field4 = State(initialValue: "")
+        case "Wi-Fi":
+            _field1 = State(initialValue: extra["Naziv mreže"] ?? "")
+            _field2 = State(initialValue: extra["Vrsta zaštite"] ?? "")
+            _field3 = State(initialValue: "")
+            _field4 = State(initialValue: "")
+        default:
+            _field1 = State(initialValue: "")
+            _field2 = State(initialValue: "")
+            _field3 = State(initialValue: "")
+            _field4 = State(initialValue: "")
+        }
     }
 
     var body: some View {
@@ -1167,6 +1390,7 @@ struct AddEditView: View {
                         .font(.title2)
                         .foregroundStyle(.white)
                 }
+                KeyraMark(size: 38)
                 Text("Keyra").font(.title.bold()).foregroundStyle(.white)
                 Spacer()
             }
@@ -1174,34 +1398,119 @@ struct AddEditView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(original == nil ? "Dodaj prijavu" : "Uredi stavku")
+                    Text(original == nil ? "Dodaj stavku" : "Uredi stavku")
                         .font(.system(size: 38, weight: .black))
                         .foregroundStyle(.white)
-                    Text("Sigurno spremite svoje vjerodajnice")
+                    Text("Sigurno spremite osjetljive podatke")
                         .foregroundStyle(muted)
 
-                    KeyraField(title: "Naslov", text: $title)
-                    KeyraField(title: "Web-stranica", text: $website)
-                    KeyraField(title: "Korisničko ime / e-pošta", text: $username)
-                    SecretField(title: "Lozinka", text: $password, reveal: $reveal)
-
-                    Button {
-                        password = PasswordTools.generate(length: 18, upper: true, lower: true, numbers: true, symbols: true)
-                    } label: {
-                        Label("Generiraj", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(cyan)
-
-                    KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
-
-                    Toggle("Favorit", isOn: $favorite)
-                        .tint(cyan)
-                        .foregroundStyle(.white)
+                    Text("VRSTA STAVKE")
+                        .font(.caption)
+                        .tracking(2)
+                        .foregroundStyle(ice)
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(["Osobno","Posao","Financije","Zabava","Putovanja","Ostalo"], id: \.self) { value in
+                            ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi"], id: \.self) { value in
+                                Button {
+                                    if original == nil {
+                                        type = value
+                                        field1 = ""
+                                        field2 = ""
+                                        field3 = ""
+                                        field4 = ""
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: {
+                                            switch value {
+                                            case "Bilješka": return "doc.text"
+                                            case "Kartica": return "creditcard"
+                                            case "Identitet": return "person.text.rectangle"
+                                            case "Wi-Fi": return "wifi"
+                                            default: return "lock"
+                                            }
+                                        }())
+                                        Text(value)
+                                    }
+                                    .foregroundStyle(type == value ? midnight : .white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                    .background(type == value ? cyan : slate)
+                                    .clipShape(Capsule())
+                                    .opacity(original == nil || type == value ? 1 : 0.45)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(original != nil && type != value)
+                            }
+                        }
+                    }
+
+                    KeyraField(title: "Naslov", text: $title)
+
+                    if type == "Prijava" {
+                        KeyraField(title: "Web-stranica", text: $website)
+                        KeyraField(title: "Korisničko ime / e-pošta", text: $username)
+                        SecretField(title: "Lozinka", text: $password, reveal: $reveal)
+
+                        Button {
+                            password = PasswordTools.generate(length: 18, upper: true, lower: true, numbers: true, symbols: true)
+                        } label: {
+                            Label("Generiraj", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(cyan)
+                    }
+
+                    if type == "Wi-Fi" {
+                        KeyraField(title: "Naziv mreže", text: $field1)
+                        KeyraField(title: "Korisničko ime (nije obavezno)", text: $username)
+                        SecretField(title: "Lozinka mreže", text: $password, reveal: $reveal)
+                        Button {
+                            password = PasswordTools.generate(length: 20, upper: true, lower: true, numbers: true, symbols: true)
+                        } label: {
+                            Label("Generiraj", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(cyan)
+                        KeyraField(title: "Vrsta zaštite, npr. WPA3", text: $field2)
+                    }
+
+                    if type == "Kartica" {
+                        KeyraField(title: "Vlasnik kartice", text: $field1)
+                        KeyraField(title: "Broj kartice", text: $field2)
+                            .keyboardType(.numberPad)
+                            .onChange(of: field2) { _, value in
+                                field2 = String(value.filter(\.isNumber).prefix(19))
+                            }
+                        KeyraField(title: "Vrijedi do", text: $field3)
+                        KeyraField(title: "Sigurnosni kod", text: $field4)
+                            .keyboardType(.numberPad)
+                            .onChange(of: field4) { _, value in
+                                field4 = String(value.filter(\.isNumber).prefix(4))
+                            }
+                    }
+
+                    if type == "Identitet" {
+                        KeyraField(title: "Puno ime", text: $field1)
+                        KeyraField(title: "Broj dokumenta", text: $field2)
+                        KeyraField(title: "Datum isteka", text: $field3)
+                    }
+
+                    KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
+
+                    Toggle("Dodaj u favorite", isOn: $favorite)
+                        .tint(cyan)
+                        .foregroundStyle(.white)
+
+                    Text("MAPA / KATEGORIJA")
+                        .font(.caption)
+                        .tracking(2)
+                        .foregroundStyle(ice)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(["Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo"], id: \.self) { value in
                                 Button(value) { category = value }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(category == value ? midnight : .white)
@@ -1218,20 +1527,47 @@ struct AddEditView: View {
                             store.message = "Unesite naslov stavke."
                             return
                         }
+
+                        let extra: [String: String]
+                        switch type {
+                        case "Kartica":
+                            extra = [
+                                "Vlasnik kartice": field1,
+                                "Broj kartice": field2,
+                                "Vrijedi do": field3,
+                                "Sigurnosni kod": field4
+                            ].filter { !$0.value.isEmpty }
+                        case "Identitet":
+                            extra = [
+                                "Puno ime": field1,
+                                "Broj dokumenta": field2,
+                                "Datum isteka": field3
+                            ].filter { !$0.value.isEmpty }
+                        case "Wi-Fi":
+                            extra = [
+                                "Naziv mreže": field1,
+                                "Vrsta zaštite": field2
+                            ].filter { !$0.value.isEmpty }
+                        default:
+                            extra = [:]
+                        }
+
                         store.save(
                             VaultItem(
                                 id: original?.id ?? UUID(),
-                                title: title,
-                                username: username,
-                                password: password,
-                                website: website,
-                                notes: notes,
+                                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                username: (type == "Prijava" || type == "Wi-Fi") ? username.trimmingCharacters(in: .whitespacesAndNewlines) : "",
+                                password: (type == "Prijava" || type == "Wi-Fi") ? password : "",
+                                website: type == "Prijava" ? website.trimmingCharacters(in: .whitespacesAndNewlines) : "",
+                                notes: String(notes.prefix(1000)).trimmingCharacters(in: .whitespacesAndNewlines),
                                 category: category,
-                                favorite: favorite
+                                favorite: favorite,
+                                type: type,
+                                fields: extra
                             )
                         )
                     } label: {
-                        Label("Spremi", systemImage: "lock.fill")
+                        Label(type == "Prijava" ? "Spremi prijavu" : "Spremi stavku", systemImage: "lock.fill")
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -1267,6 +1603,7 @@ struct KeyraField: View {
 struct DetailView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var reveal = false
+    @State private var revealSensitive = false
 
     var body: some View {
         if let item = store.selected {
@@ -1275,9 +1612,24 @@ struct DetailView: View {
                     Button { store.open(.vault) } label: {
                         Image(systemName: "chevron.left").font(.title2).foregroundStyle(.white)
                     }
+
+                    Image(systemName: {
+                        switch item.kind {
+                        case "Bilješka": return "doc.text.fill"
+                        case "Kartica": return "creditcard.fill"
+                        case "Identitet": return "person.text.rectangle.fill"
+                        case "Wi-Fi": return "wifi"
+                        default: return "lock.fill"
+                        }
+                    }())
+                    .foregroundStyle(cyan)
+                    .frame(width: 52, height: 52)
+                    .background(cyan.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+
                     VStack(alignment: .leading) {
-                        Text(item.title).font(.system(size: 34, weight: .black)).foregroundStyle(.white)
-                        Text("Prijava • \(item.category)").foregroundStyle(muted)
+                        Text(item.title).font(.system(size: 32, weight: .black)).foregroundStyle(.white)
+                        Text(item.kind + " • " + item.category).foregroundStyle(muted)
                     }
                     Spacer()
                     if item.favorite { Image(systemName: "star.fill").foregroundStyle(warn) }
@@ -1286,16 +1638,34 @@ struct DetailView: View {
 
                 ScrollView {
                     VStack(spacing: 10) {
-                        if !item.website.isEmpty {
-                            DetailRow(icon: "link", title: "Web-stranica", value: item.website)
-                        }
-                        if !item.username.isEmpty {
-                            DetailRow(icon: "person", title: "Korisničko ime / e-pošta", value: item.username) {
-                                SecureClipboard.copy(item.username)
-                                store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                        if item.kind == "Prijava" {
+                            if !item.website.isEmpty {
+                                DetailRow(icon: "link", title: "Web-stranica", value: item.website)
+                            }
+                            if !item.username.isEmpty {
+                                DetailRow(icon: "person", title: "Korisničko ime / e-pošta", value: item.username) {
+                                    SecureClipboard.copy(item.username)
+                                    store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                }
                             }
                         }
-                        if !item.password.isEmpty {
+
+                        if item.kind == "Wi-Fi" {
+                            if let network = item.extraFields["Naziv mreže"], !network.isEmpty {
+                                DetailRow(icon: "wifi", title: "Naziv mreže", value: network)
+                            }
+                            if !item.username.isEmpty {
+                                DetailRow(icon: "person", title: "Korisničko ime", value: item.username) {
+                                    SecureClipboard.copy(item.username)
+                                    store.message = "Korisničko ime kopirano je i automatski će se ukloniti."
+                                }
+                            }
+                            if let security = item.extraFields["Vrsta zaštite"], !security.isEmpty {
+                                DetailRow(icon: "shield", title: "Vrsta zaštite", value: security)
+                            }
+                        }
+
+                        if (item.kind == "Prijava" || item.kind == "Wi-Fi") && !item.password.isEmpty {
                             PasswordDetailRow(
                                 password: item.password,
                                 reveal: $reveal,
@@ -1305,6 +1675,64 @@ struct DetailView: View {
                                 }
                             )
                         }
+
+                        if item.kind == "Kartica" {
+                            if let holder = item.extraFields["Vlasnik kartice"], !holder.isEmpty {
+                                DetailRow(icon: "person", title: "Vlasnik kartice", value: holder)
+                            }
+                            if let number = item.extraFields["Broj kartice"], !number.isEmpty {
+                                SensitiveDetailView(
+                                    icon: "creditcard",
+                                    title: "Broj kartice",
+                                    value: number,
+                                    hidden: "•••• •••• •••• " + String(number.suffix(4)),
+                                    reveal: $revealSensitive,
+                                    onCopy: {
+                                        SecureClipboard.copy(number)
+                                        store.message = "Broj kartice kopiran je i automatski će se ukloniti."
+                                    }
+                                )
+                            }
+                            if let expiry = item.extraFields["Vrijedi do"], !expiry.isEmpty {
+                                DetailRow(icon: "calendar", title: "Vrijedi do", value: expiry)
+                            }
+                            if let code = item.extraFields["Sigurnosni kod"], !code.isEmpty {
+                                SensitiveDetailView(
+                                    icon: "lock",
+                                    title: "Sigurnosni kod",
+                                    value: code,
+                                    hidden: "•••",
+                                    reveal: $revealSensitive,
+                                    onCopy: {
+                                        SecureClipboard.copy(code)
+                                        store.message = "Sigurnosni kod kopiran je i automatski će se ukloniti."
+                                    }
+                                )
+                            }
+                        }
+
+                        if item.kind == "Identitet" {
+                            if let name = item.extraFields["Puno ime"], !name.isEmpty {
+                                DetailRow(icon: "person", title: "Puno ime", value: name)
+                            }
+                            if let number = item.extraFields["Broj dokumenta"], !number.isEmpty {
+                                SensitiveDetailView(
+                                    icon: "person.text.rectangle",
+                                    title: "Broj dokumenta",
+                                    value: number,
+                                    hidden: "••••" + String(number.suffix(4)),
+                                    reveal: $revealSensitive,
+                                    onCopy: {
+                                        SecureClipboard.copy(number)
+                                        store.message = "Broj dokumenta kopiran je i automatski će se ukloniti."
+                                    }
+                                )
+                            }
+                            if let expiry = item.extraFields["Datum isteka"], !expiry.isEmpty {
+                                DetailRow(icon: "calendar", title: "Datum isteka", value: expiry)
+                            }
+                        }
+
                         if !item.notes.isEmpty {
                             DetailRow(icon: "doc.text", title: "Bilješke", value: item.notes)
                         }
@@ -1337,6 +1765,46 @@ struct DetailView: View {
                 }
             }
         }
+    }
+}
+
+struct SensitiveDetailView: View {
+    let icon: String
+    let title: String
+    let value: String
+    let hidden: String
+    @Binding var reveal: Bool
+    let onCopy: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(cyan)
+                .frame(width: 48, height: 48)
+                .background(Color(hex: 0x063A3A))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.caption).foregroundStyle(muted)
+                Text(reveal ? value : hidden).foregroundStyle(.white)
+            }
+
+            Spacer()
+
+            Button { reveal.toggle() } label: {
+                Image(systemName: reveal ? "eye.slash" : "eye").foregroundStyle(ice)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onCopy) {
+                Image(systemName: "doc.on.doc").foregroundStyle(cyan)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(slate)
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
@@ -1480,20 +1948,21 @@ struct SecurityCenterView: View {
     @EnvironmentObject var store: KeyraStore
 
     private var duplicateIDs: Set<UUID> {
-        let groups = Dictionary(grouping: store.items.filter { !$0.password.isEmpty }, by: { $0.password })
+        let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
+        let groups = Dictionary(grouping: passwordItems, by: { $0.password })
         return Set(groups.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
     }
 
     private var weakItems: [VaultItem] {
-        store.items.filter { !$0.password.isEmpty && $0.password.count < 12 }
+        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty && $0.password.count < 12 }
     }
 
     private var strongItems: [VaultItem] {
-        store.items.filter { $0.password.count >= 12 && !duplicateIDs.contains($0.id) }
+        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && $0.password.count >= 12 && !duplicateIDs.contains($0.id) }
     }
 
     private var score: Int {
-        let passwordItems = store.items.filter { !$0.password.isEmpty }
+        let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
         guard !passwordItems.isEmpty else { return 100 }
         return Int((Double(strongItems.count) / Double(passwordItems.count)) * 100)
     }
