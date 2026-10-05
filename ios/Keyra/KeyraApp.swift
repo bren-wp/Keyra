@@ -790,6 +790,7 @@ struct SplashView: View {
 }
 
 struct BrandHeader: View {
+    @EnvironmentObject var store: KeyraStore
     let subtitle: String
 
     var body: some View {
@@ -816,9 +817,15 @@ struct BrandHeader: View {
                     .minimumScaleFactor(0.72)
             }
             Spacer(minLength: 4)
-            Image(systemName: "bell")
-                .foregroundStyle(.white)
-                .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+            Button {
+                store.message = "Nema novih sigurnosnih upozorenja."
+            } label: {
+                Image(systemName: "bell")
+                    .foregroundStyle(.white)
+                    .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Obavijesti")
             Text("K")
                 .font(.system(size: compact ? 12 : 14, weight: .bold))
                 .frame(width: compact ? 36 : 42, height: compact ? 36 : 42)
@@ -2403,7 +2410,11 @@ struct SettingsView: View {
                     }
 
                     SectionLabel("PREFERENCIJE")
-                    SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.")
+                    SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.") {
+                        Text("Uvijek uključen")
+                            .font(.caption)
+                            .foregroundStyle(cyan)
+                    }
 
                     SectionLabel("SIGURNOST I PRIVATNOST")
                     SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
