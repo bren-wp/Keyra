@@ -1446,6 +1446,7 @@ private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(model.vaultTypeFilter ?: "Sve") }
     var newestFirst by remember { mutableStateOf(true) }
+    var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val displayed = model.items
         .filter {
@@ -1484,7 +1485,34 @@ private fun VaultScreen(model: KeyraViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
+            trailingIcon = {
+                Box {
+                    IconButton(onClick = { filterMenuExpanded = true }) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Filtri i sortiranje", tint = Ice)
+                    }
+                    DropdownMenu(
+                        expanded = filterMenuExpanded,
+                        onDismissRequest = { filterMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (newestFirst) "Poredaj A–Ž" else "Poredaj po nedavnim") },
+                            onClick = {
+                                newestFirst = !newestFirst
+                                filterMenuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Prikaži sve") },
+                            onClick = {
+                                filter = "Sve"
+                                search = ""
+                                model.clearVaultCategoryFilter()
+                                filterMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            },
             colors = keyraFieldColors(),
             shape = RoundedCornerShape(24.dp)
         )
@@ -1754,6 +1782,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
     )
     var search by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Prijava") }
+    var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val collectionItems = model.items
         .filter { item ->
@@ -1806,7 +1835,43 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = side),
                 placeholder = { Text("Pretražite trezor...") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                trailingIcon = { Icon(Icons.Outlined.Tune, null, tint = Ice) },
+                trailingIcon = {
+                    Box {
+                        IconButton(onClick = { filterMenuExpanded = true }) {
+                            Icon(Icons.Outlined.Tune, contentDescription = "Filtriraj kolekcije", tint = Ice)
+                        }
+                        DropdownMenu(
+                            expanded = filterMenuExpanded,
+                            onDismissRequest = { filterMenuExpanded = false }
+                        ) {
+                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            when (value) {
+                                                "Prijava" -> "Lozinke"
+                                                "Bilješka" -> "Bilješke"
+                                                "Kartica" -> "Kartice"
+                                                else -> value
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        type = value
+                                        filterMenuExpanded = false
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Očisti pretragu") },
+                                onClick = {
+                                    search = ""
+                                    filterMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                },
                 colors = keyraFieldColors(),
                 shape = RoundedCornerShape(24.dp),
                 singleLine = true
