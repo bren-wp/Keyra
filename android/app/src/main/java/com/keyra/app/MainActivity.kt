@@ -446,28 +446,42 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleBiometric(value: Boolean) {
-        biometricEnabled = value
-        if (!value) sensitiveReauthEnabled = false
-        prefs.edit()
+        val nextSensitive = if (value) sensitiveReauthEnabled else false
+        val persisted = prefs.edit()
             .putBoolean("biometric_enabled", value)
-            .putBoolean("sensitive_reauth_enabled", sensitiveReauthEnabled)
-            .apply()
+            .putBoolean("sensitive_reauth_enabled", nextSensitive)
+            .commit()
+
+        if (persisted) {
+            biometricEnabled = value
+            sensitiveReauthEnabled = nextSensitive
+        } else {
+            message = "Postavku biometrijskog otključavanja nije moguće spremiti."
+        }
     }
 
     fun toggleSensitiveReauth(value: Boolean) {
-        sensitiveReauthEnabled = value && biometricEnabled
-        prefs.edit().putBoolean("sensitive_reauth_enabled", sensitiveReauthEnabled).apply()
+        val next = value && biometricEnabled
+        if (prefs.edit().putBoolean("sensitive_reauth_enabled", next).commit()) {
+            sensitiveReauthEnabled = next
+        } else {
+            message = "Postavku dodatne potvrde nije moguće spremiti."
+        }
     }
 
     fun cycleAutoLock() {
-        autoLockSeconds = when (autoLockSeconds) {
+        val next = when (autoLockSeconds) {
             0 -> 30
             30 -> 60
             60 -> 300
             else -> 0
         }
-        prefs.edit().putInt("auto_lock_seconds", autoLockSeconds).apply()
-        message = "Automatsko zaključavanje: " + autoLockLabel()
+        if (prefs.edit().putInt("auto_lock_seconds", next).commit()) {
+            autoLockSeconds = next
+            message = "Automatsko zaključavanje: " + autoLockLabel()
+        } else {
+            message = "Postavku automatskog zaključavanja nije moguće spremiti."
+        }
     }
 
     fun autoLockLabel(): String = when (autoLockSeconds) {
@@ -517,12 +531,20 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
 
     fun create(password: String): Boolean {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        return prefs.edit()
+        val saved = prefs.edit()
             .putString("master_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
             .putInt("master_iterations", CURRENT_ITERATIONS)
             .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
             .commit()
+        if (!saved) clear()
+        return saved
     }
+
+    fun clear(): Boolean = prefs.edit()
+        .remove("master_salt")
+        .remove("master_iterations")
+        .remove("master_hash")
+        .commit()
 
     fun verify(password: String): Boolean {
         return runCatching {
