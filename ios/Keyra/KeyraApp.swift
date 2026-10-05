@@ -2495,7 +2495,7 @@ struct SettingsView: View {
                     }
 
                     SectionLabel("SIGURNOST I PRIVATNOST")
-                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.4.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                    SettingRow(icon: "info.circle", title: "O aplikaciji Keyra", subtitle: "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
 
                     Button {
                         store.lock()
