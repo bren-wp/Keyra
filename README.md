@@ -41,7 +41,8 @@ Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi poda
 📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine; KEYRA2 kopije prenosive su između Androida i iOS-a.  
 ☁️ **Privatni cloud backup** — .keyra datoteka može se spremiti ili otvoriti kroz sistemski Files/Document picker, uključujući kompatibilne privatne cloud providere bez predaje njihovih vjerodajnica Keyri.  
 📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
-🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.
+🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.  
+🗑️ **Potpuno lokalno brisanje** — korisnik može trajno ukloniti trezor, glavnu lozinku, lokalne postavke i uređajni ključ s uređaja.
 
 ## Moj trezor
 
