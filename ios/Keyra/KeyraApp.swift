@@ -36,6 +36,14 @@ extension Color {
     }
 }
 
+func formatCardExpiry(_ raw: String) -> String {
+    let digits = raw.filter(\.isNumber).prefix(6)
+    guard digits.count > 2 else { return String(digits) }
+    let month = digits.prefix(2)
+    let year = digits.dropFirst(2)
+    return "\(month)/\(year)"
+}
+
 func normalizedWebURL(_ raw: String) -> URL? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
@@ -716,7 +724,11 @@ final class KeyraStore: ObservableObject {
             let imported = try PortableBackup.decrypt(text, password: password)
             try vault.save(imported)
             items = imported
-            message = "Sigurnosna kopija uspješno je uvezena."
+            selected = nil
+            if UIPasteboard.general.string == text {
+                UIPasteboard.general.items = []
+            }
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         } catch {
             message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
         }
@@ -1697,34 +1709,67 @@ struct VaultRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3.bold())
-                .foregroundStyle(accent)
-                .frame(width: 48, height: 48)
-                .background(accent.opacity(0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title).font(.headline).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline).foregroundStyle(muted).lineLimit(1)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                vaultIcon
+                vaultIdentity
+                Spacer(minLength: 8)
+                statusChip
             }
 
-            Spacer()
-
-            Text(state.0)
-                .font(.caption)
-                .foregroundStyle(state.1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(state.1.opacity(0.12))
-                .overlay(Capsule().stroke(state.1.opacity(0.8), lineWidth: 1))
-                .clipShape(Capsule())
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    vaultIcon
+                    vaultIdentity
+                }
+                HStack {
+                    Spacer()
+                    statusChip
+                }
+            }
         }
         .padding(14)
         .background(slate)
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var vaultIcon: some View {
+        Image(systemName: icon)
+            .font(.title3.bold())
+            .foregroundStyle(accent)
+            .frame(width: 48, height: 48)
+            .background(accent.opacity(0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var vaultIdentity: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusChip: some View {
+        Text(state.0)
+            .font(.caption)
+            .foregroundStyle(state.1)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(state.1.opacity(0.12))
+            .overlay(Capsule().stroke(state.1.opacity(0.8), lineWidth: 1))
+            .clipShape(Capsule())
     }
 }
 
@@ -2179,6 +2224,40 @@ struct AddEditView: View {
 
     private let original: VaultItem?
 
+    private var itemLabel: String {
+        switch type {
+        case "Bilješka": return "bilješku"
+        case "Kartica": return "karticu"
+        case "Identitet": return "identitet"
+        case "Wi-Fi": return "Wi-Fi"
+        default: return "prijavu"
+        }
+    }
+
+    private var screenTitle: String {
+        original == nil ? "Dodaj \(itemLabel)" : "Uredi \(itemLabel)"
+    }
+
+    private var screenSubtitle: String {
+        switch type {
+        case "Bilješka": return "Sigurno spremite privatne bilješke i osjetljive informacije"
+        case "Kartica": return "Zaštitite podatke kartice i držite ih na jednom mjestu"
+        case "Identitet": return "Sigurno spremite podatke identiteta i dokumenata"
+        case "Wi-Fi": return "Spremite naziv mreže, zaštitu i pristupne podatke"
+        default: return "Sigurno spremite svoje vjerodajnice"
+        }
+    }
+
+    private var saveLabel: String {
+        switch type {
+        case "Bilješka": return "Spremi bilješku"
+        case "Kartica": return "Spremi karticu"
+        case "Identitet": return "Spremi identitet"
+        case "Wi-Fi": return "Spremi Wi-Fi"
+        default: return "Spremi prijavu"
+        }
+    }
+
     init(store: KeyraStore) {
         self.store = store
         let item = store.selected
@@ -2235,10 +2314,10 @@ struct AddEditView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(original == nil ? "Dodaj stavku" : "Uredi stavku")
+                    Text(screenTitle)
                         .font(.system(size: 38, weight: .black))
                         .foregroundStyle(.white)
-                    Text("Sigurno spremite osjetljive podatke")
+                    Text(screenSubtitle)
                         .foregroundStyle(muted)
 
                     Text("VRSTA STAVKE")
@@ -2320,7 +2399,14 @@ struct AddEditView: View {
                             .onChange(of: field2) { _, value in
                                 field2 = String(value.filter(\.isNumber).prefix(19))
                             }
-                        KeyraField(title: "Vrijedi do", text: $field3)
+                        KeyraField(title: "Vrijedi do (MM/GG)", text: $field3)
+                            .keyboardType(.numberPad)
+                            .onChange(of: field3) { _, value in
+                                let formatted = formatCardExpiry(value)
+                                if formatted != value {
+                                    field3 = formatted
+                                }
+                            }
                         KeyraField(title: "Sigurnosni kod", text: $field4)
                             .keyboardType(.numberPad)
                             .onChange(of: field4) { _, value in
@@ -2335,6 +2421,17 @@ struct AddEditView: View {
                     }
 
                     KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
+                        .onChange(of: notes) { _, value in
+                            if value.count > 500 {
+                                notes = String(value.prefix(500))
+                            }
+                        }
+                    HStack {
+                        Spacer()
+                        Text("\(notes.count)/500")
+                            .font(.caption2)
+                            .foregroundStyle(muted)
+                    }
 
                     Toggle("Dodaj u favorite", isOn: $favorite)
                         .tint(cyan)
@@ -2376,6 +2473,13 @@ struct AddEditView: View {
                             }
                             if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
                                 return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            }
+                            if type == "Kartica", !field3.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                let expiry = field3.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let pattern = "^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$"
+                                if expiry.range(of: pattern, options: .regularExpression) == nil {
+                                    return "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
+                                }
                             }
                             if type == "Identitet",
                                field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2420,7 +2524,7 @@ struct AddEditView: View {
                                 username: (type == "Prijava" || type == "Wi-Fi") ? username.trimmingCharacters(in: .whitespacesAndNewlines) : "",
                                 password: (type == "Prijava" || type == "Wi-Fi") ? password : "",
                                 website: type == "Prijava" ? website.trimmingCharacters(in: .whitespacesAndNewlines) : "",
-                                notes: String(notes.prefix(1000)).trimmingCharacters(in: .whitespacesAndNewlines),
+                                notes: String(notes.prefix(500)).trimmingCharacters(in: .whitespacesAndNewlines),
                                 category: category,
                                 favorite: favorite,
                                 type: type,
@@ -2428,7 +2532,7 @@ struct AddEditView: View {
                             )
                         )
                     } label: {
-                        Label(type == "Prijava" ? "Spremi prijavu" : "Spremi stavku", systemImage: "lock.fill")
+                        Label(saveLabel, systemImage: "lock.fill")
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -2505,8 +2609,15 @@ struct DetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     VStack(alignment: .leading) {
-                        Text(item.title).font(.system(size: 32, weight: .black)).foregroundStyle(.white)
-                        Text(item.kind + " • " + item.category).foregroundStyle(muted)
+                        Text(item.title)
+                            .font(.system(size: 32, weight: .black))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.72)
+                        Text(item.kind + " • " + item.category)
+                            .foregroundStyle(muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     Spacer()
                     if item.favorite { Image(systemName: "star.fill").foregroundStyle(warn) }
@@ -2703,28 +2814,15 @@ struct DetailView: View {
                             }
                         }
 
-                        HStack {
-                            Button {
-                                store.editSelected()
-                            } label: {
-                                Label("Uredi stavku", systemImage: "pencil")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                detailEditButton
+                                detailDeleteButton
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(ice)
-                            .overlay(Capsule().stroke(ice.opacity(0.5), lineWidth: 1))
-
-                            Button {
-                                confirmDelete = true
-                            } label: {
-                                Label("Izbriši", systemImage: "trash")
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                            VStack(spacing: 8) {
+                                detailEditButton
+                                detailDeleteButton
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(danger)
-                            .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
                         }
                     }
                     .padding(18)
@@ -2745,6 +2843,32 @@ struct DetailView: View {
                 Text("Ova radnja ne može se poništiti.")
             }
         }
+    }
+
+    private var detailEditButton: some View {
+        Button {
+            store.editSelected()
+        } label: {
+            Label("Uredi stavku", systemImage: "pencil")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ice)
+        .overlay(Capsule().stroke(ice.opacity(0.5), lineWidth: 1))
+    }
+
+    private var detailDeleteButton: some View {
+        Button {
+            confirmDelete = true
+        } label: {
+            Label("Izbriši", systemImage: "trash")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(danger)
+        .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
     }
 }
 
@@ -3247,24 +3371,53 @@ struct SettingRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(cyan)
-                .frame(width: 48, height: 48)
-                .background(Color(hex: 0x0B3551))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.white)
-                Text(subtitle).font(.subheadline).foregroundStyle(muted)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                settingIcon
+                settingText
+                Spacer(minLength: 8)
+                trailing
             }
-            Spacer()
-            trailing
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    settingIcon
+                    settingText
+                }
+                HStack {
+                    Spacer()
+                    trailing
+                }
+            }
         }
         .padding(14)
         .background(slate)
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var settingIcon: some View {
+        Image(systemName: icon)
+            .font(.title2)
+            .foregroundStyle(cyan)
+            .frame(width: 48, height: 48)
+            .background(Color(hex: 0x0B3551))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var settingText: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

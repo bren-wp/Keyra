@@ -439,7 +439,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             items.clear()
             items.addAll(imported)
             selected = null
-            message = "Sigurnosna kopija uspješno je uvezena."
+            clearClipboardIfMatches(context, text)
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         }.onFailure {
             message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
         }
@@ -931,7 +932,7 @@ private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
 
 
 @Composable
-private fun OnboardingHeroBadge(icon: ImageVector, alignment: Alignment) {
+private fun OnboardingHeroBadge(icon: ImageVector) {
     Box(
         modifier = Modifier
             .size(46.dp)
@@ -980,16 +981,16 @@ private fun OnboardingVaultHero(compact: Boolean) {
         }
 
         Box(Modifier.align(Alignment.TopStart)) {
-            OnboardingHeroBadge(Icons.Outlined.Fingerprint, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Fingerprint)
         }
         Box(Modifier.align(Alignment.TopEnd)) {
-            OnboardingHeroBadge(Icons.Outlined.Security, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Security)
         }
         Box(Modifier.align(Alignment.BottomStart)) {
-            OnboardingHeroBadge(Icons.Outlined.CreditCard, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.CreditCard)
         }
         Box(Modifier.align(Alignment.BottomEnd)) {
-            OnboardingHeroBadge(Icons.Outlined.Cloud, Alignment.Center)
+            OnboardingHeroBadge(Icons.Outlined.Cloud)
         }
     }
 }
@@ -1734,37 +1735,82 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
     ) {
         BoxWithConstraints {
-            val compact = maxWidth < 350.dp
-            Row(
-                Modifier.padding(if (compact) 11.dp else 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-            Box(
-                Modifier.size(if (compact) 40.dp else 48.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha=.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = accent)
-            }
-            Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (compact) 15.sp else 17.sp, maxLines = 1)
-                Text(subtitle, color = Muted, fontSize = if (compact) 11.sp else 13.sp, maxLines = 1)
-            }
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = stateColor.copy(alpha=.12f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha=.8f))
-            ) {
-                Text(
-                    state,
-                    color = stateColor,
-                    fontSize = if (compact) 9.sp else 11.sp,
-                    modifier = Modifier.padding(horizontal = if (compact) 7.dp else 10.dp, vertical = if (compact) 5.dp else 7.dp),
-                    maxLines = 1
-                )
-            }
+            val compact = maxWidth < 380.dp
+            if (compact) {
+                Column(Modifier.padding(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(accent.copy(alpha=.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, null, tint = accent)
+                        }
+                        Spacer(Modifier.width(9.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    VaultStatusChip(
+                        state = state,
+                        stateColor = stateColor,
+                        modifier = Modifier.align(Alignment.End),
+                        compact = true
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(accent.copy(alpha=.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, null, tint = accent)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1)
+                        Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
+                    }
+                    VaultStatusChip(state = state, stateColor = stateColor)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun VaultStatusChip(
+    state: String,
+    stateColor: Color,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = stateColor.copy(alpha=.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha=.8f))
+    ) {
+        Text(
+            state,
+            color = stateColor,
+            fontSize = if (compact) 9.sp else 11.sp,
+            modifier = Modifier.padding(
+                horizontal = if (compact) 8.dp else 10.dp,
+                vertical = if (compact) 5.dp else 7.dp
+            ),
+            maxLines = 1
+        )
     }
 }
 
@@ -2200,6 +2246,14 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 }
 
+internal fun formatCardExpiry(raw: String): String {
+    val digits = raw.filter(Char::isDigit).take(6)
+    return when {
+        digits.length <= 2 -> digits
+        else -> digits.take(2) + "/" + digits.drop(2)
+    }
+}
+
 internal fun generatePassword(length: Int, upper: Boolean, lower: Boolean, numbers: Boolean, symbols: Boolean): String {
     val sets = buildList {
         if (upper) add("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -2276,6 +2330,29 @@ private fun AddScreen(model: KeyraViewModel) {
         mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
     }
 
+    val itemLabel = when (type) {
+        "Bilješka" -> "bilješku"
+        "Kartica" -> "karticu"
+        "Identitet" -> "identitet"
+        "Wi-Fi" -> "Wi-Fi"
+        else -> "prijavu"
+    }
+    val screenTitle = if (original == null) "Dodaj $itemLabel" else "Uredi $itemLabel"
+    val screenSubtitle = when (type) {
+        "Bilješka" -> "Sigurno spremite privatne bilješke i osjetljive informacije"
+        "Kartica" -> "Zaštitite podatke kartice i držite ih na jednom mjestu"
+        "Identitet" -> "Sigurno spremite podatke identiteta i dokumenata"
+        "Wi-Fi" -> "Spremite naziv mreže, zaštitu i pristupne podatke"
+        else -> "Sigurno spremite svoje vjerodajnice"
+    }
+    val saveLabel = when (type) {
+        "Bilješka" -> "Spremi bilješku"
+        "Kartica" -> "Spremi karticu"
+        "Identitet" -> "Spremi identitet"
+        "Wi-Fi" -> "Spremi Wi-Fi"
+        else -> "Spremi prijavu"
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxWidth < 360.dp
 
@@ -2300,12 +2377,12 @@ private fun AddScreen(model: KeyraViewModel) {
         ) {
             item {
                 Text(
-                    if (original == null) "Dodaj stavku" else "Uredi stavku",
+                    screenTitle,
                     color = Color.White,
                     fontSize = if (compact) 32.sp else 38.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-                Text("Sigurno spremite osjetljive podatke", color = Muted)
+                Text(screenSubtitle, color = Muted)
             }
 
             item {
@@ -2371,7 +2448,7 @@ private fun AddScreen(model: KeyraViewModel) {
             if (type == "Kartica") {
                 item { KeyraTextField(field1, { field1 = it }, "Vlasnik kartice", Icons.Outlined.Person) }
                 item { KeyraTextField(field2, { field2 = it.filter(Char::isDigit).take(19) }, "Broj kartice", Icons.Outlined.CreditCard) }
-                item { KeyraTextField(field3, { field3 = it.take(7) }, "Vrijedi do", Icons.Outlined.DateRange) }
+                item { KeyraTextField(field3, { field3 = formatCardExpiry(it) }, "Vrijedi do (MM/GG)", Icons.Outlined.DateRange) }
                 item { KeyraTextField(field4, { field4 = it.filter(Char::isDigit).take(4) }, "Sigurnosni kod", Icons.Outlined.Lock) }
             }
 
@@ -2381,7 +2458,12 @@ private fun AddScreen(model: KeyraViewModel) {
                 item { KeyraTextField(field3, { field3 = it }, "Datum isteka", Icons.Outlined.DateRange) }
             }
 
-            item { KeyraTextField(notes, { notes = it.take(1000) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false) }
+            item {
+                KeyraTextField(notes, { notes = it.take(500) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Text(notes.length.toString() + "/500", color = Muted, fontSize = 11.sp)
+                }
+            }
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2415,6 +2497,8 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
                                 "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            type == "Kartica" && field3.isNotBlank() && !Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matches(field3.trim()) ->
+                                "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
                             type == "Identitet" && field1.isBlank() && field2.isBlank() ->
                                 "Unesite puno ime ili broj dokumenta."
                             else -> null
@@ -2463,7 +2547,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Lock, null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (type == "Prijava") "Spremi prijavu" else "Spremi stavku", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(saveLabel, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
             }
         }
@@ -2759,25 +2843,53 @@ private fun DetailScreen(
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = model::editSelected,
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f))
-                    ) {
-                        Icon(Icons.Outlined.Edit, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Uredi stavku")
-                    }
-                    OutlinedButton(
-                        onClick = { confirmDelete = true },
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
-                    ) {
-                        Icon(Icons.Outlined.Delete, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Izbriši")
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth < 390.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = model::editSelected,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f)),
+                                shape = RoundedCornerShape(26.dp)
+                            ) {
+                                Icon(Icons.Outlined.Edit, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Uredi stavku")
+                            }
+                            OutlinedButton(
+                                onClick = { confirmDelete = true },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
+                                shape = RoundedCornerShape(26.dp)
+                            ) {
+                                Icon(Icons.Outlined.Delete, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Izbriši")
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = model::editSelected,
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f))
+                            ) {
+                                Icon(Icons.Outlined.Edit, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Uredi stavku")
+                            }
+                            OutlinedButton(
+                                onClick = { confirmDelete = true },
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
+                            ) {
+                                Icon(Icons.Outlined.Delete, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Izbriši")
+                            }
+                        }
                     }
                 }
             }
@@ -3072,23 +3184,68 @@ private fun SettingRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     Surface(
-        modifier = Modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
         shape = RoundedCornerShape(20.dp),
         color = Slate,
         border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
     ) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF0B3551)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = Cyan)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(subtitle, color = Muted, fontSize = 13.sp)
-            }
-            trailing?.invoke()
-            if (onClick != null && trailing == null) {
-                Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+        BoxWithConstraints {
+            val compact = maxWidth < 380.dp
+            if (compact && trailing != null) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(13.dp))
+                                .background(Color(0xFF0B3551)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, null, tint = Cyan)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
+                            Text(subtitle, color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.align(Alignment.End)) {
+                        trailing.invoke()
+                    }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(if (compact) 12.dp else 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(if (compact) 44.dp else 48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF0B3551)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, null, tint = Cyan)
+                    }
+                    Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            title,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (compact) 15.sp else 17.sp,
+                            maxLines = 2
+                        )
+                        Text(subtitle, color = Muted, fontSize = if (compact) 12.sp else 13.sp)
+                    }
+                    trailing?.invoke()
+                    if (onClick != null && trailing == null) {
+                        Icon(Icons.Outlined.ChevronRight, null, tint = Ice)
+                    }
+                }
             }
         }
     }
