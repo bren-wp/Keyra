@@ -811,6 +811,39 @@ enum PortableBackup {
     }
 }
 
+struct KeyraBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] {
+        [UTType(filenameExtension: "keyra") ?? .data, .data, .plainText]
+    }
+
+    var payload: String
+
+    init(payload: String = "") {
+        self.payload = payload
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw KeyraError.invalidBackup
+        }
+        guard data.count <= 2_500_000 else {
+            throw KeyraError.invalidBackup
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw KeyraError.invalidBackup
+        }
+        payload = text
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let data = Data(payload.utf8)
+        guard data.count <= 2_500_000 else {
+            throw KeyraError.invalidBackup
+        }
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
+
 func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
     let passwordItems = items.filter {
         ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty
@@ -1160,43 +1193,61 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func copyBackup() {
+    func makeBackupPayload() -> String? {
         guard let password = sessionPassword else {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return
+            return nil
         }
         do {
-            SecureClipboard.copy(try PortableBackup.encrypt(items, password: password))
-            message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+            return try PortableBackup.encrypt(items, password: password)
         } catch {
             message = "Sigurnosnu kopiju nije moguće izraditi."
+            return nil
         }
     }
 
-    func importBackup() {
+    func copyBackup() {
+        guard let payload = makeBackupPayload() else { return }
+        SecureClipboard.copy(payload)
+        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    @discardableResult
+    func importBackupPayload(_ text: String) -> Bool {
         guard let password = sessionPassword else {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return
+            return false
         }
-        guard let text = UIPasteboard.general.string else {
-            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
-            return
+        guard !text.isEmpty else {
+            message = "Odabrana sigurnosna kopija je prazna."
+            return false
         }
         guard text.utf8.count <= 2_500_000 else {
             message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return
+            return false
         }
+
         do {
             let imported = try PortableBackup.decrypt(text, password: password)
             try vault.save(imported)
             items = imported
             selected = nil
-            if UIPasteboard.general.string == text {
-                UIPasteboard.general.items = []
-            }
-            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
+            message = "Sigurnosna kopija uspješno je uvezena."
+            return true
         } catch {
-            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
+            return false
+        }
+    }
+
+    func importBackup() {
+        guard let text = UIPasteboard.general.string else {
+            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
+            return
+        }
+        if importBackupPayload(text), UIPasteboard.general.string == text {
+            UIPasteboard.general.items = []
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         }
     }
 
