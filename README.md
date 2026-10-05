@@ -34,6 +34,7 @@ Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez ne
 👆 **Biometrijsko otključavanje** — Brz pristup uz Face ID, Touch ID, prepoznavanje lica ili otisak prsta kada ih uređaj podržava.  
 🛡️ **Automatsko zaključavanje** — Odmah ili nakon 30 sekundi, 1 minute ili 5 minuta.  
 🔑 **Zaštita od pokušaja pogađanja** — Više uzastopnih pogrešnih pokušaja privremeno zaključava unos.  
+📱 **Prilagodljivo sučelje** — Sadržaj, navigacija i glavni gumbi prilagođavaju se manjim telefonima, većim ekranima, tabletima i vodoravnom prikazu.  
 👁️ **Potvrda prije prikaza tajni** — Po želji se traži biometrija ili šifra uređaja prije prikaza i kopiranja lozinki, kartica i dokumenata.  
 🧩 **Sve na jednom mjestu** — Prijave, bilješke, kartice, identiteti, Wi‑Fi i favoriti.  
 ✨ **Generator lozinki** — Snažne i jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
