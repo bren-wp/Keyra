@@ -1,33 +1,40 @@
-name: Izdanje 0.5.0
+name: Ručno GitHub izdanje
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/release.yml"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji, npr. 0.5.0"
+        required: true
+        default: "0.5.0"
 
 permissions:
   contents: write
 
 env:
-  VERSION: "0.5.0"
+  VERSION: ${{ inputs.version }}
 
 jobs:
   android:
     name: Android paketi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "8.13"
+
+      - name: Provjeri usklađenost verzije
+        run: |
+          set -euo pipefail
+          grep -F "versionName = \"${VERSION}\"" android/app/build.gradle.kts
+          grep -F "MARKETING_VERSION = ${VERSION};" ios/Keyra.xcodeproj/project.pbxproj
 
       - name: Izradi APK i AAB
         run: |
@@ -49,7 +56,7 @@ jobs:
     name: iOS paketi
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Izradi paket za iPhone i iPad
         run: |
@@ -130,7 +137,7 @@ jobs:
     needs: [android, ios]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v4
         with:
@@ -140,49 +147,22 @@ jobs:
 
       - name: Pripremi bilješke izdanja
         run: |
-          cat > RELEASE_NOTES.md <<'EOF'
-          # Keyra 0.5.0
+          cat > RELEASE_NOTES.md <<EOF
+          # Keyra ${VERSION}
 
-          Keyra 0.5.0 usmjerena je na stabilnost, sigurnije rukovanje podacima i dovršavanje svakodnevnih radnji u trezoru.
+          Ovo GitHub izdanje sadrži provjerene razvojne pakete iz točnog release commita.
 
-          ## Novo i poboljšano
-          - zaštita od rušenja pri oštećenim ili neočekivanim spremljenim podacima
-          - postojeći sadržaj trezora ostaje sačuvan ako spremanje, brisanje ili uvoz ne uspiju
-          - sigurnosne kopije provjeravaju format, veličinu i dopušten broj stavki prije uvoza
-          - poboljšano rukovanje Android Keystore i Apple Keychain pogreškama
-          - uklonjena prisilna iOS provjera koja je u rijetkim slučajevima mogla zatvoriti aplikaciju
-          - potvrda prije trajnog brisanja stavke
-          - broj kartice, sigurnosni kod i broj dokumenta otkrivaju se zasebno
-          - web-adrese se provjeravaju prije otvaranja i ne mogu srušiti prikaz detalja
-          - kartice u Kolekcijama sada otvaraju odgovarajuće filtrirani Trezor
-          - aktivni filtar kategorije jasno je prikazan i može se ukloniti jednim dodirom
-          - gumb obavijesti više nije neaktivan i prikazuje stvarno stanje
-          - postavka tamnog prikaza jasno pokazuje da je uvijek uključena
-          - zadržana su sva poboljšanja prilagodbe malim telefonima, većim ekranima, tabletima i vodoravnom prikazu iz 0.4.0
+          ## Provjere
+          - Android lint i unit testovi
+          - Android debug/release APK i release AAB
+          - iOS Release build i analyze
+          - iOS simulator launch smoke test
+          - SHA-256 kontrolne sume artefakata
 
-          ## Dodatne provjere kvalitete
-          - proširene automatske provjere Android paketa
-          - proširena analiza iOS aplikacije
-          - automatska provjera pokretanja iOS aplikacije u simulatoru prije objave
-          - izdanje se objavljuje tek nakon uspješnih Android i iOS provjera
+          ## Važno za trgovine
+          Android AAB i iOS IPA iz ovog javnog workflowa nisu zamjena za produkcijsko store potpisivanje. Google Play upload mora biti potpisan upload ključem/Play App Signingom, a App Store build odgovarajućim Apple distribucijskim identitetom i provisioning profilom.
 
-          ## Sigurnost
-          - AES-256-GCM zaštita sadržaja trezora
-          - ključevi zaštićeni Android Keystoreom ili Apple Keychainom
-          - PBKDF2-HMAC-SHA-256 s 600.000 iteracija
-          - dodatna potvrda identiteta prije prikaza i kopiranja osjetljivih podataka
-          - podesivo automatsko zaključavanje
-          - zaštita od uzastopnog pogađanja glavne lozinke
-          - osjetljivi sadržaj međuspremnika automatski istječe
-
-          ## Paketi
-          - `Keyra-0.5.0-Android.apk`
-          - `Keyra-0.5.0-Android.aab`
-          - `Keyra-0.5.0-Android-unsigned.apk`
-          - `Keyra-0.5.0-iOS-unsigned.ipa`
-          - `Keyra-0.5.0-iOS-Simulator.zip`
-
-          iOS paket bez distribucijskog potpisa potrebno je potpisati odgovarajućim Apple certifikatom i profilom prije instalacije na fizički uređaj ili objave.
+          Pogledajte docs/STORE_RELEASE_CHECKLIST.md prije objave u trgovinama.
           EOF
 
       - name: Objavi ili ažuriraj GitHub izdanje
