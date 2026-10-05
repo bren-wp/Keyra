@@ -355,6 +355,8 @@ final class KeyraStore: ObservableObject {
     @Published var screen: KeyraScreen
     @Published var selected: VaultItem?
     @Published var message: String?
+    @Published var vaultCategoryFilter: String?
+    @Published var vaultTypeFilter: String?
     @Published var biometricEnabled: Bool
     @Published var sensitiveReauthEnabled: Bool
     @Published var autoLockSeconds: Int
@@ -366,13 +368,33 @@ final class KeyraStore: ObservableObject {
         let setup = auth.isSetup
         self.isSetup = setup
         self.screen = setup ? .unlock : .onboarding
+        self.vaultCategoryFilter = nil
+        self.vaultTypeFilter = nil
         self.biometricEnabled = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
         self.sensitiveReauthEnabled = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
     func startCreate() { screen = .unlock }
-    func open(_ target: KeyraScreen) { screen = target }
+
+    func open(_ target: KeyraScreen) {
+        if target == .vault {
+            vaultCategoryFilter = nil
+            vaultTypeFilter = nil
+        }
+        screen = target
+    }
+
+    func openCategory(_ category: String, type: String) {
+        vaultCategoryFilter = category
+        vaultTypeFilter = type
+        screen = .vault
+    }
+
+    func clearVaultCategoryFilter() {
+        vaultCategoryFilter = nil
+    }
+
     func addNew() { selected = nil; screen = .add }
     func editSelected() { if selected != nil { screen = .add } }
     func select(_ item: VaultItem) { selected = item; screen = .detail }
@@ -1147,7 +1169,8 @@ struct VaultView: View {
                 ].joined(separator: " ")
 
                 let searchOK = search.isEmpty || haystack.localizedCaseInsensitiveContains(search)
-                return typeOK && searchOK
+                let categoryOK = store.vaultCategoryFilter == nil || item.category == store.vaultCategoryFilter
+                return typeOK && categoryOK && searchOK
             }
             .sorted {
                 newestFirst
@@ -1211,6 +1234,35 @@ struct VaultView: View {
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
+            }
+
+            if let category = store.vaultCategoryFilter {
+                HStack {
+                    HStack(spacing: 5) {
+                        Text("Kategorija: \(category)")
+                            .font(.caption)
+                            .foregroundStyle(cyan)
+                        Button {
+                            store.clearVaultCategoryFilter()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption.bold())
+                                .foregroundStyle(cyan)
+                                .frame(width: 26, height: 26)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Ukloni filtar")
+                    }
+                    .padding(.leading, 11)
+                    .padding(.trailing, 3)
+                    .padding(.vertical, 3)
+                    .background(cyan.opacity(0.12))
+                    .overlay(Capsule().stroke(cyan.opacity(0.55), lineWidth: 1))
+                    .clipShape(Capsule())
+                    Spacer()
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 5)
             }
 
             ViewThatFits(in: .horizontal) {
@@ -1300,6 +1352,11 @@ struct VaultView: View {
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 100)
+            }
+        }
+        .onAppear {
+            if let pendingType = store.vaultTypeFilter {
+                filter = pendingType
             }
         }
     }
@@ -1539,6 +1596,10 @@ struct CollectionsView: View {
                         .background(accent.opacity(0.13))
                         .overlay(RoundedRectangle(cornerRadius: 20).stroke(accent.opacity(0.8), lineWidth: 1))
                         .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .contentShape(RoundedRectangle(cornerRadius: 20))
+                        .onTapGesture {
+                            store.openCategory(name, type: selectedType)
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
