@@ -2179,6 +2179,40 @@ struct AddEditView: View {
 
     private let original: VaultItem?
 
+    private var itemLabel: String {
+        switch type {
+        case "Bilješka": return "bilješku"
+        case "Kartica": return "karticu"
+        case "Identitet": return "identitet"
+        case "Wi-Fi": return "Wi-Fi"
+        default: return "prijavu"
+        }
+    }
+
+    private var screenTitle: String {
+        original == nil ? "Dodaj \(itemLabel)" : "Uredi \(itemLabel)"
+    }
+
+    private var screenSubtitle: String {
+        switch type {
+        case "Bilješka": return "Sigurno spremite privatne bilješke i osjetljive informacije"
+        case "Kartica": return "Zaštitite podatke kartice i držite ih na jednom mjestu"
+        case "Identitet": return "Sigurno spremite podatke identiteta i dokumenata"
+        case "Wi-Fi": return "Spremite naziv mreže, zaštitu i pristupne podatke"
+        default: return "Sigurno spremite svoje vjerodajnice"
+        }
+    }
+
+    private var saveLabel: String {
+        switch type {
+        case "Bilješka": return "Spremi bilješku"
+        case "Kartica": return "Spremi karticu"
+        case "Identitet": return "Spremi identitet"
+        case "Wi-Fi": return "Spremi Wi-Fi"
+        default: return "Spremi prijavu"
+        }
+    }
+
     init(store: KeyraStore) {
         self.store = store
         let item = store.selected
@@ -2235,10 +2269,10 @@ struct AddEditView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(original == nil ? "Dodaj stavku" : "Uredi stavku")
+                    Text(screenTitle)
                         .font(.system(size: 38, weight: .black))
                         .foregroundStyle(.white)
-                    Text("Sigurno spremite osjetljive podatke")
+                    Text(screenSubtitle)
                         .foregroundStyle(muted)
 
                     Text("VRSTA STAVKE")
@@ -2335,6 +2369,17 @@ struct AddEditView: View {
                     }
 
                     KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
+                        .onChange(of: notes) { _, value in
+                            if value.count > 500 {
+                                notes = String(value.prefix(500))
+                            }
+                        }
+                    HStack {
+                        Spacer()
+                        Text("\(notes.count)/500")
+                            .font(.caption2)
+                            .foregroundStyle(muted)
+                    }
 
                     Toggle("Dodaj u favorite", isOn: $favorite)
                         .tint(cyan)
@@ -2376,6 +2421,13 @@ struct AddEditView: View {
                             }
                             if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
                                 return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
+                            }
+                            if type == "Kartica", !field3.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                let expiry = field3.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let pattern = "^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$"
+                                if expiry.range(of: pattern, options: .regularExpression) == nil {
+                                    return "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
+                                }
                             }
                             if type == "Identitet",
                                field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2420,7 +2472,7 @@ struct AddEditView: View {
                                 username: (type == "Prijava" || type == "Wi-Fi") ? username.trimmingCharacters(in: .whitespacesAndNewlines) : "",
                                 password: (type == "Prijava" || type == "Wi-Fi") ? password : "",
                                 website: type == "Prijava" ? website.trimmingCharacters(in: .whitespacesAndNewlines) : "",
-                                notes: String(notes.prefix(1000)).trimmingCharacters(in: .whitespacesAndNewlines),
+                                notes: String(notes.prefix(500)).trimmingCharacters(in: .whitespacesAndNewlines),
                                 category: category,
                                 favorite: favorite,
                                 type: type,
@@ -2428,7 +2480,7 @@ struct AddEditView: View {
                             )
                         )
                     } label: {
-                        Label(type == "Prijava" ? "Spremi prijavu" : "Spremi stavku", systemImage: "lock.fill")
+                        Label(saveLabel, systemImage: "lock.fill")
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
