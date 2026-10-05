@@ -32,7 +32,8 @@ Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez ne
 
 🔐 **Potpuno šifrirano** — Vaše osjetljive informacije ostaju zaštićene.  
 👆 **Biometrijsko otključavanje** — Brz pristup uz Face ID, Touch ID, prepoznavanje lica ili otisak prsta kada ih uređaj podržava.  
-🛡️ **Automatsko zaključavanje** — Trezor se zaključava kada napustite aplikaciju.  
+🛡️ **Automatsko zaključavanje** — Odmah ili nakon 30 sekundi, 1 minute ili 5 minuta.  
+🔑 **Zaštita od pokušaja pogađanja** — Više uzastopnih pogrešnih pokušaja privremeno zaključava unos.  
 🧩 **Sve na jednom mjestu** — Prijave, bilješke, kartice, identiteti, Wi‑Fi i favoriti.  
 ✨ **Generator lozinki** — Snažne i jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
 📦 **Sigurnosna kopija** — Vaši podaci mogu se spremiti i vratiti u šifriranom obliku.  
@@ -40,7 +41,7 @@ Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez ne
 
 ## Moj trezor
 
-Brza pretraga, kategorije, favoriti i pregled sigurnosti dostupni su odmah po otključavanju.
+Brza pretraga, filteri prema vrsti stavke, kategorije, favoriti i pregled sigurnosti dostupni su odmah po otključavanju. Prijave, bilješke, kartice, identiteti i Wi‑Fi podaci imaju prilagođene prikaze i polja.
 
 <div align="center">
 <img src="assets/screens/vault.svg" alt="Moj trezor" width="320">
@@ -64,7 +65,7 @@ Odaberite duljinu lozinke te velika i mala slova, brojeve i simbole. Nova lozink
 
 ## Dodavanje i uređivanje
 
-Svaku prijavu možete urediti, označiti kao favorit, razvrstati u odgovarajuću kategoriju i dopuniti bilješkama.
+Dodajte prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi podatke. Svaku stavku možete urediti, označiti kao favorit, razvrstati u odgovarajuću kategoriju i dopuniti bilješkama. Osjetljiva polja ostaju skrivena dok ih ne odlučite prikazati.
 
 <div align="center">
 <img src="assets/screens/add-login.svg" alt="Dodaj prijavu" width="280">
@@ -77,7 +78,7 @@ Keyra prepoznaje slabe i ponovno korištene lozinke te ih izdvaja kako biste odm
 
 ## Postavke i sigurnost
 
-Biometrijsko otključavanje, sigurnosne kopije, provjera sigurnosti i zaključavanje trezora objedinjeni su na jednom mjestu.
+Biometrijsko otključavanje, podesivo automatsko zaključavanje, sigurnosne kopije, provjera sigurnosti i ručno zaključavanje trezora objedinjeni su na jednom mjestu.
 
 <div align="center">
 <img src="assets/screens/settings.svg" alt="Postavke i sigurnost" width="320">
