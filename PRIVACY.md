@@ -10,4 +10,6 @@ Korisnik može uključiti dodatnu potvrdu identiteta prije prikaza ili kopiranja
 
 Korisnik sam upravlja sigurnosnim kopijama, uvozom i izvozom svojih podataka. Sigurnosne kopije koje izrađuje Keyra dodatno su šifrirane glavnom lozinkom.
 
+Ako korisnik spremi TOTP / 2FA autentifikator, TOTP tajna ostaje dio šifriranog trezora. Vremenski kod izračunava se lokalno na uređaju i za njegovo generiranje nije potrebno slati TOTP tajnu udaljenom poslužitelju.
+
 Keyra ne umeće probne vjerodajnice u novi trezor.

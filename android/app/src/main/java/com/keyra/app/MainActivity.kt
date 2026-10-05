@@ -3644,7 +3644,7 @@ private fun TotpCodeCard(
             }
 
             Text(
-                "Kod ovisi o točnom vremenu uređaja i generira se lokalno bez slanja TOTP tajne.",
+                "Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.",
                 color = Muted,
                 fontSize = 12.sp
             )

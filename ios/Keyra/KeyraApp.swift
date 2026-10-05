@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import CryptoKit
 import CommonCrypto
@@ -3711,7 +3712,7 @@ struct TotpCodeCard: View {
                 .font(.caption)
                 .foregroundStyle(muted)
 
-            Text("Kod ovisi o točnom vremenu uređaja i generira se lokalno bez slanja TOTP tajne.")
+            Text("Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.")
                 .font(.caption)
                 .foregroundStyle(muted)
         }
