@@ -345,17 +345,70 @@ final class EncryptedVault {
 enum PortableBackup {
     private static let maxPayloadBytes = 2_500_000
     private static let maxVaultItems = 10_000
+    private static let saltBytes = 16
+    private static let nonceBytes = 12
+    private static let tagBytes = 16
+    private static let legacyIOSIterations = 120_000
+    private static let legacyAndroidIterations = 180_000
+
+    private struct PortableVaultItem: Codable {
+        let id: String
+        let title: String
+        let username: String
+        let password: String
+        let website: String
+        let notes: String
+        let category: String
+        let favorite: Bool
+        let type: String
+        let fields: [String: String]
+        let updatedAt: Int64
+
+        init(_ item: VaultItem) {
+            id = item.id.uuidString
+            title = item.title
+            username = item.username
+            password = item.password
+            website = item.website
+            notes = item.notes
+            category = item.category
+            favorite = item.favorite
+            type = item.kind
+            fields = item.extraFields
+            updatedAt = Int64((item.updatedAt.timeIntervalSince1970 * 1000.0).rounded())
+        }
+
+        func vaultItem() -> VaultItem {
+            VaultItem(
+                id: UUID(uuidString: id) ?? UUID(),
+                title: title,
+                username: username,
+                password: password,
+                website: website,
+                notes: notes,
+                category: category,
+                favorite: favorite,
+                type: type,
+                fields: fields,
+                updatedAt: Date(timeIntervalSince1970: Double(updatedAt) / 1000.0)
+            )
+        }
+    }
 
     static func encrypt(_ items: [VaultItem], password: String) throws -> String {
-        var salt = [UInt8](repeating: 0, count: 16)
+        var salt = [UInt8](repeating: 0, count: saltBytes)
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
         let saltData = Data(salt)
         let key = SymmetricKey(data: try PasswordTools.derive(password, salt: saltData))
-        let clear = try JSONEncoder().encode(items)
+        let portableItems = items.map(PortableVaultItem.init)
+        let clear = try JSONEncoder().encode(portableItems)
         let sealed = try AES.GCM.seal(clear, using: key)
         guard let combined = sealed.combined else { throw KeyraError.invalidBackup }
+
+        // Shared KEYRA2 format on iOS and Android:
+        // version.iterations.salt.(12-byte nonce + ciphertext + 16-byte GCM tag)
         return [
             "KEYRA2",
             String(PasswordTools.currentIterations),
@@ -370,35 +423,172 @@ enum PortableBackup {
         }
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
 
-        let iterations: Int
-        let saltPart: Substring
-        let payloadPart: Substring
-        if parts.count == 4, parts[0] == "KEYRA2", let parsed = Int(parts[1]), (100_000...2_000_000).contains(parsed) {
-            iterations = parsed
-            saltPart = parts[2]
-            payloadPart = parts[3]
-        } else if parts.count == 3, parts[0] == "KEYRA1" {
-            iterations = 120_000
-            saltPart = parts[1]
-            payloadPart = parts[2]
-        } else {
-            throw KeyraError.invalidBackup
+        if
+            parts.count == 4,
+            parts[0] == "KEYRA2",
+            let iterations = Int(parts[1]),
+            (100_000...2_000_000).contains(iterations),
+            let salt = decodeSalt(parts[2]),
+            let combined = Data(base64Encoded: String(parts[3]))
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [iterations]
+            )
         }
 
-        guard
-            let salt = Data(base64Encoded: String(saltPart)),
-            let combined = Data(base64Encoded: String(payloadPart))
-        else { throw KeyraError.invalidBackup }
-
-        let key = SymmetricKey(data: try PasswordTools.derive(password, salt: salt, iterations: iterations))
-        let box = try AES.GCM.SealedBox(combined: combined)
-        let clear = try AES.GCM.open(box, using: key)
-        let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
-        guard decoded.count <= maxVaultItems else {
-            throw KeyraError.invalidBackup
+        // Legacy Android KEYRA2 stored nonce and ciphertext/tag separately.
+        if
+            parts.count == 5,
+            parts[0] == "KEYRA2",
+            let iterations = Int(parts[1]),
+            (100_000...2_000_000).contains(iterations),
+            let salt = decodeSalt(parts[2]),
+            let combined = combineLegacyParts(noncePart: parts[3], payloadPart: parts[4])
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [iterations]
+            )
         }
-        return decoded
+
+        // Legacy iOS KEYRA1 used CryptoKit combined data and 120k iterations.
+        if
+            parts.count == 3,
+            parts[0] == "KEYRA1",
+            let salt = decodeSalt(parts[1]),
+            let combined = Data(base64Encoded: String(parts[2]))
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [legacyIOSIterations, legacyAndroidIterations]
+            )
+        }
+
+        // Legacy Android KEYRA1 stored nonce and ciphertext/tag separately.
+        if
+            parts.count == 4,
+            parts[0] == "KEYRA1",
+            let salt = decodeSalt(parts[1]),
+            let combined = combineLegacyParts(noncePart: parts[2], payloadPart: parts[3])
+        {
+            return try decryptCombined(
+                combined,
+                password: password,
+                salt: salt,
+                iterations: [legacyAndroidIterations, legacyIOSIterations]
+            )
+        }
+
+        throw KeyraError.invalidBackup
     }
+
+    private static func decodeSalt(_ value: Substring) -> Data? {
+        guard
+            let salt = Data(base64Encoded: String(value)),
+            salt.count == saltBytes
+        else {
+            return nil
+        }
+        return salt
+    }
+
+    private static func combineLegacyParts(
+        noncePart: Substring,
+        payloadPart: Substring
+    ) -> Data? {
+        guard
+            let nonce = Data(base64Encoded: String(noncePart)),
+            nonce.count == nonceBytes,
+            let payload = Data(base64Encoded: String(payloadPart)),
+            payload.count >= tagBytes
+        else {
+            return nil
+        }
+        var combined = Data()
+        combined.append(nonce)
+        combined.append(payload)
+        return combined
+    }
+
+    private static func decryptCombined(
+        _ combined: Data,
+        password: String,
+        salt: Data,
+        iterations: [Int]
+    ) throws -> [VaultItem] {
+        guard
+            salt.count == saltBytes,
+            combined.count >= nonceBytes + tagBytes
+        else {
+            throw KeyraError.invalidBackup
+        }
+
+        var lastError: Error?
+        for iterationCount in iterations {
+            do {
+                let key = SymmetricKey(
+                    data: try PasswordTools.derive(
+                        password,
+                        salt: salt,
+                        iterations: iterationCount
+                    )
+                )
+                let box = try AES.GCM.SealedBox(combined: combined)
+                let clear = try AES.GCM.open(box, using: key)
+
+                let decoded: [VaultItem]
+                if let portable = try? JSONDecoder().decode([PortableVaultItem].self, from: clear) {
+                    decoded = portable.map { $0.vaultItem() }
+                } else {
+                    // Backward compatibility with legacy iOS backups that encoded VaultItem directly.
+                    decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
+                }
+
+                guard decoded.count <= maxVaultItems else {
+                    throw KeyraError.invalidBackup
+                }
+                return decoded
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let lastError = lastError {
+            throw lastError
+        }
+        throw KeyraError.invalidBackup
+    }
+}
+
+func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
+    let passwordItems = items.filter {
+        ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty
+    }
+    let duplicateIDs = Set(
+        Dictionary(grouping: passwordItems, by: { $0.password })
+            .values
+            .filter { $0.count > 1 }
+            .flatMap { $0.map(\.id) }
+    )
+    let weakIDs = Set(passwordItems.filter { !isStrongPassword($0.password) }.map(\.id))
+    return duplicateIDs.union(weakIDs)
+}
+
+func securityIssueCount(_ items: [VaultItem]) -> Int {
+    securityIssueIDs(items).count
+}
+
+func deviceAuthenticationAvailable() -> Bool {
+    let context = LAContext()
+    var error: NSError?
+    return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
 }
 
 final class KeyraStore: ObservableObject {
@@ -426,8 +616,11 @@ final class KeyraStore: ObservableObject {
         self.screen = setup ? .unlock : .onboarding
         self.vaultCategoryFilter = nil
         self.vaultTypeFilter = nil
-        self.biometricEnabled = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
-        self.sensitiveReauthEnabled = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
+        let authenticationAvailable = deviceAuthenticationAvailable()
+        let savedBiometric = defaults.object(forKey: "biometric_enabled") as? Bool ?? true
+        let savedSensitiveReauth = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
+        self.biometricEnabled = savedBiometric && authenticationAvailable
+        self.sensitiveReauthEnabled = savedSensitiveReauth && savedBiometric && authenticationAvailable
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
     }
 
@@ -638,6 +831,13 @@ final class KeyraStore: ObservableObject {
     }
 
     func toggleBiometric(_ enabled: Bool) {
+        if enabled && !deviceAuthenticationAvailable() {
+            biometricEnabled = false
+            sensitiveReauthEnabled = false
+            message = "Biometrija ili zaključavanje uređaja nisu dostupni. Najprije zaštitite uređaj."
+            return
+        }
+
         biometricEnabled = enabled
         if !enabled { sensitiveReauthEnabled = false }
         defaults.set(enabled, forKey: "biometric_enabled")
@@ -945,6 +1145,10 @@ struct BrandHeader: View {
     @EnvironmentObject var store: KeyraStore
     let subtitle: String
 
+    private var notificationCount: Int {
+        securityIssueCount(store.items)
+    }
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             header(compact: false)
@@ -972,12 +1176,29 @@ struct BrandHeader: View {
             Button {
                 store.open(.security)
             } label: {
-                Image(systemName: "bell")
-                    .foregroundStyle(.white)
-                    .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell")
+                        .foregroundStyle(.white)
+                        .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+
+                    if notificationCount > 0 {
+                        Text(notificationCount > 9 ? "9+" : "\(notificationCount)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(danger)
+                            .clipShape(Capsule())
+                            .offset(x: 4, y: -3)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Obavijesti")
+            .accessibilityLabel(
+                notificationCount > 0
+                    ? "Sigurnosna upozorenja: \(notificationCount)"
+                    : "Nema sigurnosnih upozorenja"
+            )
             Text("K")
                 .font(.system(size: compact ? 12 : 14, weight: .bold))
                 .frame(width: compact ? 36 : 42, height: compact ? 36 : 42)
@@ -3024,6 +3245,13 @@ struct DetailRow: View {
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
+    @State private var confirmImport = false
+
+    private func runProtectedImport() {
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+            store.importBackup()
+        }
+    }
 
     private func matches(_ values: String...) -> Bool {
         search.isEmpty || values.contains { $0.localizedCaseInsensitiveContains(search) }
@@ -3163,15 +3391,18 @@ struct SettingsView: View {
                     }
 
                     if matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija") {
-                        SettingRow(icon: "square.and.arrow.down", title: "Uvezi sigurnosnu kopiju", subtitle: "Vratite šifriranu kopiju iz međuspremnika.") {
+                        SettingRow(
+                            icon: "square.and.arrow.down",
+                            title: "Uvezi sigurnosnu kopiju",
+                            subtitle: "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
+                        ) {
                             Button {
-                                store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
-                                    store.importBackup()
-                                }
+                                confirmImport = true
                             } label: {
                                 Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi sigurnosnu kopiju")
                         }
                     }
 
@@ -3229,6 +3460,21 @@ struct SettingsView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
+        .confirmationDialog(
+            "Uvesti sigurnosnu kopiju?",
+            isPresented: $confirmImport,
+            titleVisibility: .visible
+        ) {
+            Button("Uvezi i zamijeni", role: .destructive) {
+                runProtectedImport()
+            }
+            Button("Odustani", role: .cancel) {}
+        } message: {
+            Text(
+                "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
+                "Prije nastavka provjerite da je kopija ispravna."
+            )
+        }
     }
 }
 
@@ -3249,9 +3495,9 @@ struct SecurityCenterView: View {
         store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && isStrongPassword($0.password) && !duplicateIDs.contains($0.id) }
     }
 
-    private var score: Int {
+    private var score: Int? {
         let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
-        guard !passwordItems.isEmpty else { return 100 }
+        guard !passwordItems.isEmpty else { return nil }
         return Int((Double(strongItems.count) / Double(passwordItems.count)) * 100)
     }
 
@@ -3271,23 +3517,43 @@ struct SecurityCenterView: View {
                         Text("Ocjena sigurnosti")
                             .foregroundStyle(muted)
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text("\(score)")
+                            Text(score.map(String.init) ?? "—")
                                 .font(.system(size: 54, weight: .black))
-                                .foregroundStyle(score >= 80 ? good : warn)
+                                .foregroundStyle(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
                             Text("/100")
                                 .font(.headline)
                                 .foregroundStyle(muted)
                         }
-                        ProgressView(value: Double(score), total: 100)
-                            .tint(score >= 80 ? good : warn)
-                        Text(score >= 80 ? "Vaš trezor izgleda dobro zaštićen." : "Pregledajte stavke koje zahtijevaju pažnju.")
-                            .foregroundStyle(muted)
+                        ProgressView(value: Double(score ?? 0), total: 100)
+                            .tint(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
+                        Text({
+                            guard let score else {
+                                return "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
+                            }
+                            return score >= 80
+                                ? "Vaš trezor izgleda dobro zaštićen."
+                                : "Pregledajte stavke koje zahtijevaju pažnju."
+                        }())
+                        .foregroundStyle(muted)
                     }
 
-                    HStack(spacing: 10) {
-                        Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
-                        Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
-                        Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
+                            Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                            Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
+                                    .frame(width: 110)
+                                Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                                    .frame(width: 110)
+                                Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
+                                    .frame(width: 124)
+                            }
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -3301,11 +3567,17 @@ struct SecurityCenterView: View {
                                         .foregroundStyle(duplicateIDs.contains(item.id) ? danger : warn)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(item.title).fontWeight(.bold).foregroundStyle(.white)
-                                        Text(
-                                            duplicateIDs.contains(item.id)
-                                            ? "Lozinka se koristi na više mjesta."
-                                            : "Lozinka nije dovoljno snažna i preporučuje se zamjena."
-                                        )
+                                        Text({
+                                            let duplicate = duplicateIDs.contains(item.id)
+                                            let weak = !isStrongPassword(item.password)
+                                            if duplicate && weak {
+                                                return "Lozinka je slaba i koristi se na više mjesta."
+                                            }
+                                            if duplicate {
+                                                return "Lozinka se koristi na više mjesta."
+                                            }
+                                            return "Lozinka nije dovoljno snažna i preporučuje se zamjena."
+                                        }())
                                         .font(.subheadline)
                                         .foregroundStyle(muted)
                                     }

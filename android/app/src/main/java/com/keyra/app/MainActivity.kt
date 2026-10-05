@@ -161,6 +161,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("keyra", Context.MODE_PRIVATE)
     private val auth = AuthStore(prefs)
     private val store = VaultStore(prefs)
+    private val deviceAuthenticationAvailable =
+        BiometricManager.from(app).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        ) == BiometricManager.BIOMETRIC_SUCCESS
     val items: SnapshotStateList<VaultItem> = mutableStateListOf()
 
     var isSetup by mutableStateOf(auth.isSetup())
@@ -170,8 +175,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var message by mutableStateOf<String?>(null)
     var vaultCategoryFilter by mutableStateOf<String?>(null)
     var vaultTypeFilter by mutableStateOf<String?>(null)
-    var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric_enabled", true))
-    var sensitiveReauthEnabled by mutableStateOf(prefs.getBoolean("sensitive_reauth_enabled", true))
+    var biometricEnabled by mutableStateOf(
+        prefs.getBoolean("biometric_enabled", true) && deviceAuthenticationAvailable
+    )
+    var sensitiveReauthEnabled by mutableStateOf(
+        prefs.getBoolean("sensitive_reauth_enabled", true) &&
+            prefs.getBoolean("biometric_enabled", true) &&
+            deviceAuthenticationAvailable
+    )
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     var importingNewVault by mutableStateOf(false)
     private var sessionPassword: String? = null
@@ -447,6 +458,13 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleBiometric(value: Boolean) {
+        if (value && !deviceAuthenticationAvailable) {
+            biometricEnabled = false
+            sensitiveReauthEnabled = false
+            message = "Biometrija ili zaključavanje uređaja nisu dostupni. Najprije zaštitite uređaj."
+            return
+        }
+
         val nextSensitive = if (value) sensitiveReauthEnabled else false
         val persisted = prefs.edit()
             .putBoolean("biometric_enabled", value)
@@ -620,6 +638,21 @@ private class CryptoStore {
     }
 }
 
+internal fun normalizePortableUpdatedAt(
+    raw: Double,
+    fallback: Long = System.currentTimeMillis()
+): Long {
+    if (!raw.isFinite() || raw <= 0.0) return fallback
+
+    // Legacy iOS JSONEncoder dates are seconds since 2001-01-01.
+    // Current portable Keyra backups use Unix epoch milliseconds.
+    return if (raw < 100_000_000_000.0) {
+        ((raw + 978_307_200.0) * 1000.0).toLong()
+    } else {
+        raw.toLong()
+    }
+}
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore()
 
@@ -697,7 +730,9 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
                         favorite = o.optBoolean("favorite", false),
                         type = inferredType,
                         fields = fields,
-                        updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+                        updatedAt = normalizePortableUpdatedAt(
+                            o.optDouble("updatedAt", Double.NaN)
+                        )
                     )
                 )
             }
@@ -705,47 +740,123 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     }
 }
 
-private object PortableBackup {
+internal object PortableBackup {
     private const val ITERATIONS = 600_000
+    private const val LEGACY_ANDROID_ITERATIONS = 180_000
+    private const val LEGACY_IOS_ITERATIONS = 120_000
+    private const val IV_BYTES = 12
+    private const val SALT_BYTES = 16
+    private const val TAG_BYTES = 16
 
     fun encrypt(text: String, password: String): String {
-        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val key = derive(password, salt, ITERATIONS)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
-        val data = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        val encrypted = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
+        val combined = iv + encrypted
+
+        // KEYRA2 is intentionally cross-platform:
+        // version.iterations.salt.(12-byte nonce + ciphertext + 16-byte GCM tag)
         return listOf(
             "KEYRA2",
             ITERATIONS.toString(),
             Base64.encodeToString(salt, Base64.NO_WRAP),
-            Base64.encodeToString(iv, Base64.NO_WRAP),
-            Base64.encodeToString(data, Base64.NO_WRAP)
+            Base64.encodeToString(combined, Base64.NO_WRAP)
         ).joinToString(".")
     }
 
     fun decrypt(payload: String, password: String): String {
-        val p = payload.split(".")
-        val iterations: Int
-        val saltIndex: Int
-        when {
-            p.size == 5 && p[0] == "KEYRA2" -> {
-                iterations = p[1].toInt()
+        val parts = payload.split(".")
+        return when {
+            parts.size == 4 && parts[0] == "KEYRA2" -> {
+                val iterations = parts[1].toInt()
                 require(iterations in 100_000..2_000_000)
-                saltIndex = 2
+                val salt = decodeSalt(parts[2])
+                val combined = Base64.decode(parts[3], Base64.NO_WRAP)
+                decryptCombined(combined, password, salt, listOf(iterations))
             }
-            p.size == 4 && p[0] == "KEYRA1" -> {
-                iterations = 180_000
-                saltIndex = 1
+            // Legacy Android KEYRA2 stored nonce and ciphertext/tag separately.
+            parts.size == 5 && parts[0] == "KEYRA2" -> {
+                val iterations = parts[1].toInt()
+                require(iterations in 100_000..2_000_000)
+                val salt = decodeSalt(parts[2])
+                val iv = Base64.decode(parts[3], Base64.NO_WRAP)
+                val encrypted = Base64.decode(parts[4], Base64.NO_WRAP)
+                decryptParts(iv, encrypted, password, salt, listOf(iterations))
+            }
+            // Legacy iOS KEYRA1 used CryptoKit combined data and 120k PBKDF2 iterations.
+            parts.size == 3 && parts[0] == "KEYRA1" -> {
+                val salt = decodeSalt(parts[1])
+                val combined = Base64.decode(parts[2], Base64.NO_WRAP)
+                decryptCombined(
+                    combined,
+                    password,
+                    salt,
+                    listOf(LEGACY_IOS_ITERATIONS, LEGACY_ANDROID_ITERATIONS)
+                )
+            }
+            // Legacy Android KEYRA1 stored nonce and ciphertext/tag separately.
+            parts.size == 4 && parts[0] == "KEYRA1" -> {
+                val salt = decodeSalt(parts[1])
+                val iv = Base64.decode(parts[2], Base64.NO_WRAP)
+                val encrypted = Base64.decode(parts[3], Base64.NO_WRAP)
+                decryptParts(
+                    iv,
+                    encrypted,
+                    password,
+                    salt,
+                    listOf(LEGACY_ANDROID_ITERATIONS, LEGACY_IOS_ITERATIONS)
+                )
             }
             else -> error("Neispravan format sigurnosne kopije.")
         }
-        val salt = Base64.decode(p[saltIndex], Base64.NO_WRAP)
-        val iv = Base64.decode(p[saltIndex + 1], Base64.NO_WRAP)
-        val data = Base64.decode(p[saltIndex + 2], Base64.NO_WRAP)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, derive(password, salt, iterations), GCMParameterSpec(128, iv))
-        return cipher.doFinal(data).toString(Charsets.UTF_8)
+    }
+
+    private fun decodeSalt(value: String): ByteArray {
+        val salt = Base64.decode(value, Base64.NO_WRAP)
+        require(salt.size == SALT_BYTES) { "Neispravna sol sigurnosne kopije." }
+        return salt
+    }
+
+    private fun decryptCombined(
+        combined: ByteArray,
+        password: String,
+        salt: ByteArray,
+        iterations: List<Int>
+    ): String {
+        require(combined.size >= IV_BYTES + TAG_BYTES) { "Neispravan šifrirani sadržaj." }
+        val iv = combined.copyOfRange(0, IV_BYTES)
+        val encrypted = combined.copyOfRange(IV_BYTES, combined.size)
+        return decryptParts(iv, encrypted, password, salt, iterations)
+    }
+
+    private fun decryptParts(
+        iv: ByteArray,
+        encrypted: ByteArray,
+        password: String,
+        salt: ByteArray,
+        iterations: List<Int>
+    ): String {
+        require(iv.size == IV_BYTES) { "Neispravan nonce sigurnosne kopije." }
+        require(encrypted.size >= TAG_BYTES) { "Neispravan šifrirani sadržaj." }
+
+        var lastError: Throwable? = null
+        for (iterationCount in iterations) {
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(
+                    Cipher.DECRYPT_MODE,
+                    derive(password, salt, iterationCount),
+                    GCMParameterSpec(128, iv)
+                )
+                return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+            } catch (error: Throwable) {
+                lastError = error
+            }
+        }
+        throw lastError ?: IllegalArgumentException("Sigurnosnu kopiju nije moguće dešifrirati.")
     }
 
     private fun derive(password: String, salt: ByteArray, iterations: Int): SecretKey {
@@ -879,8 +990,32 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     }
 }
 
+internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
+    val passwordItems = items.filter {
+        (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank()
+    }
+    val duplicatedIds = passwordItems
+        .groupBy { it.password }
+        .filterValues { it.size > 1 }
+        .values
+        .flatten()
+        .map { it.id }
+        .toSet()
+    val weakIds = passwordItems
+        .filter { !isStrongPassword(it.password) }
+        .map { it.id }
+        .toSet()
+    return duplicatedIds + weakIds
+}
+
+internal fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
+
 @Composable
-private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
+private fun BrandHeader(
+    subtitle: String,
+    notificationCount: Int = 0,
+    onNotifications: () -> Unit = {}
+) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val compact = maxWidth < 370.dp
         Row(
@@ -910,11 +1045,37 @@ private fun BrandHeader(subtitle: String, onNotifications: () -> Unit = {}) {
                     maxLines = 1
                 )
             }
-            IconButton(
-                onClick = onNotifications,
-                modifier = Modifier.size(if (compact) 38.dp else 44.dp)
-            ) {
-                Icon(Icons.Outlined.Notifications, contentDescription = "Obavijesti", tint = Color.White)
+            Box {
+                IconButton(
+                    onClick = onNotifications,
+                    modifier = Modifier.size(if (compact) 38.dp else 44.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Notifications,
+                        contentDescription = if (notificationCount > 0)
+                            "Sigurnosna upozorenja: $notificationCount"
+                        else
+                            "Nema sigurnosnih upozorenja",
+                        tint = Color.White
+                    )
+                }
+                if (notificationCount > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 2.dp, y = (-2).dp),
+                        shape = CircleShape,
+                        color = Danger
+                    ) {
+                        Text(
+                            if (notificationCount > 9) "9+" else notificationCount.toString(),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
             }
             Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
             Box(
@@ -1479,7 +1640,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
+        BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
 
         OutlinedTextField(
             search, { search = it },
@@ -1859,7 +2020,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR") { model.open(Screen.SECURITY) }
+            BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
             Text(
                 "Kolekcije",
                 Modifier.padding(horizontal = side),
@@ -2099,7 +2260,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki") { model.open(Screen.SECURITY) }
+        BrandHeader("Generator lozinki", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -3031,6 +3192,17 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var search by remember { mutableStateOf("") }
+    var confirmImport by remember { mutableStateOf(false) }
+
+    fun runProtectedImport() {
+        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
+                model.importBackup(context)
+            }
+        } else {
+            model.importBackup(context)
+        }
+    }
 
     fun matches(vararg values: String): Boolean =
         search.isBlank() || values.any { it.contains(search, ignoreCase = true) }
@@ -3046,7 +3218,43 @@ private fun SettingsScreen(
     val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("POSTAVKE I SIGURNOST") { model.open(Screen.SECURITY) }
+        if (confirmImport) {
+            AlertDialog(
+                onDismissRequest = { confirmImport = false },
+                icon = {
+                    Icon(
+                        Icons.Outlined.Warning,
+                        contentDescription = null,
+                        tint = Warn
+                    )
+                },
+                title = { Text("Uvesti sigurnosnu kopiju?") },
+                text = {
+                    Text(
+                        "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
+                            "Prije nastavka provjerite da je kopija ispravna."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmImport = false
+                            runProtectedImport()
+                        }
+                    ) {
+                        Text("Uvezi i zamijeni", color = Warn)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmImport = false }) {
+                        Text("Odustani")
+                    }
+                },
+                containerColor = Slate
+            )
+        }
+
+        BrandHeader("POSTAVKE I SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
@@ -3125,16 +3333,18 @@ private fun SettingsScreen(
                 }
             }
             if (matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija")) item {
-                SettingRow(Icons.Outlined.Download, "Uvezi sigurnosnu kopiju", "Vratite šifriranu kopiju iz međuspremnika.") {
-                    IconButton(onClick = {
-                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
-                            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
-                                model.importBackup(context)
-                            }
-                        } else {
-                            model.importBackup(context)
-                        }
-                    }) { Icon(Icons.Outlined.Download, null, tint = Cyan) }
+                SettingRow(
+                    Icons.Outlined.Download,
+                    "Uvezi sigurnosnu kopiju",
+                    "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
+                ) {
+                    IconButton(onClick = { confirmImport = true }) {
+                        Icon(
+                            Icons.Outlined.Download,
+                            contentDescription = "Uvezi sigurnosnu kopiju",
+                            tint = Cyan
+                        )
+                    }
                 }
             }
 
@@ -3253,19 +3463,25 @@ private fun SettingRow(
 
 @Composable
 private fun SecurityScreen(model: KeyraViewModel) {
-    val passwordItems = model.items.filter { (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank() }
-    val duplicatedGroups = passwordItems
+    val passwordItems = model.items.filter {
+        (it.type == "Prijava" || it.type == "Wi-Fi") && it.password.isNotBlank()
+    }
+    val duplicatedIds = passwordItems
         .groupBy { it.password }
         .filterValues { it.size > 1 }
-    val duplicatedIds = duplicatedGroups.values.flatten().map { it.id }.toSet()
+        .values
+        .flatten()
+        .map { it.id }
+        .toSet()
     val weak = passwordItems.filter { !isStrongPassword(it.password) }
     val strong = passwordItems.filter { isStrongPassword(it.password) && it.id !in duplicatedIds }
-    val score = if (passwordItems.isEmpty()) 100 else {
-        ((strong.size.toFloat() / passwordItems.size.coerceAtLeast(1)) * 100).toInt()
+    val issueIds = securityIssueIds(model.items)
+    val score = if (passwordItems.isEmpty()) null else {
+        ((strong.size.toFloat() / passwordItems.size) * 100).toInt()
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST") { model.open(Screen.SECURITY) }
+        BrandHeader("SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3275,18 +3491,26 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 GlassCard {
                     Text("Ocjena sigurnosti", color = Muted, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("$score", color = if (score >= 80) Good else Warn, fontSize = 54.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            score?.toString() ?: "—",
+                            color = if (score == null) Muted else if (score >= 80) Good else Warn,
+                            fontSize = 54.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
                         Text("/100", color = Muted, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
                     }
                     LinearProgressIndicator(
-                        progress = { score / 100f },
+                        progress = { (score ?: 0) / 100f },
                         modifier = Modifier.fillMaxWidth(),
-                        color = if (score >= 80) Good else Warn,
+                        color = if (score == null) Muted else if (score >= 80) Good else Warn,
                         trackColor = Color(0xFF203449)
                     )
                     Text(
-                        if (score >= 80) "Vaš trezor izgleda dobro zaštićen."
-                        else "Pregledajte stavke koje zahtijevaju pažnju.",
+                        when {
+                            score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
+                            score >= 80 -> "Vaš trezor izgleda dobro zaštićen."
+                            else -> "Pregledajte stavke koje zahtijevaju pažnju."
+                        },
                         color = Muted
                     )
                 }
@@ -3314,6 +3538,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
             items((weak + model.items.filter { it.id in duplicatedIds }).distinctBy { it.id }) { issue ->
                 val duplicate = issue.id in duplicatedIds
+                val weakPassword = !isStrongPassword(issue.password)
                 Surface(
                     Modifier.fillMaxWidth().clickable { model.select(issue) },
                     shape = RoundedCornerShape(20.dp),
@@ -3330,8 +3555,11 @@ private fun SecurityScreen(model: KeyraViewModel) {
                         Column(Modifier.weight(1f)) {
                             Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
-                                if (duplicate) "Lozinka se koristi na više mjesta."
-                                else "Lozinka nije dovoljno snažna i preporučuje se zamjena.",
+                                when {
+                                    duplicate && weakPassword -> "Lozinka je slaba i koristi se na više mjesta."
+                                    duplicate -> "Lozinka se koristi na više mjesta."
+                                    else -> "Lozinka nije dovoljno snažna i preporučuje se zamjena."
+                                },
                                 color = Muted,
                                 fontSize = 13.sp
                             )
@@ -3340,7 +3568,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     }
                 }
             }
-            if (weak.isEmpty() && duplicatedIds.isEmpty()) {
+            if (issueIds.isEmpty()) {
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
