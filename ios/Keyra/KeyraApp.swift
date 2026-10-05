@@ -2966,6 +2966,9 @@ struct AddEditView: View {
                             Button {
                                 field1 = config.issuer
                                 field2 = config.account
+                                if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    title = config.issuer.isEmpty ? config.account : config.issuer
+                                }
                                 field3 = config.secret
                                 totpAlgorithm = config.algorithm
                                 totpDigits = config.digits
