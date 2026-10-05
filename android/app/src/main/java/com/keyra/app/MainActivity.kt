@@ -2789,25 +2789,53 @@ private fun DetailScreen(
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = model::editSelected,
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f))
-                    ) {
-                        Icon(Icons.Outlined.Edit, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Uredi stavku")
-                    }
-                    OutlinedButton(
-                        onClick = { confirmDelete = true },
-                        modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
-                    ) {
-                        Icon(Icons.Outlined.Delete, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Izbriši")
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth < 390.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = model::editSelected,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f)),
+                                shape = RoundedCornerShape(26.dp)
+                            ) {
+                                Icon(Icons.Outlined.Edit, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Uredi stavku")
+                            }
+                            OutlinedButton(
+                                onClick = { confirmDelete = true },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
+                                shape = RoundedCornerShape(26.dp)
+                            ) {
+                                Icon(Icons.Outlined.Delete, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Izbriši")
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = model::editSelected,
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.65f))
+                            ) {
+                                Icon(Icons.Outlined.Edit, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Uredi stavku")
+                            }
+                            OutlinedButton(
+                                onClick = { confirmDelete = true },
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
+                            ) {
+                                Icon(Icons.Outlined.Delete, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Izbriši")
+                            }
+                        }
                     }
                 }
             }
