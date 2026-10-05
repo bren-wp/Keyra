@@ -1,16 +1,16 @@
 <div align="center">
 
-<img src="assets/brand/keyra-logo.svg" alt="Keyra" width="430">
+<img src="assets/brand/keyra-logo.svg" alt="Keyra" width="460">
 
 # Keyra
 
-### Sigurni upravitelj lozinki
+### Sigurni upravitelj lozinki za Android i iOS
 
 **Vaši ključevi. Vaši podaci. Uvijek vaši.**
 
-<img src="assets/brand/keyra-icon.svg" alt="Keyra ikona" width="120">
+<img src="assets/brand/keyra-icon.svg" alt="Keyra ikona" width="118">
 
-**Android · iOS · Bez računa · Bez oglasa**
+**Bez računa · Bez oglasa · Šifrirani trezor na uređaju**
 
 </div>
 
@@ -18,9 +18,7 @@
 
 ## Sigurniji način upravljanja lozinkama
 
-Keyra čuva lozinke, bilješke, kartice, identitete, Wi‑Fi podatke i druge osjetljive informacije na jednom preglednom mjestu.
-
-Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez nepotrebnih koraka. Vaš trezor ostaje šifriran na uređaju, a za svakodnevno korištenje nije potreban račun.
+Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi podatke u jednom preglednom trezoru. Sučelje prati tamni Keyra identitet s tirkiznim, plavim i indigo naglascima, tankim obrubima i jasnom hijerarhijom.
 
 <div align="center">
 <img src="assets/screens/splash.svg" alt="Keyra početni prikaz" width="230">
@@ -28,64 +26,77 @@ Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez ne
 <img src="assets/screens/unlock.svg" alt="Keyra otključavanje" width="230">
 </div>
 
-## Zašto Keyra?
+## Ključne mogućnosti
 
-🔐 **Potpuno šifrirano** — Vaše osjetljive informacije ostaju zaštićene AES-256-GCM zaštitom.  
-👆 **Biometrijsko otključavanje** — Brz pristup uz Face ID, Touch ID, prepoznavanje lica ili otisak prsta kada ih uređaj podržava.  
-🛡️ **Automatsko zaključavanje** — Odmah ili nakon 30 sekundi, 1 minute ili 5 minuta.  
-🔑 **Zaštita od pokušaja pogađanja** — Više uzastopnih pogrešnih pokušaja privremeno zaključava unos.  
-📱 **Prilagodljivo sučelje** — Sadržaj, navigacija i glavni gumbi prilagođavaju se manjim telefonima, većim ekranima, tabletima i vodoravnom prikazu.  
-👁️ **Potvrda prije prikaza tajni** — Po želji se traži biometrija ili šifra uređaja prije prikaza i kopiranja lozinki, kartica i dokumenata.  
-🧩 **Sve na jednom mjestu** — Prijave, bilješke, kartice, identiteti, Wi‑Fi i favoriti.  
-✨ **Generator lozinki** — Snažne i jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
-📦 **Sigurnosna kopija** — Vaši podaci mogu se spremiti i vratiti u šifriranom obliku.  
-✅ **Zaštićeno spremanje** — Ako spremanje ili uvoz ne uspiju, postojeći sadržaj trezora ostaje sačuvan.  
-🌙 **Premium tamni izgled** — Pregledno sučelje s tirkiznim, plavim i indigo naglascima.
+🔐 **Šifrirani trezor** — sadržaj se štiti AES‑256‑GCM enkripcijom.  
+🔑 **Glavna lozinka** — provjera koristi PBKDF2‑HMAC‑SHA‑256 s 600.000 iteracija.  
+👆 **Biometrijsko otključavanje** — koristi podržanu potvrdu identiteta uređaja.  
+🛡️ **Dodatna potvrda za osjetljive radnje** — prikaz i kopiranje tajnih vrijednosti mogu tražiti novu potvrdu identiteta.  
+⏱️ **Automatsko zaključavanje** — odmah ili nakon odabranog vremenskog razdoblja.  
+🚫 **Zaštita od uzastopnih pokušaja** — ponavljani pogrešni pokušaji privremeno zaustavljaju novo otključavanje.  
+📋 **Zaštićeni međuspremnik** — osjetljive kopirane vrijednosti automatski istječu.  
+🔎 **Provjera sigurnosti** — prepoznaje slabe i ponovno korištene lozinke.  
+✨ **Generator lozinki** — duljina do 64 znaka, vrste znakova i brzi presetovi jačine.  
+📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine.  
+📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
+🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.
 
 ## Moj trezor
 
-Brza pretraga, filteri prema vrsti stavke, kategorije, favoriti i pregled sigurnosti dostupni su odmah po otključavanju. Prijave, bilješke, kartice, identiteti i Wi‑Fi podaci imaju prilagođene prikaze i polja.
+Pretraga, tipovi stavki, favoriti, kategorije, sortiranje i sigurnosni sažetak dostupni su odmah nakon otključavanja. Novi trezor počinje prazan i Keyra ne umeće probne vjerodajnice.
 
 <div align="center">
 <img src="assets/screens/vault.svg" alt="Moj trezor" width="320">
 </div>
 
-## Kolekcije
+## Dodavanje i detalji
 
-Organizirajte podatke u cjeline kao što su Osobno, Posao, Financije, Društvene mreže, Kupovina, Putovanja, Zdravlje i Ostalo. Dodirom kategorije otvara se Trezor s odgovarajućim filtrom, koji možete ukloniti jednim dodirom.
+Podržane su prijave, bilješke, kartice, identiteti i Wi‑Fi podaci. Svaki tip prikazuje samo odgovarajuća polja. Osjetljive vrijednosti ostaju skrivene dok ih korisnik ne odluči prikazati ili kopirati.
+
+Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu.
 
 <div align="center">
-<img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
+<img src="assets/screens/add-login.svg" alt="Dodavanje prijave" width="280">
+<img src="assets/screens/detail.svg" alt="Detalji stavke" width="280">
 </div>
 
 ## Generator lozinki
 
-Odaberite duljinu lozinke te velika i mala slova, brojeve i simbole. Generator prikazuje procijenjenu entropiju i razinu jačine te omogućuje sigurno kopiranje s automatskim istekom međuspremnika.
+Presetovi **Jednostavna**, **Snažna** i **Maksimalna** omogućuju brz izbor, dok **Prilagodi** daje potpunu kontrolu nad duljinom i vrstama znakova. Generator koristi sigurni izvor slučajnosti platforme i prikazuje procjenu jačine.
 
 <div align="center">
 <img src="assets/screens/generator.svg" alt="Generator lozinki" width="320">
 </div>
 
-## Dodavanje i uređivanje
+## Kolekcije
 
-Dodajte prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi podatke. Svaku stavku možete urediti, označiti kao favorit, razvrstati u odgovarajuću kategoriju i dopuniti bilješkama. Osjetljiva polja ostaju skrivena dok ih ne odlučite prikazati.
+Kategorije **Osobno**, **Posao**, **Financije**, **Društvene mreže**, **Kupovina**, **Putovanja**, **Zdravlje** i **Ostalo** otvaraju odgovarajući filtrirani sadržaj trezora. Brojevi stavki dolaze iz stvarnog sadržaja korisničkog trezora.
 
 <div align="center">
-<img src="assets/screens/add-login.svg" alt="Dodaj prijavu" width="280">
-<img src="assets/screens/detail.svg" alt="Detalji prijave" width="280">
+<img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
 </div>
-
-## Provjera sigurnosti
-
-Keyra prepoznaje slabe i ponovno korištene lozinke te ih izdvaja kako biste odmah znali koje stavke treba pregledati. Procjena se više ne temelji samo na duljini: provjerava se i raznolikost znakova.
 
 ## Postavke i sigurnost
 
-Biometrijsko otključavanje, dodatna potvrda prije prikaza osjetljivih podataka, podesivo automatsko zaključavanje, sigurnosne kopije, provjera sigurnosti i ručno zaključavanje trezora objedinjeni su na jednom mjestu. Novi trezor počinje prazan — aplikacija ne umeće probne vjerodajnice.
+Keyra prikazuje samo dostupne mogućnosti: biometrijsko otključavanje, dodatnu potvrdu identiteta, automatsko zaključavanje, provjeru sigurnosti, šifriranu sigurnosnu kopiju i ručno zaključavanje trezora. Tamni Keyra prikaz dio je stalnog vizualnog identiteta.
+
+Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogućuje. Na iOS-u Keyra skriva sadržaj kada aplikacija nije aktivna te tijekom aktivnog snimanja zaslona.
 
 <div align="center">
 <img src="assets/screens/settings.svg" alt="Postavke i sigurnost" width="320">
 </div>
+
+## Sigurnost podataka
+
+- sadržaj trezora šifrira se prije trajnog spremanja
+- ključ trezora štiti Android Keystore ili Apple Keychain
+- sigurnosna kopija dodatno se šifrira glavnom lozinkom
+- oštećena ili prevelika sigurnosna kopija ne zamjenjuje postojeći trezor
+- neuspjelo spremanje ne mijenja prikazano stanje kao da je radnja uspjela
+- osjetljive vrijednosti ne zapisuju se u aplikacijske logove
+- novi trezor ne sadrži unaprijed umetnute račune ni lozinke
+
+Više pojedinosti nalazi se u [SECURITY.md](SECURITY.md) i [PRIVACY.md](PRIVACY.md).
 
 ## Vizualni identitet
 
@@ -107,7 +118,7 @@ Biometrijsko otključavanje, dodatna potvrda prije prikaza osjetljivih podataka,
 
 ### Keyra
 
-**Sigurniji način upravljanja lozinkama.**
+**Sigurnost za bezbrižniji život.**
 
 Vaši ključevi. Vaši podaci. Uvijek vaši.
 
