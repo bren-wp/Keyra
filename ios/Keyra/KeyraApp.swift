@@ -1049,11 +1049,11 @@ struct OnboardingView: View {
                             .minimumScaleFactor(0.75)
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
-                            Text("Sve važno. Jedan siguran trezor.")
+                            Text("Sigurniji način upravljanja lozinkama")
                                 .font(.system(size: compact ? 25 : 31, weight: .black))
                                 .foregroundStyle(.white)
                                 .minimumScaleFactor(0.8)
-                            Text("Lozinke, bilješke, kartice, identiteti i Wi‑Fi na jednom mjestu.")
+                            Text("Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.")
                                 .font(compact ? .subheadline : .body)
                                 .foregroundStyle(muted)
                         }
@@ -1063,19 +1063,19 @@ struct OnboardingView: View {
                         FeatureCard(
                             icon: "lock.fill",
                             title: "Potpuno šifrirano",
-                            subtitle: "Vaši podaci ostaju zaštićeni.",
+                            subtitle: "Vaši podaci ostaju na vašem uređaju.",
                             compact: compact
                         )
                         FeatureCard(
                             icon: "faceid",
                             title: "Privatnost u osnovi",
-                            subtitle: "Brz pristup uz potvrdu identiteta.",
+                            subtitle: "Stvoreno za vaš mir.",
                             compact: compact
                         )
                         FeatureCard(
                             icon: "rectangle.on.rectangle",
-                            title: "Spremno za svaki ekran",
-                            subtitle: "Pregledno na telefonu i tabletu.",
+                            title: "Radi svugdje",
+                            subtitle: "Pregledno na Androidu i iOS-u.",
                             compact: compact
                         )
                     }
