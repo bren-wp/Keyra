@@ -18,40 +18,70 @@
 
 ## Sigurniji način upravljanja lozinkama
 
-Keyra je privatni trezor za lozinke, pristupne ključeve, bilješke, kartice, identitete i Wi‑Fi podatke. Sve je osmišljeno za brz pristup, jasnu organizaciju i mir pri svakodnevnom korištenju.
+Keyra čuva lozinke, bilješke, kartice, identitete, Wi‑Fi podatke i druge osjetljive informacije na jednom preglednom mjestu.
 
-Vaši osjetljivi podaci ostaju šifrirani na uređaju. Aplikacija ne zahtijeva račun ni internetsku vezu za čuvanje i korištenje trezora.
+Sve je osmišljeno tako da najvažnije stvari budu dostupne brzo, jasno i bez nepotrebnih koraka. Vaš trezor ostaje šifriran na uređaju, a za svakodnevno korištenje nije potreban račun ni internetska veza.
 
 <div align="center">
-<img src="assets/screens/onboarding.svg" alt="Keyra početni zaslon" width="250">
-<img src="assets/screens/vault.svg" alt="Keyra trezor" width="250">
-<img src="assets/screens/generator.svg" alt="Keyra generator lozinki" width="250">
+<img src="assets/screens/splash.svg" alt="Keyra početni prikaz" width="230">
+<img src="assets/screens/onboarding.svg" alt="Keyra dobrodošlica" width="230">
+<img src="assets/screens/unlock.svg" alt="Keyra otključavanje" width="230">
 </div>
 
-## Ključne prednosti
+## Zašto Keyra?
 
-🔐 **Potpuno šifrirano** — Vaši podaci ostaju zaštićeni na vašem uređaju.  
-👆 **Biometrijsko otključavanje** — Brz pristup uz Face ID, Touch ID ili otisak prsta.  
+🔐 **Potpuno šifrirano** — Vaše osjetljive informacije ostaju zaštićene.  
+👆 **Biometrijsko otključavanje** — Brz pristup uz Face ID, Touch ID, prepoznavanje lica ili otisak prsta kada ih uređaj podržava.  
+🛡️ **Automatsko zaključavanje** — Trezor se zaključava kada napustite aplikaciju.  
 🧩 **Sve na jednom mjestu** — Prijave, bilješke, kartice, identiteti, Wi‑Fi i favoriti.  
-✨ **Generator lozinki** — Snažne, jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
-📦 **Sigurnosna kopija** — Uvoz i izvoz trezora pod vašom kontrolom.  
+✨ **Generator lozinki** — Snažne i jedinstvene lozinke uz prilagodljivu duljinu i vrste znakova.  
+📦 **Sigurnosna kopija** — Vaši podaci mogu se spremiti i vratiti u šifriranom obliku.  
 🌙 **Premium tamni izgled** — Pregledno sučelje s tirkiznim, plavim i indigo naglascima.
 
 ## Moj trezor
 
-<div align="center"><img src="assets/screens/vault.svg" alt="Moj trezor" width="320"></div>
+Brza pretraga, kategorije, favoriti i pregled sigurnosti dostupni su odmah po otključavanju.
+
+<div align="center">
+<img src="assets/screens/vault.svg" alt="Moj trezor" width="320">
+</div>
 
 ## Kolekcije
 
 Organizirajte podatke u cjeline kao što su Osobno, Posao, Financije, Društvene mreže, Kupovina, Putovanja, Zdravlje i Ostalo.
 
+<div align="center">
+<img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
+</div>
+
 ## Generator lozinki
 
-<div align="center"><img src="assets/screens/generator.svg" alt="Generator lozinki" width="320"></div>
+Odaberite duljinu lozinke te velika i mala slova, brojeve i simbole. Nova lozinka izrađuje se u nekoliko sekundi.
+
+<div align="center">
+<img src="assets/screens/generator.svg" alt="Generator lozinki" width="320">
+</div>
+
+## Dodavanje i uređivanje
+
+Svaku prijavu možete urediti, označiti kao favorit, razvrstati u odgovarajuću kategoriju i dopuniti bilješkama.
+
+<div align="center">
+<img src="assets/screens/add-login.svg" alt="Dodaj prijavu" width="280">
+<img src="assets/screens/detail.svg" alt="Detalji prijave" width="280">
+</div>
+
+## Provjera sigurnosti
+
+Keyra prepoznaje slabe i ponovno korištene lozinke te ih izdvaja kako biste odmah znali koje stavke treba pregledati.
 
 ## Postavke i sigurnost
 
-Upravljajte biometrijskim otključavanjem, sigurnosnom kopijom, uvozom i izvozom, tamnim načinom i provjerom sigurnosti.
+Biometrijsko otključavanje, sigurnosne kopije, provjera sigurnosti i zaključavanje trezora objedinjeni su na jednom mjestu.
+
+<div align="center">
+<img src="assets/screens/settings.svg" alt="Postavke i sigurnost" width="320">
+</div>
 
 ## Vizualni identitet
 
@@ -63,7 +93,9 @@ Upravljajte biometrijskim otključavanjem, sigurnosnom kopijom, uvozom i izvozom
 | Indigo | `#6366F1` |
 | Ledeno plava | `#7DD3FC` |
 
-<div align="center"><img src="assets/brand/keyra-styleboard.svg" alt="Keyra vizualni identitet" width="100%"></div>
+<div align="center">
+<img src="assets/brand/keyra-styleboard.svg" alt="Keyra vizualni identitet" width="100%">
+</div>
 
 ---
 
