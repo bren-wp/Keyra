@@ -36,6 +36,29 @@ extension Color {
     }
 }
 
+func normalizedWebURL(_ raw: String) -> URL? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    let candidate: String
+    if trimmed.lowercased().hasPrefix("https://") || trimmed.lowercased().hasPrefix("http://") {
+        candidate = trimmed
+    } else {
+        candidate = "https://" + trimmed
+    }
+
+    guard
+        let components = URLComponents(string: candidate),
+        let scheme = components.scheme?.lowercased(),
+        ["https", "http"].contains(scheme),
+        let host = components.host,
+        !host.isEmpty
+    else {
+        return nil
+    }
+    return components.url
+}
+
 enum SecureClipboard {
     static func copy(_ text: String) {
         UIPasteboard.general.setItems(
@@ -1964,6 +1987,7 @@ struct KeyraField: View {
 
 struct DetailView: View {
     @EnvironmentObject var store: KeyraStore
+    @Environment(\.openURL) private var openURL
     @State private var reveal = false
     @State private var revealSensitive = false
 
@@ -2002,7 +2026,17 @@ struct DetailView: View {
                     VStack(spacing: 10) {
                         if item.kind == "Prijava" {
                             if !item.website.isEmpty {
-                                DetailRow(icon: "link", title: "Web-stranica", value: item.website)
+                                DetailRow(icon: "link", title: "Web-stranica", value: item.website) {
+                                    guard let url = normalizedWebURL(item.website) else {
+                                        store.message = "Web-stranicu nije moguće otvoriti. Provjerite adresu."
+                                        return
+                                    }
+                                    openURL(url) { accepted in
+                                        if !accepted {
+                                            store.message = "Web-stranicu nije moguće otvoriti."
+                                        }
+                                    }
+                                }
                             }
                             if !item.username.isEmpty {
                                 DetailRow(icon: "person", title: "Korisničko ime / e-pošta", value: item.username) {
