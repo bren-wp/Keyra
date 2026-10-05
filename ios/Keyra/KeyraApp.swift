@@ -27,7 +27,7 @@ extension Color {
     }
 }
 
-enum KeyraScreen {
+enum KeyraScreen: Equatable {
     case onboarding, unlock, vault, collections, generator, add, detail, settings
 }
 
@@ -396,13 +396,13 @@ struct RootView: View {
                     .padding(.horizontal)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .task(id: message) {
-                        try? await Task.sleep(for: .seconds(2.6))
+                        try? await Task.sleep(nanoseconds: 2_600_000_000)
                         withAnimation { store.message = nil }
                     }
             }
         }
         .task {
-            try? await Task.sleep(for: .milliseconds(850))
+            try? await Task.sleep(nanoseconds: 850_000_000)
             withAnimation(.easeOut(duration: 0.3)) { splash = false }
         }
     }
@@ -892,7 +892,9 @@ struct CollectionsView: View {
 
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    ForEach(categories, id: \.0) { name, accent in
+                    ForEach(categories.indices, id: \.self) { index in
+                        let name = categories[index].0
+                        let accent = categories[index].1
                         VStack(alignment: .leading, spacing: 4) {
                             Text(name).font(.headline).foregroundStyle(.white)
                             Text("\(store.items.filter { $0.category == name }.count) stavki")
