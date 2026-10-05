@@ -1940,6 +1940,17 @@ private fun GeneratorScreen(model: KeyraViewModel) {
         password = generatePassword(length.toInt(), upper, lower, numbers, symbols)
     }
 
+    fun updateCharacterSet(current: Boolean, enabled: Boolean, apply: (Boolean) -> Unit) {
+        val activeCount = listOf(upper, lower, numbers, symbols).count { it }
+        if (current && !enabled && activeCount <= 1) {
+            model.message = "Generator mora koristiti barem jednu vrstu znakova."
+            return
+        }
+        apply(enabled)
+        preset = "Prilagodi"
+        refresh()
+    }
+
     fun applyPreset(name: String) {
         preset = name
         when (name) {
@@ -2049,36 +2060,74 @@ private fun GeneratorScreen(model: KeyraViewModel) {
             item {
                 GlassCard {
                     Text("Vrste znakova", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    GeneratorToggle("Velika slova (A–Z)", upper) { upper = it; preset = "Prilagodi"; refresh() }
-                    GeneratorToggle("Mala slova (a–z)", lower) { lower = it; preset = "Prilagodi"; refresh() }
-                    GeneratorToggle("Brojevi (0–9)", numbers) { numbers = it; preset = "Prilagodi"; refresh() }
-                    GeneratorToggle("Simboli (!@#...)", symbols) { symbols = it; preset = "Prilagodi"; refresh() }
+                    GeneratorToggle("Velika slova (A–Z)", upper) {
+                        updateCharacterSet(upper, it) { value -> upper = value }
+                    }
+                    GeneratorToggle("Mala slova (a–z)", lower) {
+                        updateCharacterSet(lower, it) { value -> lower = value }
+                    }
+                    GeneratorToggle("Brojevi (0–9)", numbers) {
+                        updateCharacterSet(numbers, it) { value -> numbers = value }
+                    }
+                    GeneratorToggle("Simboli (!@#...)", symbols) {
+                        updateCharacterSet(symbols, it) { value -> symbols = value }
+                    }
                 }
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            copy(context, password)
-                            model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
-                        },
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.7f)),
-                        shape = RoundedCornerShape(28.dp)
-                    ) {
-                        Icon(Icons.Outlined.ContentCopy, null, tint = Ice)
-                        Spacer(Modifier.width(7.dp))
-                        Text("Kopiraj lozinku", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = { refresh() },
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
-                        shape = RoundedCornerShape(28.dp)
-                    ) {
-                        Icon(Icons.Outlined.Refresh, null)
-                        Spacer(Modifier.width(7.dp))
-                        Text("Generiraj novu", fontWeight = FontWeight.Bold)
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    if (maxWidth < 390.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { refresh() },
+                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                                shape = RoundedCornerShape(27.dp)
+                            ) {
+                                Icon(Icons.Outlined.Refresh, null)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Generiraj novu", fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    copy(context, password)
+                                    model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                                },
+                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.7f)),
+                                shape = RoundedCornerShape(27.dp)
+                            ) {
+                                Icon(Icons.Outlined.ContentCopy, null, tint = Ice)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Kopiraj lozinku", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    copy(context, password)
+                                    model.message = "Lozinka je kopirana i automatski će se ukloniti iz međuspremnika."
+                                },
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha=.7f)),
+                                shape = RoundedCornerShape(28.dp)
+                            ) {
+                                Icon(Icons.Outlined.ContentCopy, null, tint = Ice)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Kopiraj lozinku", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { refresh() },
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                                shape = RoundedCornerShape(28.dp)
+                            ) {
+                                Icon(Icons.Outlined.Refresh, null)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Generiraj novu", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
