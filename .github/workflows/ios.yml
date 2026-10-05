@@ -1,0 +1,20 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provjeri iOS aplikaciju
+        run: xcodebuild -project ios/Keyra.xcodeproj -scheme Keyra -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
