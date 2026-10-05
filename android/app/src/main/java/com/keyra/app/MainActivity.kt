@@ -1789,6 +1789,28 @@ private fun AddScreen(model: KeyraViewModel) {
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxWidth < 360.dp
+
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Danger) },
+                title = { Text("Izbrisati stavku?") },
+                text = { Text("Ova radnja ne može se poništiti.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmDelete = false
+                            model.deleteSelected()
+                        }
+                    ) { Text("Izbriši", color = Danger) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
         Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1987,6 +2009,7 @@ private fun DetailScreen(
     val current = model.selected ?: return
     var reveal by remember(current.id) { mutableStateOf(false) }
     var revealCard by remember(current.id) { mutableStateOf(false) }
+    var confirmDelete by remember(current.id) { mutableStateOf(false) }
     val context = LocalContext.current
 
     fun guarded(reason: String, action: () -> Unit) {
@@ -2181,7 +2204,7 @@ private fun DetailScreen(
                         Text("Uredi stavku")
                     }
                     OutlinedButton(
-                        onClick = model::deleteSelected,
+                        onClick = { confirmDelete = true },
                         modifier = Modifier.weight(1f),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Danger.copy(alpha=.65f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
