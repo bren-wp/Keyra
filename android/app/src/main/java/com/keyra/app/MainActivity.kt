@@ -2723,6 +2723,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 "Kartica" -> original.fields["Vlasnik kartice"].orEmpty()
                 "Identitet" -> original.fields["Puno ime"].orEmpty()
                 "Wi-Fi" -> original.fields["Naziv mreže"].orEmpty()
+                "Autentifikator" -> original.fields["Izdavatelj"].orEmpty()
                 else -> ""
             }
         )
@@ -2733,6 +2734,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 "Kartica" -> original.fields["Broj kartice"].orEmpty()
                 "Identitet" -> original.fields["Broj dokumenta"].orEmpty()
                 "Wi-Fi" -> original.fields["Vrsta zaštite"].orEmpty()
+                "Autentifikator" -> original.fields["Račun"].orEmpty()
                 else -> ""
             }
         )
@@ -2742,6 +2744,7 @@ private fun AddScreen(model: KeyraViewModel) {
             when (original?.type) {
                 "Kartica" -> original.fields["Vrijedi do"].orEmpty()
                 "Identitet" -> original.fields["Datum isteka"].orEmpty()
+                "Autentifikator" -> original.fields["TOTP tajna"].orEmpty()
                 else -> ""
             }
         )
@@ -2749,12 +2752,36 @@ private fun AddScreen(model: KeyraViewModel) {
     var field4 by remember(original?.id) {
         mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
     }
+    var totpAlgorithm by remember(original?.id) {
+        mutableStateOf(original?.fields?.get("Algoritam").orEmpty().ifBlank { "SHA1" })
+    }
+    var totpDigits by remember(original?.id) {
+        mutableIntStateOf(original?.fields?.get("Znamenke")?.toIntOrNull() ?: 6)
+    }
+    var totpPeriod by remember(original?.id) {
+        mutableIntStateOf(original?.fields?.get("Period")?.toIntOrNull() ?: 30)
+    }
+    val totpPreview = remember(type, field1, field2, field3, totpAlgorithm, totpDigits, totpPeriod) {
+        if (type == "Autentifikator") {
+            parseTotpInput(
+                raw = field3,
+                fallbackIssuer = field1,
+                fallbackAccount = field2,
+                fallbackAlgorithm = totpAlgorithm,
+                fallbackDigits = totpDigits,
+                fallbackPeriod = totpPeriod
+            )
+        } else {
+            null
+        }
+    }
 
     val itemLabel = when (type) {
         "Bilješka" -> "bilješku"
         "Kartica" -> "karticu"
         "Identitet" -> "identitet"
         "Wi-Fi" -> "Wi-Fi"
+        "Autentifikator" -> "autentifikator"
         else -> "prijavu"
     }
     val screenTitle = if (original == null) "Dodaj $itemLabel" else "Uredi $itemLabel"
@@ -2763,6 +2790,7 @@ private fun AddScreen(model: KeyraViewModel) {
         "Kartica" -> "Zaštitite podatke kartice i držite ih na jednom mjestu"
         "Identitet" -> "Sigurno spremite podatke identiteta i dokumenata"
         "Wi-Fi" -> "Spremite naziv mreže, zaštitu i pristupne podatke"
+        "Autentifikator" -> "Generirajte vremenski 2FA kod koji se automatski mijenja"
         else -> "Sigurno spremite svoje vjerodajnice"
     }
     val saveLabel = when (type) {
@@ -2770,6 +2798,7 @@ private fun AddScreen(model: KeyraViewModel) {
         "Kartica" -> "Spremi karticu"
         "Identitet" -> "Spremi identitet"
         "Wi-Fi" -> "Spremi Wi-Fi"
+        "Autentifikator" -> "Spremi autentifikator"
         else -> "Spremi prijavu"
     }
 
@@ -2811,13 +2840,14 @@ private fun AddScreen(model: KeyraViewModel) {
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi").forEach { value ->
+                    listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator").forEach { value ->
                         FilterChip(
                             selected = type == value,
                             onClick = {
                                 if (original == null) {
                                     type = value
                                     field1 = ""; field2 = ""; field3 = ""; field4 = ""
+                                    totpAlgorithm = "SHA1"; totpDigits = 6; totpPeriod = 30
                                 }
                             },
                             enabled = original == null || type == value,
@@ -2829,6 +2859,7 @@ private fun AddScreen(model: KeyraViewModel) {
                                         "Kartica" -> Icons.Outlined.CreditCard
                                         "Identitet" -> Icons.Outlined.Badge
                                         "Wi-Fi" -> Icons.Outlined.Wifi
+                                        "Autentifikator" -> Icons.Outlined.Security
                                         else -> Icons.Outlined.Lock
                                     },
                                     null,
@@ -2876,6 +2907,58 @@ private fun AddScreen(model: KeyraViewModel) {
                 item { KeyraTextField(field1, { field1 = it }, "Puno ime", Icons.Outlined.Person) }
                 item { KeyraTextField(field2, { field2 = it }, "Broj dokumenta", Icons.Outlined.Badge) }
                 item { KeyraTextField(field3, { field3 = it }, "Datum isteka", Icons.Outlined.DateRange) }
+            }
+
+            if (type == "Autentifikator") {
+                item { KeyraTextField(field1, { field1 = it }, "Izdavatelj / servis", Icons.Outlined.Security) }
+                item { KeyraTextField(field2, { field2 = it }, "Račun / e-pošta", Icons.Outlined.Person) }
+                item {
+                    KeyraPasswordField(
+                        field3,
+                        { field3 = it },
+                        show,
+                        { show = !show },
+                        "TOTP tajna ili otpauth:// URI"
+                    )
+                    val parsed = totpPreview
+                    if (parsed != null) {
+                        Text(
+                            "TOTP • ${parsed.algorithm} • ${parsed.digits} znamenki • ${parsed.period} s",
+                            color = Good,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    } else if (field3.isNotBlank()) {
+                        Text(
+                            "Tajna mora biti Base32 ili valjani otpauth://totp URI.",
+                            color = Warn,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    if (field3.trim().startsWith("otpauth://", ignoreCase = true) && parsed != null) {
+                        TextButton(
+                            onClick = {
+                                field1 = parsed.issuer
+                                field2 = parsed.account
+                                field3 = parsed.secret
+                                totpAlgorithm = parsed.algorithm
+                                totpDigits = parsed.digits
+                                totpPeriod = parsed.period
+                                model.message = "Podaci autentifikatora učitani su iz otpauth URI-ja."
+                            }
+                        ) {
+                            Icon(Icons.Outlined.Download, contentDescription = null)
+                            Spacer(Modifier.width(5.dp))
+                            Text("Učitaj podatke iz URI-ja")
+                        }
+                    }
+                    Text(
+                        "Kompatibilno s RFC 6238 TOTP aplikacijama. Kod se obnavlja prema vremenu uređaja.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                }
             }
 
             item {
@@ -2928,6 +3011,8 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Datum isteka kartice je u prošlosti."
                             type == "Identitet" && field1.isBlank() && field2.isBlank() ->
                                 "Unesite puno ime ili broj dokumenta."
+                            type == "Autentifikator" && totpPreview == null ->
+                                "Unesite valjanu Base32 TOTP tajnu ili otpauth:// URI."
                             else -> null
                         }
                         if (validationMessage != null) {
@@ -2949,6 +3034,17 @@ private fun AddScreen(model: KeyraViewModel) {
                                     "Naziv mreže" to field1,
                                     "Vrsta zaštite" to field2
                                 ).filterValues { it.isNotBlank() }
+                                "Autentifikator" -> {
+                                    val config = requireNotNull(totpPreview)
+                                    mapOf(
+                                        "Izdavatelj" to config.issuer,
+                                        "Račun" to config.account,
+                                        "TOTP tajna" to config.secret,
+                                        "Algoritam" to config.algorithm,
+                                        "Znamenke" to config.digits.toString(),
+                                        "Period" to config.period.toString()
+                                    ).filterValues { it.isNotBlank() }
+                                }
                                 else -> emptyMap()
                             }
 
