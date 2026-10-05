@@ -1735,37 +1735,82 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
     ) {
         BoxWithConstraints {
-            val compact = maxWidth < 350.dp
-            Row(
-                Modifier.padding(if (compact) 11.dp else 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-            Box(
-                Modifier.size(if (compact) 40.dp else 48.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha=.16f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = accent)
-            }
-            Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (compact) 15.sp else 17.sp, maxLines = 1)
-                Text(subtitle, color = Muted, fontSize = if (compact) 11.sp else 13.sp, maxLines = 1)
-            }
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = stateColor.copy(alpha=.12f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha=.8f))
-            ) {
-                Text(
-                    state,
-                    color = stateColor,
-                    fontSize = if (compact) 9.sp else 11.sp,
-                    modifier = Modifier.padding(horizontal = if (compact) 7.dp else 10.dp, vertical = if (compact) 5.dp else 7.dp),
-                    maxLines = 1
-                )
-            }
+            val compact = maxWidth < 380.dp
+            if (compact) {
+                Column(Modifier.padding(11.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(accent.copy(alpha=.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, null, tint = accent)
+                        }
+                        Spacer(Modifier.width(9.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    VaultStatusChip(
+                        state = state,
+                        stateColor = stateColor,
+                        modifier = Modifier.align(Alignment.End),
+                        compact = true
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(accent.copy(alpha=.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, null, tint = accent)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1)
+                        Text(subtitle, color = Muted, fontSize = 13.sp, maxLines = 1)
+                    }
+                    VaultStatusChip(state = state, stateColor = stateColor)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun VaultStatusChip(
+    state: String,
+    stateColor: Color,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = stateColor.copy(alpha=.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, stateColor.copy(alpha=.8f))
+    ) {
+        Text(
+            state,
+            color = stateColor,
+            fontSize = if (compact) 9.sp else 11.sp,
+            modifier = Modifier.padding(
+                horizontal = if (compact) 8.dp else 10.dp,
+                vertical = if (compact) 5.dp else 7.dp
+            ),
+            maxLines = 1
+        )
     }
 }
 
