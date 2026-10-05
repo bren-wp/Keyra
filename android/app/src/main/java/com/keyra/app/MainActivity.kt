@@ -720,9 +720,13 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     fun fromJson(json: String): List<VaultItem> {
         val array = JSONArray(json)
         require(array.length() <= MAX_VAULT_ITEMS) { "Previše stavki u trezoru." }
+        val seenIds = mutableSetOf<String>()
         return buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
+                val rawId = o.optString("id").trim()
+                val itemId = rawId.ifBlank { UUID.randomUUID().toString() }
+                require(seenIds.add(itemId)) { "Sigurnosna kopija sadrži duplicirane identifikatore stavki." }
                 val username = o.optString("username")
                 val password = o.optString("password")
                 val website = o.optString("website")
@@ -745,7 +749,7 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
                 }
                 add(
                     VaultItem(
-                        id = o.optString("id", UUID.randomUUID().toString()),
+                        id = itemId,
                         title = o.optString("title"),
                         username = username,
                         password = password,
@@ -877,7 +881,7 @@ internal object PortableBackup {
                     GCMParameterSpec(128, iv)
                 )
                 return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 lastError = error
             }
         }
