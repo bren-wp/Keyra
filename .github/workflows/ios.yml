@@ -16,10 +16,52 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
       - name: Provjeri iOS aplikaciju
         run: |
           set -euo pipefail
-          rm -rf build/ci-ios
-          xcodebuild             -project ios/Keyra.xcodeproj             -scheme Keyra             -sdk iphonesimulator             -configuration Debug             -derivedDataPath build/ci-ios             CODE_SIGNING_ALLOWED=NO             build
+          rm -rf build/ci-ios build/ci-ios-analyze
 
-          xcodebuild             -project ios/Keyra.xcodeproj             -scheme Keyra             -sdk iphonesimulator             -configuration Debug             -derivedDataPath build/ci-ios-analyze             CODE_SIGNING_ALLOWED=NO             analyze
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build/ci-ios \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build/ci-ios-analyze \
+            CODE_SIGNING_ALLOWED=NO \
+            analyze
+
+      - name: Provjeri pokretanje iOS aplikacije
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ci-ios/Build/Products/Debug-iphonesimulator/Keyra.app"
+          test -d "$APP_PATH"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Info.plist")
+
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin).get("devices", {})
+          for runtime_devices in devices.values():
+              for device in runtime_devices:
+                  if device.get("isAvailable") and str(device.get("name", "")).startswith("iPhone"):
+                      print(device["udid"])
+                      raise SystemExit(0)
+          raise SystemExit(1)
+          ')
+
+          xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP_PATH"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+          sleep 3
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+          xcrun simctl shutdown "$UDID" || true
