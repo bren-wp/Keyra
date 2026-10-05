@@ -1247,17 +1247,32 @@ private fun MainScaffold(model: KeyraViewModel, active: Screen, content: @Compos
 
 @Composable
 private fun BottomNav(model: KeyraViewModel, active: Screen) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .background(Midnight)
+            .navigationBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
         val compact = maxWidth < 360.dp
-        NavigationBar(
-            containerColor = Slate,
-            tonalElevation = 10.dp,
-            modifier = Modifier.navigationBarsPadding()
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = Slate.copy(alpha = .98f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha = .28f)),
+            shadowElevation = 8.dp
         ) {
-            NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
-            NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
-            NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
-            NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
+                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
+                NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
+                NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
+            }
         }
     }
 }
@@ -1270,19 +1285,45 @@ private fun RowScope.NavItem(
     compact: Boolean,
     onClick: () -> Unit
 ) {
-    NavigationBarItem(
-        selected = selected,
-        onClick = onClick,
-        icon = { Icon(icon, contentDescription = label, modifier = Modifier.size(if (compact) 21.dp else 24.dp)) },
-        label = { Text(label, fontSize = if (compact) 9.sp else 11.sp, maxLines = 1) },
-        colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Cyan,
-            selectedTextColor = Cyan,
-            indicatorColor = Color(0xFF0A3242),
-            unselectedIconColor = Muted,
-            unselectedTextColor = Muted
-        )
-    )
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(if (compact) 52.dp else 58.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (selected) Cyan.copy(alpha = .11f) else Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = if (selected) Cyan.copy(alpha = .30f) else Color.Transparent,
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) Cyan else Muted,
+                modifier = Modifier.size(if (compact) 20.dp else 23.dp)
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                label,
+                color = if (selected) Cyan else Muted,
+                fontSize = if (compact) 8.sp else 10.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1
+            )
+            Spacer(Modifier.height(3.dp))
+            Box(
+                Modifier
+                    .width(if (selected) 24.dp else 0.dp)
+                    .height(2.dp)
+                    .clip(CircleShape)
+                    .background(Cyan)
+            )
+        }
+    }
 }
 
 internal fun isStrongPassword(password: String): Boolean {
