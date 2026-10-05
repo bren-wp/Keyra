@@ -17,6 +17,8 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -59,15 +62,22 @@ import org.json.JSONObject
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import java.io.ByteArrayOutputStream
 import java.text.DateFormat
 import java.util.Date
+import java.util.Calendar
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 private val Midnight = Color(0xFF0B0F14)
 private val Slate = Color(0xFF121826)
@@ -371,6 +381,30 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.UNLOCK
     }
 
+    fun eraseAllLocalData(): Boolean {
+        val vaultDestroyed = store.destroy()
+        val preferencesCleared = prefs.edit().clear().commit()
+        if (!vaultDestroyed || !preferencesCleared) {
+            message = "Sve lokalne podatke nije moguće sigurno izbrisati. Pokušajte ponovno."
+            return false
+        }
+
+        items.clear()
+        selected = null
+        sessionPassword = null
+        vaultCategoryFilter = null
+        vaultTypeFilter = null
+        isSetup = false
+        unlocked = false
+        importingNewVault = false
+        biometricEnabled = false
+        sensitiveReauthEnabled = false
+        autoLockSeconds = 0
+        screen = Screen.ONBOARDING
+        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        return true
+    }
+
     fun saveItem(item: VaultItem) {
         val saved = item.copy(updatedAt = System.currentTimeMillis())
         val next = items.toMutableList()
@@ -389,6 +423,29 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
+    fun toggleSelectedFavorite() {
+        val target = selected ?: return
+        val updated = target.copy(
+            favorite = !target.favorite,
+            updatedAt = System.currentTimeMillis()
+        )
+        val next = items.map { if (it.id == target.id) updated else it }
+
+        runCatching { store.save(next) }
+            .onSuccess {
+                items.clear()
+                items.addAll(next)
+                selected = updated
+                message = if (updated.favorite)
+                    "Stavka je dodana u favorite."
+                else
+                    "Stavka je uklonjena iz favorita."
+            }
+            .onFailure {
+                message = "Promjenu favorita nije moguće spremiti."
+            }
+    }
+
     fun deleteSelected() {
         val target = selected ?: return
         val next = items.filterNot { it.id == target.id }
@@ -404,28 +461,68 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
-    fun exportBackup(context: Context) {
+    fun makeBackupPayload(): String? {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return
+            return null
         }
-        runCatching { PortableBackup.encrypt(store.toJson(items), password) }
-            .onSuccess { payload ->
-                copy(context, payload)
-                message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
-            }
-            .onFailure {
-                message = "Sigurnosnu kopiju nije moguće izraditi."
-            }
+        return runCatching { PortableBackup.encrypt(store.toJson(items), password) }
+            .onFailure { message = "Sigurnosnu kopiju nije moguće izraditi." }
+            .getOrNull()
     }
 
-    fun importBackup(context: Context) {
+    fun exportBackup(context: Context) {
+        val payload = makeBackupPayload() ?: return
+        copy(context, payload)
+        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    fun exportBackupToUri(context: Context, uri: Uri) {
+        val payload = makeBackupPayload() ?: return
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(payload.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
+        }.onSuccess {
+            message = "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
+        }.onFailure {
+            message = "Sigurnosnu kopiju nije moguće spremiti u odabranu datoteku."
+        }
+    }
+
+    fun importBackupPayload(payload: String): Boolean {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return
+            return false
         }
+        if (payload.isBlank()) {
+            message = "Odabrana sigurnosna kopija je prazna."
+            return false
+        }
+        if (payload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS) {
+            message = "Sigurnosna kopija je prevelika za siguran uvoz."
+            return false
+        }
+
+        return runCatching {
+            val json = PortableBackup.decrypt(payload, password)
+            val imported = store.fromJson(json)
+            store.save(imported)
+            imported
+        }.onSuccess { imported ->
+            items.clear()
+            items.addAll(imported)
+            selected = null
+            message = "Sigurnosna kopija uspješno je uvezena."
+        }.onFailure {
+            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
+        }.isSuccess
+    }
+
+    fun importBackup(context: Context) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = clipboard.primaryClip
         val text = if (clip != null && clip.itemCount > 0) {
@@ -437,23 +534,23 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Međuspremnik ne sadrži sigurnosnu kopiju."
             return
         }
-        if (text.length > MAX_BACKUP_CHARS) {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return
-        }
-        runCatching {
-            val json = PortableBackup.decrypt(text, password)
-            val imported = store.fromJson(json)
-            store.save(imported)
-            imported
-        }.onSuccess { imported ->
-            items.clear()
-            items.addAll(imported)
-            selected = null
+
+        if (importBackupPayload(text)) {
             clearClipboardIfMatches(context, text)
             message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
+        }
+    }
+
+    fun importBackupFromUri(context: Context, uri: Uri) {
+        runCatching {
+            val payload = readUtf8Limited(context, uri, MAX_BACKUP_CHARS)
+            if (!importBackupPayload(payload)) {
+                error("Uvoz sigurnosne kopije nije uspio.")
+            }
         }.onFailure {
-            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
+            if (message.isNullOrBlank() || message == "Sigurnosna kopija uspješno je uvezena.") {
+                message = "Odabranu sigurnosnu kopiju nije moguće uvesti."
+            }
         }
     }
 
@@ -636,6 +733,14 @@ private class CryptoStore {
         )
         return cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)).toString(Charsets.UTF_8)
     }
+
+    fun clearKey(): Boolean = runCatching {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (keyStore.containsAlias(alias)) {
+            keyStore.deleteEntry(alias)
+        }
+        true
+    }.getOrDefault(false)
 }
 
 internal fun normalizePortableUpdatedAt(
@@ -664,6 +769,12 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     }
 
     fun clear(): Boolean = prefs.edit().remove("vault_blob").commit()
+
+    fun destroy(): Boolean {
+        val blobCleared = clear()
+        val keyCleared = crypto.clearKey()
+        return blobCleared && keyCleared
+    }
 
     fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
@@ -695,9 +806,13 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     fun fromJson(json: String): List<VaultItem> {
         val array = JSONArray(json)
         require(array.length() <= MAX_VAULT_ITEMS) { "Previše stavki u trezoru." }
+        val seenIds = mutableSetOf<String>()
         return buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
+                val rawId = o.optString("id").trim()
+                val itemId = rawId.ifBlank { UUID.randomUUID().toString() }
+                require(seenIds.add(itemId)) { "Sigurnosna kopija sadrži duplicirane identifikatore stavki." }
                 val username = o.optString("username")
                 val password = o.optString("password")
                 val website = o.optString("website")
@@ -720,7 +835,7 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
                 }
                 add(
                     VaultItem(
-                        id = o.optString("id", UUID.randomUUID().toString()),
+                        id = itemId,
                         title = o.optString("title"),
                         username = username,
                         password = password,
@@ -738,6 +853,22 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
             }
         }
     }
+}
+
+internal fun readUtf8Limited(context: Context, uri: Uri, maxBytes: Int): String {
+    val output = ByteArrayOutputStream()
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= maxBytes) { "Sigurnosna kopija je prevelika." }
+            output.write(buffer, 0, read)
+        }
+    } ?: error("Odabranu datoteku nije moguće otvoriti.")
+    return output.toString(Charsets.UTF_8.name())
 }
 
 internal object PortableBackup {
@@ -852,7 +983,7 @@ internal object PortableBackup {
                     GCMParameterSpec(128, iv)
                 )
                 return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 lastError = error
             }
         }
@@ -1683,11 +1814,12 @@ private fun VaultScreen(model: KeyraViewModel) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Sve", "Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+            listOf("Sve", "Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
                 val label = when (value) {
                     "Prijava" -> "Prijave"
                     "Bilješka" -> "Bilješke"
                     "Kartica" -> "Kartice"
+                    "Autentifikator" -> "2FA"
                     else -> value
                 }
                 FilterChip(
@@ -1702,6 +1834,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                                 "Kartica" -> Icons.Outlined.CreditCard
                                 "Identitet" -> Icons.Outlined.Badge
                                 "Wi-Fi" -> Icons.Outlined.Wifi
+                                "Autentifikator" -> Icons.Outlined.Security
                                 "Favoriti" -> Icons.Outlined.Star
                                 else -> Icons.Outlined.GridView
                             },
@@ -1818,7 +1951,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                         )
                         Text(
                             if (model.items.isEmpty())
-                                "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                                "Dodajte prvu prijavu, bilješku, karticu, identitet, Wi‑Fi ili 2FA autentifikator."
                             else
                                 "Promijenite pretragu ili odaberite drugi filtar.",
                             color = Muted
@@ -1865,6 +1998,7 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         item.type == "Bilješka" -> "Zaštićena"
         item.type == "Kartica" -> "Zaštićena"
         item.type == "Identitet" -> "Zaštićen"
+        item.type == "Autentifikator" -> "2FA aktivan"
         else -> "Snažna"
     }
     val icon = when (item.type) {
@@ -1872,6 +2006,7 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         "Kartica" -> Icons.Outlined.CreditCard
         "Identitet" -> Icons.Outlined.Badge
         "Wi-Fi" -> Icons.Outlined.Wifi
+        "Autentifikator" -> Icons.Outlined.Security
         else -> Icons.Outlined.Lock
     }
     val accent = when (item.type) {
@@ -1879,12 +2014,16 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         "Kartica" -> Color(0xFFFFC247)
         "Identitet" -> Color(0xFFB48CFF)
         "Wi-Fi" -> Color(0xFF22BDF7)
+        "Autentifikator" -> Good
         else -> Cyan
     }
     val subtitle = when (item.type) {
         "Kartica" -> item.fields["Broj kartice"]?.let { "•••• " + it.takeLast(4) } ?: item.category
         "Identitet" -> item.fields["Puno ime"].orEmpty().ifBlank { item.category }
         "Wi-Fi" -> item.fields["Naziv mreže"].orEmpty().ifBlank { item.username.ifBlank { item.category } }
+        "Autentifikator" -> item.fields["Račun"].orEmpty().ifBlank {
+            item.fields["Izdavatelj"].orEmpty().ifBlank { item.category }
+        }
         "Bilješka" -> item.category
         else -> item.username.ifBlank { item.website.ifBlank { item.category } }
     }
@@ -2051,7 +2190,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                             expanded = filterMenuExpanded,
                             onDismissRequest = { filterMenuExpanded = false }
                         ) {
-                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti").forEach { value ->
+                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -2059,6 +2198,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                                                 "Prijava" -> "Lozinke"
                                                 "Bilješka" -> "Bilješke"
                                                 "Kartica" -> "Kartice"
+                                                "Autentifikator" -> "2FA"
                                                 else -> value
                                             }
                                         )
@@ -2091,7 +2231,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     .padding(horizontal = side, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti").forEach { value ->
+                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
                     FilterChip(
                         selected = type == value,
                         onClick = { type = value },
@@ -2101,6 +2241,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                                     "Prijava" -> "Lozinke"
                                     "Bilješka" -> "Bilješke"
                                     "Kartica" -> "Kartice"
+                                    "Autentifikator" -> "2FA"
                                     else -> value
                                 }
                             )
@@ -2407,6 +2548,231 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 }
 
+internal data class TotpConfig(
+    val secret: String,
+    val issuer: String = "",
+    val account: String = "",
+    val algorithm: String = "SHA1",
+    val digits: Int = 6,
+    val period: Int = 30
+)
+
+private const val BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+internal fun normalizeBase32Secret(raw: String): String? {
+    val clean = raw
+        .trim()
+        .replace(" ", "")
+        .replace("-", "")
+        .trimEnd('=')
+        .uppercase()
+
+    if (clean.isBlank() || clean.any { it !in BASE32_ALPHABET }) return null
+    return if (decodeBase32(clean)?.isNotEmpty() == true) clean else null
+}
+
+internal fun decodeBase32(raw: String): ByteArray? {
+    val clean = raw.trim().trimEnd('=').uppercase()
+    if (clean.isBlank()) return null
+
+    val output = ArrayList<Byte>()
+    var buffer = 0
+    var bits = 0
+
+    for (char in clean) {
+        val value = BASE32_ALPHABET.indexOf(char)
+        if (value < 0) return null
+
+        buffer = (buffer shl 5) or value
+        bits += 5
+
+        while (bits >= 8) {
+            bits -= 8
+            output.add(((buffer shr bits) and 0xFF).toByte())
+            buffer = if (bits == 0) 0 else buffer and ((1 shl bits) - 1)
+        }
+    }
+
+    return output.toByteArray()
+}
+
+private fun normalizeTotpAlgorithm(raw: String): String? = when (
+    raw.trim().uppercase().replace("-", "")
+) {
+    "SHA1" -> "SHA1"
+    "SHA256" -> "SHA256"
+    "SHA512" -> "SHA512"
+    else -> null
+}
+
+private fun decodeUrlPart(value: String): String =
+    runCatching { URLDecoder.decode(value, StandardCharsets.UTF_8.name()) }
+        .getOrDefault(value)
+
+internal fun parseTotpInput(
+    raw: String,
+    fallbackIssuer: String = "",
+    fallbackAccount: String = "",
+    fallbackAlgorithm: String = "SHA1",
+    fallbackDigits: Int = 6,
+    fallbackPeriod: Int = 30
+): TotpConfig? {
+    val input = raw.trim()
+    if (input.isBlank()) return null
+
+    if (!input.startsWith("otpauth://", ignoreCase = true)) {
+        val secret = normalizeBase32Secret(input) ?: return null
+        val algorithm = normalizeTotpAlgorithm(fallbackAlgorithm) ?: "SHA1"
+        val digits = fallbackDigits.takeIf { it in 6..8 } ?: 6
+        val period = fallbackPeriod.takeIf { it in 15..120 } ?: 30
+        return TotpConfig(
+            secret = secret,
+            issuer = fallbackIssuer.trim(),
+            account = fallbackAccount.trim(),
+            algorithm = algorithm,
+            digits = digits,
+            period = period
+        )
+    }
+
+    val uri = runCatching { URI(input) }.getOrNull() ?: return null
+    if (!uri.scheme.equals("otpauth", ignoreCase = true)) return null
+    if (!uri.host.equals("totp", ignoreCase = true)) return null
+
+    val params = uri.rawQuery
+        ?.split("&")
+        ?.mapNotNull { entry ->
+            val pair = entry.split("=", limit = 2)
+            if (pair.isEmpty()) null
+            else decodeUrlPart(pair[0]).lowercase() to decodeUrlPart(pair.getOrElse(1) { "" })
+        }
+        ?.toMap()
+        .orEmpty()
+
+    val secret = normalizeBase32Secret(params["secret"].orEmpty()) ?: return null
+    val label = decodeUrlPart(uri.rawPath.orEmpty().trimStart('/'))
+    val labelParts = label.split(":", limit = 2)
+    val labelIssuer = if (labelParts.size == 2) labelParts[0].trim() else ""
+    val labelAccount = if (labelParts.size == 2) labelParts[1].trim() else label.trim()
+
+    val issuer = params["issuer"].orEmpty().trim().ifBlank {
+        fallbackIssuer.trim().ifBlank { labelIssuer }
+    }
+    val account = fallbackAccount.trim().ifBlank { labelAccount }
+    val algorithm = normalizeTotpAlgorithm(params["algorithm"] ?: fallbackAlgorithm) ?: return null
+    val digits = (params["digits"]?.toIntOrNull() ?: fallbackDigits).takeIf { it in 6..8 } ?: return null
+    val period = (params["period"]?.toIntOrNull() ?: fallbackPeriod).takeIf { it in 15..120 } ?: return null
+
+    return TotpConfig(
+        secret = secret,
+        issuer = issuer,
+        account = account,
+        algorithm = algorithm,
+        digits = digits,
+        period = period
+    )
+}
+
+internal fun generateTotp(
+    config: TotpConfig,
+    timeMillis: Long = System.currentTimeMillis()
+): String? {
+    val secretBytes = decodeBase32(config.secret) ?: return null
+    if (secretBytes.isEmpty()) return null
+
+    val counter = (timeMillis / 1000L) / config.period
+    val counterBytes = ByteArray(8)
+    for (index in 0 until 8) {
+        counterBytes[7 - index] = ((counter ushr (index * 8)) and 0xFF).toByte()
+    }
+
+    val macName = when (config.algorithm) {
+        "SHA256" -> "HmacSHA256"
+        "SHA512" -> "HmacSHA512"
+        else -> "HmacSHA1"
+    }
+    val hash = runCatching {
+        val mac = Mac.getInstance(macName)
+        mac.init(SecretKeySpec(secretBytes, macName))
+        mac.doFinal(counterBytes)
+    }.getOrNull() ?: return null
+
+    val offset = hash.last().toInt() and 0x0F
+    if (offset + 3 >= hash.size) return null
+
+    val binary =
+        ((hash[offset].toInt() and 0x7F) shl 24) or
+        ((hash[offset + 1].toInt() and 0xFF) shl 16) or
+        ((hash[offset + 2].toInt() and 0xFF) shl 8) or
+        (hash[offset + 3].toInt() and 0xFF)
+
+    var modulo = 1
+    repeat(config.digits) { modulo *= 10 }
+    return (binary % modulo).toString().padStart(config.digits, '0')
+}
+
+internal fun totpRemainingSeconds(
+    config: TotpConfig,
+    timeMillis: Long = System.currentTimeMillis()
+): Int {
+    val elapsed = ((timeMillis / 1000L) % config.period).toInt()
+    return config.period - elapsed
+}
+
+internal fun totpConfigFromFields(fields: Map<String, String>): TotpConfig? {
+    val secret = fields["TOTP tajna"] ?: return null
+    return parseTotpInput(
+        raw = secret,
+        fallbackIssuer = fields["Izdavatelj"].orEmpty(),
+        fallbackAccount = fields["Račun"].orEmpty(),
+        fallbackAlgorithm = fields["Algoritam"].orEmpty().ifBlank { "SHA1" },
+        fallbackDigits = fields["Znamenke"]?.toIntOrNull() ?: 6,
+        fallbackPeriod = fields["Period"]?.toIntOrNull() ?: 30
+    )
+}
+
+internal fun formatTotpCode(code: String): String = when {
+    code.length == 6 -> code.chunked(3).joinToString(" ")
+    code.length == 8 -> code.chunked(4).joinToString(" ")
+    else -> code
+}
+
+internal fun isValidCardNumber(raw: String): Boolean {
+    val digits = raw.filter(Char::isDigit)
+    if (digits.length !in 12..19) return false
+    if (digits.toSet().size < 2) return false
+
+    var sum = 0
+    var doubleDigit = false
+    for (index in digits.indices.reversed()) {
+        var value = digits[index].digitToInt()
+        if (doubleDigit) {
+            value *= 2
+            if (value > 9) value -= 9
+        }
+        sum += value
+        doubleDigit = !doubleDigit
+    }
+    return sum % 10 == 0
+}
+
+internal fun isCardExpiryNotPast(
+    raw: String,
+    currentYear: Int,
+    currentMonth: Int
+): Boolean {
+    val match = Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matchEntire(raw.trim())
+        ?: return false
+    val month = match.groupValues[1].toInt()
+    val yearPart = match.groupValues[2].toInt()
+    val year = if (match.groupValues[2].length == 2) {
+        2000 + yearPart
+    } else {
+        yearPart
+    }
+    return year > currentYear || (year == currentYear && month >= currentMonth)
+}
+
 internal fun formatCardExpiry(raw: String): String {
     val digits = raw.filter(Char::isDigit).take(6)
     return when {
@@ -2464,6 +2830,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 "Kartica" -> original.fields["Vlasnik kartice"].orEmpty()
                 "Identitet" -> original.fields["Puno ime"].orEmpty()
                 "Wi-Fi" -> original.fields["Naziv mreže"].orEmpty()
+                "Autentifikator" -> original.fields["Izdavatelj"].orEmpty()
                 else -> ""
             }
         )
@@ -2474,6 +2841,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 "Kartica" -> original.fields["Broj kartice"].orEmpty()
                 "Identitet" -> original.fields["Broj dokumenta"].orEmpty()
                 "Wi-Fi" -> original.fields["Vrsta zaštite"].orEmpty()
+                "Autentifikator" -> original.fields["Račun"].orEmpty()
                 else -> ""
             }
         )
@@ -2483,6 +2851,7 @@ private fun AddScreen(model: KeyraViewModel) {
             when (original?.type) {
                 "Kartica" -> original.fields["Vrijedi do"].orEmpty()
                 "Identitet" -> original.fields["Datum isteka"].orEmpty()
+                "Autentifikator" -> original.fields["TOTP tajna"].orEmpty()
                 else -> ""
             }
         )
@@ -2490,12 +2859,36 @@ private fun AddScreen(model: KeyraViewModel) {
     var field4 by remember(original?.id) {
         mutableStateOf(if (original?.type == "Kartica") original.fields["Sigurnosni kod"].orEmpty() else "")
     }
+    var totpAlgorithm by remember(original?.id) {
+        mutableStateOf(original?.fields?.get("Algoritam").orEmpty().ifBlank { "SHA1" })
+    }
+    var totpDigits by remember(original?.id) {
+        mutableIntStateOf(original?.fields?.get("Znamenke")?.toIntOrNull() ?: 6)
+    }
+    var totpPeriod by remember(original?.id) {
+        mutableIntStateOf(original?.fields?.get("Period")?.toIntOrNull() ?: 30)
+    }
+    val totpPreview = remember(type, field1, field2, field3, totpAlgorithm, totpDigits, totpPeriod) {
+        if (type == "Autentifikator") {
+            parseTotpInput(
+                raw = field3,
+                fallbackIssuer = field1,
+                fallbackAccount = field2,
+                fallbackAlgorithm = totpAlgorithm,
+                fallbackDigits = totpDigits,
+                fallbackPeriod = totpPeriod
+            )
+        } else {
+            null
+        }
+    }
 
     val itemLabel = when (type) {
         "Bilješka" -> "bilješku"
         "Kartica" -> "karticu"
         "Identitet" -> "identitet"
         "Wi-Fi" -> "Wi-Fi"
+        "Autentifikator" -> "autentifikator"
         else -> "prijavu"
     }
     val screenTitle = if (original == null) "Dodaj $itemLabel" else "Uredi $itemLabel"
@@ -2504,6 +2897,7 @@ private fun AddScreen(model: KeyraViewModel) {
         "Kartica" -> "Zaštitite podatke kartice i držite ih na jednom mjestu"
         "Identitet" -> "Sigurno spremite podatke identiteta i dokumenata"
         "Wi-Fi" -> "Spremite naziv mreže, zaštitu i pristupne podatke"
+        "Autentifikator" -> "Generirajte vremenski 2FA kod koji se automatski mijenja"
         else -> "Sigurno spremite svoje vjerodajnice"
     }
     val saveLabel = when (type) {
@@ -2511,6 +2905,7 @@ private fun AddScreen(model: KeyraViewModel) {
         "Kartica" -> "Spremi karticu"
         "Identitet" -> "Spremi identitet"
         "Wi-Fi" -> "Spremi Wi-Fi"
+        "Autentifikator" -> "Spremi autentifikator"
         else -> "Spremi prijavu"
     }
 
@@ -2552,13 +2947,14 @@ private fun AddScreen(model: KeyraViewModel) {
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi").forEach { value ->
+                    listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator").forEach { value ->
                         FilterChip(
                             selected = type == value,
                             onClick = {
                                 if (original == null) {
                                     type = value
                                     field1 = ""; field2 = ""; field3 = ""; field4 = ""
+                                    totpAlgorithm = "SHA1"; totpDigits = 6; totpPeriod = 30
                                 }
                             },
                             enabled = original == null || type == value,
@@ -2570,6 +2966,7 @@ private fun AddScreen(model: KeyraViewModel) {
                                         "Kartica" -> Icons.Outlined.CreditCard
                                         "Identitet" -> Icons.Outlined.Badge
                                         "Wi-Fi" -> Icons.Outlined.Wifi
+                                        "Autentifikator" -> Icons.Outlined.Security
                                         else -> Icons.Outlined.Lock
                                     },
                                     null,
@@ -2619,6 +3016,61 @@ private fun AddScreen(model: KeyraViewModel) {
                 item { KeyraTextField(field3, { field3 = it }, "Datum isteka", Icons.Outlined.DateRange) }
             }
 
+            if (type == "Autentifikator") {
+                item { KeyraTextField(field1, { field1 = it }, "Izdavatelj / servis", Icons.Outlined.Security) }
+                item { KeyraTextField(field2, { field2 = it }, "Račun / e-pošta", Icons.Outlined.Person) }
+                item {
+                    KeyraPasswordField(
+                        field3,
+                        { field3 = it },
+                        show,
+                        { show = !show },
+                        "TOTP tajna ili otpauth:// URI"
+                    )
+                    val parsed = totpPreview
+                    if (parsed != null) {
+                        Text(
+                            "TOTP • ${parsed.algorithm} • ${parsed.digits} znamenki • ${parsed.period} s",
+                            color = Good,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    } else if (field3.isNotBlank()) {
+                        Text(
+                            "Tajna mora biti Base32 ili valjani otpauth://totp URI.",
+                            color = Warn,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    if (field3.trim().startsWith("otpauth://", ignoreCase = true) && parsed != null) {
+                        TextButton(
+                            onClick = {
+                                field1 = parsed.issuer
+                                field2 = parsed.account
+                                if (title.isBlank()) {
+                                    title = parsed.issuer.ifBlank { parsed.account }
+                                }
+                                field3 = parsed.secret
+                                totpAlgorithm = parsed.algorithm
+                                totpDigits = parsed.digits
+                                totpPeriod = parsed.period
+                                model.message = "Podaci autentifikatora učitani su iz otpauth URI-ja."
+                            }
+                        ) {
+                            Icon(Icons.Outlined.Download, contentDescription = null)
+                            Spacer(Modifier.width(5.dp))
+                            Text("Učitaj podatke iz URI-ja")
+                        }
+                    }
+                    Text(
+                        "Kompatibilno s RFC 6238 TOTP aplikacijama. Kod se obnavlja prema vremenu uređaja.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
             item {
                 KeyraTextField(notes, { notes = it.take(500) }, "Bilješke (nije obavezno)", Icons.Outlined.Description, singleLine = false)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -2648,6 +3100,9 @@ private fun AddScreen(model: KeyraViewModel) {
                 Button(
                     onClick = {
                         val cleanTitle = title.trim()
+                        val now = Calendar.getInstance()
+                        val currentYear = now.get(Calendar.YEAR)
+                        val currentMonth = now.get(Calendar.MONTH) + 1
                         val validationMessage = when {
                             cleanTitle.isBlank() -> "Unesite naslov stavke."
                             type == "Prijava" && website.isNotBlank() && normalizedWebsiteUri(website) == null ->
@@ -2656,12 +3111,18 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Unesite naziv Wi-Fi mreže."
                             type == "Kartica" && field2.isNotBlank() && field2.length !in 12..19 ->
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
+                            type == "Kartica" && field2.isNotBlank() && !isValidCardNumber(field2) ->
+                                "Broj kartice nije prošao provjeru kontrolne znamenke."
                             type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
                                 "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             type == "Kartica" && field3.isNotBlank() && !Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matches(field3.trim()) ->
                                 "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
+                            type == "Kartica" && field3.isNotBlank() && !isCardExpiryNotPast(field3, currentYear, currentMonth) ->
+                                "Datum isteka kartice je u prošlosti."
                             type == "Identitet" && field1.isBlank() && field2.isBlank() ->
                                 "Unesite puno ime ili broj dokumenta."
+                            type == "Autentifikator" && totpPreview == null ->
+                                "Unesite valjanu Base32 TOTP tajnu ili otpauth:// URI."
                             else -> null
                         }
                         if (validationMessage != null) {
@@ -2683,6 +3144,17 @@ private fun AddScreen(model: KeyraViewModel) {
                                     "Naziv mreže" to field1,
                                     "Vrsta zaštite" to field2
                                 ).filterValues { it.isNotBlank() }
+                                "Autentifikator" -> {
+                                    val config = requireNotNull(totpPreview)
+                                    mapOf(
+                                        "Izdavatelj" to config.issuer,
+                                        "Račun" to config.account,
+                                        "TOTP tajna" to config.secret,
+                                        "Algoritam" to config.algorithm,
+                                        "Znamenke" to config.digits.toString(),
+                                        "Period" to config.period.toString()
+                                    ).filterValues { it.isNotBlank() }
+                                }
                                 else -> emptyMap()
                             }
 
@@ -2742,17 +3214,39 @@ private fun DetailScreen(
     var revealCardNumber by remember(current.id) { mutableStateOf(false) }
     var revealSecurityCode by remember(current.id) { mutableStateOf(false) }
     var revealDocumentNumber by remember(current.id) { mutableStateOf(false) }
+    var revealTotpSecret by remember(current.id) { mutableStateOf(false) }
     var confirmDelete by remember(current.id) { mutableStateOf(false) }
+    var selectedTab by remember(current.id) { mutableStateOf("Detalji") }
+    var totpNow by remember(current.id) { mutableLongStateOf(System.currentTimeMillis()) }
     val context = LocalContext.current
+    val totpConfig = remember(current.id, current.fields) {
+        if (current.type == "Autentifikator") totpConfigFromFields(current.fields) else null
+    }
+
+    LaunchedEffect(current.id, current.type, totpConfig?.period) {
+        if (current.type == "Autentifikator" && totpConfig != null) {
+            while (true) {
+                totpNow = System.currentTimeMillis()
+                delay(1_000)
+            }
+        }
+    }
     val isPasswordItem = current.type == "Prijava" || current.type == "Wi-Fi"
+    val duplicatedPassword = isPasswordItem &&
+        current.password.isNotBlank() &&
+        model.items.any { it.id != current.id && it.password == current.password }
     val securityLabel = when {
+        current.type == "Autentifikator" && totpConfig != null -> "TOTP aktivan"
+        current.type == "Autentifikator" -> "TOTP greška"
         isPasswordItem && current.password.isBlank() -> "Bez lozinke"
+        duplicatedPassword -> "Ponovno korištena"
         isPasswordItem && isStrongPassword(current.password) -> "Snažna"
         isPasswordItem -> "Potrebno ažuriranje"
         else -> "Zaštićena"
     }
     val securityColor = when (securityLabel) {
-        "Snažna", "Zaštićena" -> Good
+        "Snažna", "Zaštićena", "TOTP aktivan" -> Good
+        "Ponovno korištena", "TOTP greška" -> Danger
         "Potrebno ažuriranje" -> Warn
         else -> Muted
     }
@@ -2773,6 +3267,7 @@ private fun DetailScreen(
         "Kartica" -> Icons.Outlined.CreditCard
         "Identitet" -> Icons.Outlined.Badge
         "Wi-Fi" -> Icons.Outlined.Wifi
+        "Autentifikator" -> Icons.Outlined.Security
         else -> Icons.Outlined.Lock
     }
 
@@ -2818,15 +3313,27 @@ private fun DetailScreen(
                 Text(current.title, color = Color.White, fontSize = if (compact) 23.sp else 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
                 Text(current.type + " • " + current.category, color = Muted)
             }
-            if (current.favorite) Icon(Icons.Outlined.Star, null, tint = Warn)
+            IconButton(onClick = model::toggleSelectedFavorite) {
+                Icon(
+                    if (current.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                    contentDescription = if (current.favorite) "Ukloni iz favorita" else "Dodaj u favorite",
+                    tint = if (current.favorite) Warn else Ice
+                )
+            }
         }
+
+        DetailTabBar(
+            selected = selectedTab,
+            onSelected = { selectedTab = it },
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)
+        )
 
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            if (current.type == "Prijava") {
+            if (selectedTab == "Detalji" && current.type == "Prijava") {
                 if (current.website.isNotBlank()) item {
                     DetailRow(Icons.Outlined.Link, "Web-stranica", current.website) {
                         if (!openWebsite(context, current.website)) {
@@ -2844,7 +3351,7 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.type == "Wi-Fi") {
+            if (selectedTab == "Detalji" && current.type == "Wi-Fi") {
                 current.fields["Naziv mreže"]?.takeIf { it.isNotBlank() }?.let { network ->
                     item { DetailRow(Icons.Outlined.Wifi, "Naziv mreže", network) }
                 }
@@ -2861,7 +3368,7 @@ private fun DetailScreen(
                 }
             }
 
-            if ((current.type == "Prijava" || current.type == "Wi-Fi") && current.password.isNotBlank()) item {
+            if (selectedTab == "Detalji" && (current.type == "Prijava" || current.type == "Wi-Fi") && current.password.isNotBlank()) item {
                 PasswordDetailRow(
                     password = current.password,
                     reveal = reveal,
@@ -2878,7 +3385,7 @@ private fun DetailScreen(
                 )
             }
 
-            if (current.type == "Kartica") {
+            if (selectedTab == "Detalji" && current.type == "Kartica") {
                 current.fields["Vlasnik kartice"]?.takeIf { it.isNotBlank() }?.let { value ->
                     item { DetailRow(Icons.Outlined.Person, "Vlasnik kartice", value) }
                 }
@@ -2929,7 +3436,7 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.type == "Identitet") {
+            if (selectedTab == "Detalji" && current.type == "Identitet") {
                 current.fields["Puno ime"]?.takeIf { it.isNotBlank() }?.let { value ->
                     item { DetailRow(Icons.Outlined.Person, "Puno ime", value) }
                 }
@@ -2959,51 +3466,167 @@ private fun DetailScreen(
                 }
             }
 
-            if (current.notes.isNotBlank()) item {
-                DetailRow(Icons.Outlined.Description, "Bilješke", current.notes)
-            }
-
-            item {
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    if (maxWidth < 500.dp) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Security,
-                                label = "Ocjena sigurnosti",
-                                value = securityLabel,
-                                accent = securityColor,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Schedule,
-                                label = "Zadnje ažurirano",
-                                value = updatedLabel,
-                                accent = Indigo,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Security,
-                                label = "Ocjena sigurnosti",
-                                value = securityLabel,
-                                accent = securityColor,
-                                modifier = Modifier.weight(1f)
-                            )
-                            DetailMetaCard(
-                                icon = Icons.Outlined.Schedule,
-                                label = "Zadnje ažurirano",
-                                value = updatedLabel,
-                                accent = Indigo,
-                                modifier = Modifier.weight(1f)
-                            )
+            if (selectedTab == "Detalji" && current.type == "Autentifikator") {
+                val config = totpConfig
+                if (config != null) {
+                    item {
+                        TotpCodeCard(
+                            config = config,
+                            nowMillis = totpNow,
+                            onCopy = {
+                                val code = generateTotp(config, totpNow)
+                                if (code != null) {
+                                    guarded("Potvrdite identitet za kopiranje 2FA koda.") {
+                                        copy(context, code)
+                                        model.message = "2FA kod kopiran je i automatski će se ukloniti."
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    if (config.issuer.isNotBlank()) item {
+                        DetailRow(Icons.Outlined.Business, "Izdavatelj", config.issuer)
+                    }
+                    if (config.account.isNotBlank()) item {
+                        DetailRow(Icons.Outlined.Person, "Račun", config.account)
+                    }
+                    item {
+                        SensitiveDetailRow(
+                            icon = Icons.Outlined.Key,
+                            label = "TOTP tajna",
+                            value = config.secret,
+                            reveal = revealTotpSecret,
+                            hidden = "••••••••" + config.secret.takeLast(4),
+                            onReveal = {
+                                if (revealTotpSecret) revealTotpSecret = false
+                                else guarded("Potvrdite identitet za prikaz TOTP tajne.") {
+                                    revealTotpSecret = true
+                                }
+                            },
+                            onCopy = {
+                                guarded("Potvrdite identitet za kopiranje TOTP tajne.") {
+                                    copy(context, config.secret)
+                                    model.message = "TOTP tajna kopirana je i automatski će se ukloniti."
+                                }
+                            }
+                        )
+                    }
+                    item {
+                        DetailMetaCard(
+                            icon = Icons.Outlined.Schedule,
+                            label = "TOTP postavke",
+                            value = "${config.algorithm} • ${config.digits} znamenki • ${config.period} s",
+                            accent = Good,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    item {
+                        GlassCard {
+                            Icon(Icons.Outlined.Warning, contentDescription = null, tint = Danger)
+                            Text("TOTP konfiguracija nije valjana.", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Uredite stavku i ponovno unesite Base32 tajnu ili otpauth URI.", color = Muted)
+                            Button(
+                                onClick = model::editSelected,
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight)
+                            ) {
+                                Text("Uredi autentifikator", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
 
-            item {
+            if (selectedTab == "Detalji" && current.notes.isNotBlank()) item {
+                DetailRow(Icons.Outlined.Description, "Bilješke", current.notes)
+            }
+
+            if (selectedTab == "Sigurnost") {
+                item {
+                    GlassCard {
+                        Icon(Icons.Outlined.Security, contentDescription = null, tint = securityColor)
+                        Text("Ocjena sigurnosti", color = Muted, fontSize = 13.sp)
+                        Text(
+                            securityLabel,
+                            color = securityColor,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            when {
+                                duplicatedPassword ->
+                                    "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
+                                isPasswordItem && current.password.isBlank() ->
+                                    "Ova stavka nema spremljenu lozinku."
+                                isPasswordItem && !isStrongPassword(current.password) ->
+                                    "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                isPasswordItem ->
+                                    "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                current.type == "Autentifikator" && totpConfig != null ->
+                                    "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                current.type == "Autentifikator" ->
+                                    "TOTP konfiguracija nije valjana i treba je urediti."
+                                else ->
+                                    "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
+                            },
+                            color = Muted
+                        )
+                    }
+                }
+                item {
+                    DetailMetaCard(
+                        icon = Icons.Outlined.Security,
+                        label = "Zaštita stavke",
+                        value = if (model.sensitiveReauthEnabled && model.biometricEnabled)
+                            "Dodatna potvrda uključena"
+                        else
+                            "Zaštita trezora",
+                        accent = Cyan,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (
+                    isPasswordItem &&
+                    (current.password.isBlank() || duplicatedPassword || !isStrongPassword(current.password))
+                ) {
+                    item {
+                        Button(
+                            onClick = model::editSelected,
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                            shape = RoundedCornerShape(27.dp)
+                        ) {
+                            Icon(Icons.Outlined.Edit, contentDescription = null)
+                            Spacer(Modifier.width(7.dp))
+                            Text("Uredi i promijeni lozinku", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            if (selectedTab == "Aktivnost") {
+                item {
+                    DetailMetaCard(
+                        icon = Icons.Outlined.Schedule,
+                        label = "Zadnja izmjena",
+                        value = updatedLabel,
+                        accent = Indigo,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    GlassCard {
+                        Icon(Icons.Outlined.Info, contentDescription = null, tint = Cyan)
+                        Text("Aktivnost stavke", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Keyra čuva samo vrijeme posljednje izmjene ove stavke. Radi privatnosti ne zapisuje povijest otvaranja, prikaza ni kopiranja osjetljivih vrijednosti.",
+                            color = Muted
+                        )
+                    }
+                }
+            }
+
+            if (selectedTab == "Detalji") item {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     if (maxWidth < 390.dp) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3056,6 +3679,110 @@ private fun DetailScreen(
             }
         }
         }
+        }
+    }
+}
+
+@Composable
+private fun TotpCodeCard(
+    config: TotpConfig,
+    nowMillis: Long,
+    onCopy: () -> Unit
+) {
+    val code = generateTotp(config, nowMillis) ?: "—".repeat(config.digits)
+    val remaining = totpRemainingSeconds(config, nowMillis)
+    val progress = (remaining.toFloat() / config.period.toFloat()).coerceIn(0f, 1f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Slate,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha = .65f))
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Good.copy(alpha = .14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Outlined.Security, contentDescription = null, tint = Good)
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Vremenski 2FA kod", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Automatski se mijenja svakih ${config.period} s", color = Muted, fontSize = 12.sp)
+                }
+                IconButton(onClick = onCopy) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Kopiraj 2FA kod", tint = Ice)
+                }
+            }
+
+            Text(
+                formatTotpCode(code),
+                color = Cyan,
+                fontSize = 38.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.size(34.dp),
+                    color = Good,
+                    trackColor = Color(0xFF203449),
+                    strokeWidth = 4.dp
+                )
+                Spacer(Modifier.width(10.dp))
+                Text("$remaining s do novog koda", color = Muted, fontSize = 13.sp)
+            }
+
+            Text(
+                "Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.",
+                color = Muted,
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailTabBar(
+    selected: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(Slate),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        listOf("Detalji", "Sigurnost", "Aktivnost").forEach { label ->
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelected(label) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (selected == label) Cyan.copy(alpha = .16f) else Color.Transparent,
+                border = if (selected == label)
+                    androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .8f))
+                else
+                    null
+            ) {
+                Text(
+                    label,
+                    color = if (selected == label) Cyan else Muted,
+                    fontWeight = if (selected == label) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            }
         }
     }
 }
@@ -3193,6 +3920,28 @@ private fun SettingsScreen(
     val context = LocalContext.current
     var search by remember { mutableStateOf("") }
     var confirmImport by remember { mutableStateOf(false) }
+    var confirmErase by remember { mutableStateOf(false) }
+    var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
+
+    val exportFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
+                    model.exportBackupToUri(context, uri)
+                }
+            } else {
+                model.exportBackupToUri(context, uri)
+            }
+        }
+    }
+
+    val importFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) pendingFileImport = uri
+    }
 
     fun runProtectedImport() {
         if (model.sensitiveReauthEnabled && model.biometricEnabled) {
@@ -3213,11 +3962,102 @@ private fun SettingsScreen(
         "Automatsko zaključavanje",
         "Provjera sigurnosti"
     )
-    val dataVisible = matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+    val dataVisible = matches(
+        "Kopiraj sigurnosnu kopiju",
+        "Uvezi sigurnosnu kopiju",
+        "Spremi šifriranu kopiju",
+        "Privatni cloud",
+        "Proton Drive",
+        "Files",
+        "sigurnosna kopija"
+    )
     val preferenceVisible = matches("Tamni način", "tamni izgled")
-    val privacyVisible = matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+    val privacyVisible = matches(
+        "O aplikaciji Keyra",
+        "Pravila privatnosti",
+        "Privatnost",
+        "Izbriši sve lokalne podatke",
+        "Zaključaj trezor",
+        "sigurnost privatnost"
+    )
 
     Column(Modifier.fillMaxSize()) {
+        if (confirmErase) {
+            AlertDialog(
+                onDismissRequest = { confirmErase = false },
+                icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
+                title = { Text("Izbrisati sve lokalne podatke?") },
+                text = {
+                    Text(
+                        "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                            "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmErase = false
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                                    model.eraseAllLocalData()
+                                }
+                            } else {
+                                model.eraseAllLocalData()
+                            }
+                        }
+                    ) {
+                        Text("Trajno izbriši", color = Danger)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmErase = false }) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
+        pendingFileImport?.let { uri ->
+            AlertDialog(
+                onDismissRequest = { pendingFileImport = null },
+                icon = {
+                    Icon(
+                        Icons.Outlined.CloudDownload,
+                        contentDescription = null,
+                        tint = Warn
+                    )
+                },
+                title = { Text("Uvesti šifriranu datoteku?") },
+                text = {
+                    Text(
+                        "Odabrana .keyra sigurnosna kopija zamijenit će trenutačni sadržaj trezora. " +
+                            "Datoteka se prvo provjerava i dešifrira prije spremanja."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingFileImport = null
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
+                                    model.importBackupFromUri(context, uri)
+                                }
+                            } else {
+                                model.importBackupFromUri(context, uri)
+                            }
+                        }
+                    ) {
+                        Text("Uvezi i zamijeni", color = Warn)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingFileImport = null }) {
+                        Text("Odustani")
+                    }
+                },
+                containerColor = Slate
+            )
+        }
+
         if (confirmImport) {
             AlertDialog(
                 onDismissRequest = { confirmImport = false },
@@ -3319,6 +4159,43 @@ private fun SettingsScreen(
             }
 
             if (dataVisible) item { SectionTitle("UPRAVLJANJE PODACIMA") }
+            if (matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz")) item {
+                SettingRow(
+                    Icons.Outlined.CloudUpload,
+                    "Spremi šifriranu kopiju",
+                    "Spremite već šifriranu .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
+                ) {
+                    IconButton(onClick = {
+                        exportFileLauncher.launch("Keyra-backup.keyra")
+                    }) {
+                        Icon(
+                            Icons.Outlined.SaveAlt,
+                            contentDescription = "Spremi šifriranu kopiju",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+            if (matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz")) item {
+                SettingRow(
+                    Icons.Outlined.CloudDownload,
+                    "Uvezi šifriranu datoteku",
+                    "Odaberite šifriranu .keyra kopiju iz Files ili cloud providera i vratite trezor tek nakon izričite potvrde."
+                ) {
+                    IconButton(onClick = {
+                        importFileLauncher.launch(
+                            arrayOf("application/octet-stream", "text/plain", "application/*")
+                        )
+                    }) {
+                        Icon(
+                            Icons.Outlined.FolderOpen,
+                            contentDescription = "Uvezi šifriranu datoteku",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
@@ -3358,6 +4235,26 @@ private fun SettingsScreen(
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
                 SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+            }
+            if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
+                SettingRow(
+                    Icons.Outlined.PrivacyTip,
+                    "Pravila privatnosti",
+                    "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru.",
+                    onClick = {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
+                            model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
+                        }
+                    }
+                )
+            }
+            if (matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset")) item {
+                SettingRow(
+                    Icons.Outlined.DeleteForever,
+                    "Izbriši sve lokalne podatke",
+                    "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja.",
+                    onClick = { confirmErase = true }
+                )
             }
             if (matches("Zaključaj trezor", "zaključavanje")) item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {

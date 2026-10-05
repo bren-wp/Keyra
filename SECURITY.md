@@ -15,6 +15,10 @@ Stvarne lozinke, pristupne ključeve i privatne sigurnosne kopije nemojte prilag
 - novi trezor zahtijeva glavnu lozinku od najmanje 12 znakova
 - uzastopni pogrešni pokušaji otključavanja uvode privremeno zaključavanje
 - osjetljivi prikaz i kopiranje mogu zahtijevati dodatnu potvrdu identiteta
+- TOTP tajne čuvaju se unutar šifriranog trezora; kodovi se računaju lokalno prema RFC 6238 bez slanja tajne na udaljeni poslužitelj
+- TOTP podržava HMAC-SHA-1, HMAC-SHA-256 i HMAC-SHA-512 s kontroliranim brojem znamenki i periodom
+- izvoz u cloud počinje tek nakon lokalnog šifriranja KEYRA2 kopije; Keyra ne preuzima vjerodajnice cloud servisa
+- Android koristi sistemski Storage Access Framework bez široke storage dozvole, a iOS koristi sistemski Files dokumentni tok
 - biometrijska / uređajna potvrda može se uključiti samo kada je podržana i konfigurirana na uređaju
 - spremanje trezora mora uspjeti prije nego što aplikacija prikaže novo stanje kao spremljeno
 - Android onemogućuje snimanje osjetljivog prozora, a iOS skriva sadržaj tijekom aktivnog snimanja zaslona
@@ -24,5 +28,6 @@ Stvarne lozinke, pristupne ključeve i privatne sigurnosne kopije nemojte prilag
 - zamjena postojećeg trezora uvozom traži izričitu korisničku potvrdu
 - oštećena sigurnosna kopija ne zamjenjuje postojeći trezor
 - trezor se zaključava prema odabranoj politici automatskog zaključavanja
+- korisnik može pokrenuti potpuno lokalno brisanje trezora, auth podataka, postavki i uređajnog kriptografskog ključa
 
 Sigurnosne tvrdnje odnose se na implementirani model zaštite i ne znače da je bilo koji softver apsolutno neprobojan.

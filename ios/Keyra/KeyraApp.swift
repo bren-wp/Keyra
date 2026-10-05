@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import CryptoKit
 import CommonCrypto
@@ -34,6 +35,246 @@ extension Color {
             opacity: 1
         )
     }
+}
+
+struct TotpConfig {
+    let secret: String
+    let issuer: String
+    let account: String
+    let algorithm: String
+    let digits: Int
+    let period: Int
+}
+
+private let base32Alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+
+func normalizedBase32Secret(_ raw: String) -> String? {
+    let clean = raw
+        .uppercased()
+        .filter { $0 != " " && $0 != "-" }
+        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+
+    guard !clean.isEmpty else { return nil }
+    let allowed = Set(base32Alphabet)
+    guard clean.allSatisfy({ allowed.contains($0) }) else { return nil }
+    guard let decoded = decodeBase32(clean), !decoded.isEmpty else { return nil }
+    return clean
+}
+
+func decodeBase32(_ raw: String) -> Data? {
+    let clean = raw
+        .uppercased()
+        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+    guard !clean.isEmpty else { return nil }
+
+    let table = Dictionary(uniqueKeysWithValues: base32Alphabet.enumerated().map { ($0.element, $0.offset) })
+    var output = [UInt8]()
+    var buffer = 0
+    var bits = 0
+
+    for char in clean {
+        guard let value = table[char] else { return nil }
+        buffer = (buffer << 5) | value
+        bits += 5
+
+        while bits >= 8 {
+            bits -= 8
+            output.append(UInt8((buffer >> bits) & 0xFF))
+            buffer = bits == 0 ? 0 : buffer & ((1 << bits) - 1)
+        }
+    }
+
+    return Data(output)
+}
+
+private func normalizedTotpAlgorithm(_ raw: String) -> String? {
+    switch raw.uppercased().replacingOccurrences(of: "-", with: "") {
+    case "SHA1": return "SHA1"
+    case "SHA256": return "SHA256"
+    case "SHA512": return "SHA512"
+    default: return nil
+    }
+}
+
+func parseTotpInput(
+    _ raw: String,
+    fallbackIssuer: String = "",
+    fallbackAccount: String = "",
+    fallbackAlgorithm: String = "SHA1",
+    fallbackDigits: Int = 6,
+    fallbackPeriod: Int = 30
+) -> TotpConfig? {
+    let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !input.isEmpty else { return nil }
+
+    if !input.lowercased().hasPrefix("otpauth://") {
+        guard let secret = normalizedBase32Secret(input) else { return nil }
+        let algorithm = normalizedTotpAlgorithm(fallbackAlgorithm) ?? "SHA1"
+        let digits = (6...8).contains(fallbackDigits) ? fallbackDigits : 6
+        let period = (15...120).contains(fallbackPeriod) ? fallbackPeriod : 30
+        return TotpConfig(
+            secret: secret,
+            issuer: fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines),
+            account: fallbackAccount.trimmingCharacters(in: .whitespacesAndNewlines),
+            algorithm: algorithm,
+            digits: digits,
+            period: period
+        )
+    }
+
+    guard
+        let components = URLComponents(string: input),
+        components.scheme?.lowercased() == "otpauth",
+        components.host?.lowercased() == "totp"
+    else {
+        return nil
+    }
+
+    var params: [String: String] = [:]
+    for item in components.queryItems ?? [] {
+        params[item.name.lowercased()] = item.value ?? ""
+    }
+    guard let secret = normalizedBase32Secret(params["secret"] ?? "") else { return nil }
+
+    let rawLabel = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    let label = rawLabel.removingPercentEncoding ?? rawLabel
+    let labelParts = label.split(separator: ":", maxSplits: 1).map(String.init)
+    let labelIssuer = labelParts.count == 2 ? labelParts[0].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    let labelAccount = labelParts.count == 2
+        ? labelParts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        : label.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let issuer = (params["issuer"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedIssuer = issuer.isEmpty
+        ? (fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? labelIssuer
+            : fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines))
+        : issuer
+    let fallbackAccountValue = fallbackAccount.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedAccount = fallbackAccountValue.isEmpty ? labelAccount : fallbackAccountValue
+
+    guard let algorithm = normalizedTotpAlgorithm(params["algorithm"] ?? fallbackAlgorithm) else {
+        return nil
+    }
+    let digits = Int(params["digits"] ?? "") ?? fallbackDigits
+    let period = Int(params["period"] ?? "") ?? fallbackPeriod
+    guard (6...8).contains(digits), (15...120).contains(period) else { return nil }
+
+    return TotpConfig(
+        secret: secret,
+        issuer: resolvedIssuer,
+        account: resolvedAccount,
+        algorithm: algorithm,
+        digits: digits,
+        period: period
+    )
+}
+
+func generateTotp(
+    _ config: TotpConfig,
+    at date: Date = Date()
+) -> String? {
+    guard let secret = decodeBase32(config.secret), !secret.isEmpty else { return nil }
+
+    let counter = UInt64(date.timeIntervalSince1970) / UInt64(config.period)
+    var bigEndianCounter = counter.bigEndian
+    let counterData = withUnsafeBytes(of: &bigEndianCounter) { Data($0) }
+    let key = SymmetricKey(data: secret)
+
+    let hash: [UInt8]
+    switch config.algorithm {
+    case "SHA256":
+        hash = Array(HMAC<SHA256>.authenticationCode(for: counterData, using: key))
+    case "SHA512":
+        hash = Array(HMAC<SHA512>.authenticationCode(for: counterData, using: key))
+    default:
+        hash = Array(HMAC<Insecure.SHA1>.authenticationCode(for: counterData, using: key))
+    }
+
+    guard let last = hash.last else { return nil }
+    let offset = Int(last & 0x0F)
+    guard offset + 3 < hash.count else { return nil }
+
+    let binary =
+        (Int(hash[offset] & 0x7F) << 24) |
+        (Int(hash[offset + 1]) << 16) |
+        (Int(hash[offset + 2]) << 8) |
+        Int(hash[offset + 3])
+
+    var modulo = 1
+    for _ in 0..<config.digits { modulo *= 10 }
+    return String(format: "%0*d", config.digits, binary % modulo)
+}
+
+func totpRemainingSeconds(
+    _ config: TotpConfig,
+    at date: Date = Date()
+) -> Int {
+    let seconds = Int(date.timeIntervalSince1970)
+    return config.period - (seconds % config.period)
+}
+
+func totpConfigFromFields(_ fields: [String: String]) -> TotpConfig? {
+    guard let secret = fields["TOTP tajna"] else { return nil }
+    return parseTotpInput(
+        secret,
+        fallbackIssuer: fields["Izdavatelj"] ?? "",
+        fallbackAccount: fields["Račun"] ?? "",
+        fallbackAlgorithm: fields["Algoritam"] ?? "SHA1",
+        fallbackDigits: Int(fields["Znamenke"] ?? "") ?? 6,
+        fallbackPeriod: Int(fields["Period"] ?? "") ?? 30
+    )
+}
+
+func formatTotpCode(_ code: String) -> String {
+    if code.count == 6 {
+        return String(code.prefix(3)) + " " + String(code.suffix(3))
+    }
+    if code.count == 8 {
+        return String(code.prefix(4)) + " " + String(code.suffix(4))
+    }
+    return code
+}
+
+func isValidCardNumber(_ raw: String) -> Bool {
+    let digits = raw.compactMap { $0.wholeNumberValue }
+    guard (12...19).contains(digits.count) else { return false }
+    guard Set(digits).count >= 2 else { return false }
+
+    var sum = 0
+    var shouldDouble = false
+    for digit in digits.reversed() {
+        var value = digit
+        if shouldDouble {
+            value *= 2
+            if value > 9 { value -= 9 }
+        }
+        sum += value
+        shouldDouble.toggle()
+    }
+    return sum.isMultiple(of: 10)
+}
+
+func isCardExpiryNotPast(
+    _ raw: String,
+    now: Date = Date(),
+    calendar: Calendar = .current
+) -> Bool {
+    let parts = raw.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "/")
+    guard
+        parts.count == 2,
+        let month = Int(parts[0]),
+        (1...12).contains(month),
+        let parsedYear = Int(parts[1]),
+        parts[1].count == 2 || parts[1].count == 4
+    else {
+        return false
+    }
+
+    let year = parts[1].count == 2 ? 2000 + parsedYear : parsedYear
+    let currentYear = calendar.component(.year, from: now)
+    let currentMonth = calendar.component(.month, from: now)
+    return year > currentYear || (year == currentYear && month >= currentMonth)
 }
 
 func formatCardExpiry(_ raw: String) -> String {
@@ -224,6 +465,17 @@ enum KeychainVault {
         }
         throw KeyraError.keyUnavailable
     }
+
+    static func clear() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
 }
 
 final class AuthStore {
@@ -250,6 +502,12 @@ final class AuthStore {
         } catch {
             return false
         }
+    }
+
+    func clear() {
+        defaults.removeObject(forKey: "master_hash")
+        defaults.removeObject(forKey: "master_salt")
+        defaults.removeObject(forKey: "master_iterations")
     }
 
     func verify(password: String) -> Bool {
@@ -554,6 +812,9 @@ enum PortableBackup {
                 guard decoded.count <= maxVaultItems else {
                     throw KeyraError.invalidBackup
                 }
+                guard Set(decoded.map(\.id)).count == decoded.count else {
+                    throw KeyraError.invalidBackup
+                }
                 return decoded
             } catch {
                 lastError = error
@@ -564,6 +825,39 @@ enum PortableBackup {
             throw lastError
         }
         throw KeyraError.invalidBackup
+    }
+}
+
+struct KeyraBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] {
+        [UTType(filenameExtension: "keyra") ?? .data, .data, .plainText]
+    }
+
+    var payload: String
+
+    init(payload: String = "") {
+        self.payload = payload
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw KeyraError.invalidBackup
+        }
+        guard data.count <= 2_500_000 else {
+            throw KeyraError.invalidBackup
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw KeyraError.invalidBackup
+        }
+        payload = text
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let data = Data(payload.utf8)
+        guard data.count <= 2_500_000 else {
+            throw KeyraError.invalidBackup
+        }
+        return FileWrapper(regularFileWithContents: data)
     }
 }
 
@@ -797,6 +1091,41 @@ final class KeyraStore: ObservableObject {
         screen = .unlock
     }
 
+    @discardableResult
+    func eraseAllLocalData() -> Bool {
+        vault.clear()
+        auth.clear()
+        let keyCleared = KeychainVault.clear()
+
+        let keys = [
+            "biometric_enabled",
+            "sensitive_reauth_enabled",
+            "auto_lock_seconds",
+            "unlock_failed_attempts",
+            "unlock_lockout_until"
+        ]
+        keys.forEach { defaults.removeObject(forKey: $0) }
+
+        guard keyCleared else {
+            message = "Uređajni ključ nije moguće sigurno izbrisati. Pokušajte ponovno."
+            return false
+        }
+
+        items = []
+        selected = nil
+        sessionPassword = nil
+        vaultCategoryFilter = nil
+        vaultTypeFilter = nil
+        isSetup = false
+        importingNewVault = false
+        biometricEnabled = false
+        sensitiveReauthEnabled = false
+        autoLockSeconds = 0
+        screen = .onboarding
+        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        return true
+    }
+
     func save(_ item: VaultItem) {
         var saved = item
         saved.updatedAt = Date()
@@ -814,6 +1143,28 @@ final class KeyraStore: ObservableObject {
             screen = .vault
         } catch {
             message = "Stavku nije moguće spremiti. Pokušajte ponovno."
+        }
+    }
+
+    func toggleSelectedFavorite() {
+        guard let selected else { return }
+        var updated = selected
+        updated.favorite.toggle()
+        updated.updatedAt = Date()
+
+        var next = items
+        guard let index = next.firstIndex(where: { $0.id == selected.id }) else { return }
+        next[index] = updated
+
+        do {
+            try vault.save(next)
+            items = next
+            self.selected = updated
+            message = updated.favorite
+                ? "Stavka je dodana u favorite."
+                : "Stavka je uklonjena iz favorita."
+        } catch {
+            message = "Promjenu favorita nije moguće spremiti."
         }
     }
 
@@ -894,43 +1245,61 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func copyBackup() {
+    func makeBackupPayload() -> String? {
         guard let password = sessionPassword else {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return
+            return nil
         }
         do {
-            SecureClipboard.copy(try PortableBackup.encrypt(items, password: password))
-            message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+            return try PortableBackup.encrypt(items, password: password)
         } catch {
             message = "Sigurnosnu kopiju nije moguće izraditi."
+            return nil
         }
     }
 
-    func importBackup() {
+    func copyBackup() {
+        guard let payload = makeBackupPayload() else { return }
+        SecureClipboard.copy(payload)
+        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    @discardableResult
+    func importBackupPayload(_ text: String) -> Bool {
         guard let password = sessionPassword else {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return
+            return false
         }
-        guard let text = UIPasteboard.general.string else {
-            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
-            return
+        guard !text.isEmpty else {
+            message = "Odabrana sigurnosna kopija je prazna."
+            return false
         }
         guard text.utf8.count <= 2_500_000 else {
             message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return
+            return false
         }
+
         do {
             let imported = try PortableBackup.decrypt(text, password: password)
             try vault.save(imported)
             items = imported
             selected = nil
-            if UIPasteboard.general.string == text {
-                UIPasteboard.general.items = []
-            }
-            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
+            message = "Sigurnosna kopija uspješno je uvezena."
+            return true
         } catch {
-            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
+            return false
+        }
+    }
+
+    func importBackup() {
+        guard let text = UIPasteboard.general.string else {
+            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
+            return
+        }
+        if importBackupPayload(text), UIPasteboard.general.string == text {
+            UIPasteboard.general.items = []
+            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         }
     }
 
@@ -1689,7 +2058,7 @@ struct VaultView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             filter = value
                         } label: {
@@ -1701,6 +2070,7 @@ struct VaultView: View {
                                     case "Kartica": return "creditcard"
                                     case "Identitet": return "person.text.rectangle"
                                     case "Wi-Fi": return "wifi"
+                                    case "Autentifikator": return "shield.lefthalf.filled"
                                     case "Favoriti": return "star"
                                     default: return "square.grid.2x2"
                                     }
@@ -1710,6 +2080,7 @@ struct VaultView: View {
                                     case "Prijava": return "Prijave"
                                     case "Bilješka": return "Bilješke"
                                     case "Kartica": return "Kartice"
+                                    case "Autentifikator": return "2FA"
                                     default: return value
                                     }
                                 }())
@@ -1819,7 +2190,7 @@ struct VaultView: View {
                                 .foregroundStyle(.white)
                             Text(
                                 store.items.isEmpty
-                                ? "Dodajte prvu prijavu, sigurnu bilješku, karticu, identitet ili Wi‑Fi."
+                                ? "Dodajte prvu prijavu, bilješku, karticu, identitet, Wi‑Fi ili 2FA autentifikator."
                                 : "Promijenite pretragu ili odaberite drugi filtar."
                             )
                             .foregroundStyle(muted)
@@ -1884,6 +2255,7 @@ struct VaultRow: View {
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
         case "Identitet": return ("Zaštićen", good)
+        case "Autentifikator": return ("2FA aktivan", good)
         default: return ("Snažna", good)
         }
     }
@@ -1894,6 +2266,7 @@ struct VaultRow: View {
         case "Kartica": return "creditcard.fill"
         case "Identitet": return "person.text.rectangle.fill"
         case "Wi-Fi": return "wifi"
+        case "Autentifikator": return "shield.lefthalf.filled"
         default: return "lock.fill"
         }
     }
@@ -1904,6 +2277,7 @@ struct VaultRow: View {
         case "Kartica": return warn
         case "Identitet": return Color(hex: 0xB48CFF)
         case "Wi-Fi": return Color(hex: 0x22BDF7)
+        case "Autentifikator": return good
         default: return cyan
         }
     }
@@ -1920,6 +2294,10 @@ struct VaultRow: View {
         case "Wi-Fi":
             if let network = item.extraFields["Naziv mreže"], !network.isEmpty { return network }
             return item.username.isEmpty ? item.category : item.username
+        case "Autentifikator":
+            if let account = item.extraFields["Račun"], !account.isEmpty { return account }
+            if let issuer = item.extraFields["Izdavatelj"], !issuer.isEmpty { return issuer }
+            return item.category
         case "Bilješka":
             return item.category
         default:
@@ -2059,12 +2437,13 @@ struct CollectionsView: View {
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
                 Menu {
-                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Favoriti"], id: \.self) { value in
+                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti"], id: \.self) { value in
                         Button({
                             switch value {
                             case "Prijava": return "Lozinke"
                             case "Bilješka": return "Bilješke"
                             case "Kartica": return "Kartice"
+                            case "Autentifikator": return "2FA"
                             default: return value
                             }
                         }()) {
@@ -2088,7 +2467,7 @@ struct CollectionsView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Favoriti"], id: \.self) { value in
+                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             selectedType = value
                         } label: {
@@ -2441,6 +2820,9 @@ struct AddEditView: View {
     @State private var field2: String
     @State private var field3: String
     @State private var field4: String
+    @State private var totpAlgorithm: String
+    @State private var totpDigits: Int
+    @State private var totpPeriod: Int
     @State private var reveal = false
 
     private let original: VaultItem?
@@ -2451,6 +2833,7 @@ struct AddEditView: View {
         case "Kartica": return "karticu"
         case "Identitet": return "identitet"
         case "Wi-Fi": return "Wi-Fi"
+        case "Autentifikator": return "autentifikator"
         default: return "prijavu"
         }
     }
@@ -2465,6 +2848,7 @@ struct AddEditView: View {
         case "Kartica": return "Zaštitite podatke kartice i držite ih na jednom mjestu"
         case "Identitet": return "Sigurno spremite podatke identiteta i dokumenata"
         case "Wi-Fi": return "Spremite naziv mreže, zaštitu i pristupne podatke"
+        case "Autentifikator": return "Generirajte vremenski 2FA kod koji se automatski mijenja"
         default: return "Sigurno spremite svoje vjerodajnice"
         }
     }
@@ -2475,8 +2859,21 @@ struct AddEditView: View {
         case "Kartica": return "Spremi karticu"
         case "Identitet": return "Spremi identitet"
         case "Wi-Fi": return "Spremi Wi-Fi"
+        case "Autentifikator": return "Spremi autentifikator"
         default: return "Spremi prijavu"
         }
+    }
+
+    private var totpPreview: TotpConfig? {
+        guard type == "Autentifikator" else { return nil }
+        return parseTotpInput(
+            field3,
+            fallbackIssuer: field1,
+            fallbackAccount: field2,
+            fallbackAlgorithm: totpAlgorithm,
+            fallbackDigits: totpDigits,
+            fallbackPeriod: totpPeriod
+        )
     }
 
     init(store: KeyraStore) {
@@ -2493,6 +2890,10 @@ struct AddEditView: View {
         _type = State(initialValue: item?.kind ?? "Prijava")
 
         let extra = item?.extraFields ?? [:]
+        _totpAlgorithm = State(initialValue: extra["Algoritam"] ?? "SHA1")
+        _totpDigits = State(initialValue: Int(extra["Znamenke"] ?? "") ?? 6)
+        _totpPeriod = State(initialValue: Int(extra["Period"] ?? "") ?? 30)
+
         switch item?.kind {
         case "Kartica":
             _field1 = State(initialValue: extra["Vlasnik kartice"] ?? "")
@@ -2508,6 +2909,11 @@ struct AddEditView: View {
             _field1 = State(initialValue: extra["Naziv mreže"] ?? "")
             _field2 = State(initialValue: extra["Vrsta zaštite"] ?? "")
             _field3 = State(initialValue: "")
+            _field4 = State(initialValue: "")
+        case "Autentifikator":
+            _field1 = State(initialValue: extra["Izdavatelj"] ?? "")
+            _field2 = State(initialValue: extra["Račun"] ?? "")
+            _field3 = State(initialValue: extra["TOTP tajna"] ?? "")
             _field4 = State(initialValue: "")
         default:
             _field1 = State(initialValue: "")
@@ -2548,7 +2954,7 @@ struct AddEditView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi"], id: \.self) { value in
+                            ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator"], id: \.self) { value in
                                 Button {
                                     if original == nil {
                                         type = value
@@ -2556,6 +2962,9 @@ struct AddEditView: View {
                                         field2 = ""
                                         field3 = ""
                                         field4 = ""
+                                        totpAlgorithm = "SHA1"
+                                        totpDigits = 6
+                                        totpPeriod = 30
                                     }
                                 } label: {
                                     HStack(spacing: 6) {
@@ -2565,6 +2974,7 @@ struct AddEditView: View {
                                             case "Kartica": return "creditcard"
                                             case "Identitet": return "person.text.rectangle"
                                             case "Wi-Fi": return "wifi"
+                                            case "Autentifikator": return "shield.lefthalf.filled"
                                             default: return "lock"
                                             }
                                         }())
@@ -2641,6 +3051,45 @@ struct AddEditView: View {
                         KeyraField(title: "Datum isteka", text: $field3)
                     }
 
+                    if type == "Autentifikator" {
+                        KeyraField(title: "Izdavatelj / servis", text: $field1)
+                        KeyraField(title: "Račun / e-pošta", text: $field2)
+                        SecretField(title: "TOTP tajna ili otpauth:// URI", text: $field3, reveal: $reveal)
+
+                        if let config = totpPreview {
+                            Text("TOTP • \(config.algorithm) • \(config.digits) znamenki • \(config.period) s")
+                                .font(.caption)
+                                .foregroundStyle(good)
+                        } else if !field3.isEmpty {
+                            Text("Tajna mora biti Base32 ili valjani otpauth://totp URI.")
+                                .font(.caption)
+                                .foregroundStyle(warn)
+                        }
+
+                        if field3.lowercased().hasPrefix("otpauth://"), let config = totpPreview {
+                            Button {
+                                field1 = config.issuer
+                                field2 = config.account
+                                if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    title = config.issuer.isEmpty ? config.account : config.issuer
+                                }
+                                field3 = config.secret
+                                totpAlgorithm = config.algorithm
+                                totpDigits = config.digits
+                                totpPeriod = config.period
+                                store.message = "Podaci autentifikatora učitani su iz otpauth URI-ja."
+                            } label: {
+                                Label("Učitaj podatke iz URI-ja", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(cyan)
+                        }
+
+                        Text("Kompatibilno s RFC 6238 TOTP aplikacijama. Kod se obnavlja prema vremenu uređaja.")
+                            .font(.caption)
+                            .foregroundStyle(muted)
+                    }
+
                     KeyraField(title: "Bilješke (nije obavezno)", text: $notes, axis: .vertical)
                         .onChange(of: notes) { _, value in
                             if value.count > 500 {
@@ -2692,6 +3141,9 @@ struct AddEditView: View {
                             if type == "Kartica", !field2.isEmpty, !(12...19).contains(field2.count) {
                                 return "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             }
+                            if type == "Kartica", !field2.isEmpty, !isValidCardNumber(field2) {
+                                return "Broj kartice nije prošao provjeru kontrolne znamenke."
+                            }
                             if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
                                 return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             }
@@ -2701,11 +3153,17 @@ struct AddEditView: View {
                                 if expiry.range(of: pattern, options: .regularExpression) == nil {
                                     return "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
                                 }
+                                if !isCardExpiryNotPast(expiry) {
+                                    return "Datum isteka kartice je u prošlosti."
+                                }
                             }
                             if type == "Identitet",
                                field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                                field2.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 return "Unesite puno ime ili broj dokumenta."
+                            }
+                            if type == "Autentifikator", totpPreview == nil {
+                                return "Unesite valjanu Base32 TOTP tajnu ili otpauth:// URI."
                             }
                             return nil
                         }()
@@ -2733,6 +3191,19 @@ struct AddEditView: View {
                             extra = [
                                 "Naziv mreže": field1,
                                 "Vrsta zaštite": field2
+                            ].filter { !$0.value.isEmpty }
+                        case "Autentifikator":
+                            guard let config = totpPreview else {
+                                store.message = "TOTP konfiguracija nije valjana."
+                                return
+                            }
+                            extra = [
+                                "Izdavatelj": config.issuer,
+                                "Račun": config.account,
+                                "TOTP tajna": config.secret,
+                                "Algoritam": config.algorithm,
+                                "Znamenke": String(config.digits),
+                                "Period": String(config.period)
                             ].filter { !$0.value.isEmpty }
                         default:
                             extra = [:]
@@ -2794,17 +3265,30 @@ struct DetailView: View {
     @State private var revealCardNumber = false
     @State private var revealSecurityCode = false
     @State private var revealDocumentNumber = false
+    @State private var revealTotpSecret = false
     @State private var confirmDelete = false
+    @State private var selectedTab = "Detalji"
 
     var body: some View {
         if let item = store.selected {
             let isPasswordItem = item.kind == "Prijava" || item.kind == "Wi-Fi"
-            let securityLabel = isPasswordItem
-                ? (item.password.isEmpty ? "Bez lozinke" : (isStrongPassword(item.password) ? "Snažna" : "Potrebno ažuriranje"))
-                : "Zaštićena"
+            let totpConfig = item.kind == "Autentifikator" ? totpConfigFromFields(item.extraFields) : nil
+            let duplicatedPassword = isPasswordItem &&
+                !item.password.isEmpty &&
+                store.items.contains { $0.id != item.id && $0.password == item.password }
+            let securityLabel: String = {
+                if item.kind == "Autentifikator", totpConfig != nil { return "TOTP aktivan" }
+                if item.kind == "Autentifikator" { return "TOTP greška" }
+                if isPasswordItem && item.password.isEmpty { return "Bez lozinke" }
+                if duplicatedPassword { return "Ponovno korištena" }
+                if isPasswordItem && isStrongPassword(item.password) { return "Snažna" }
+                if isPasswordItem { return "Potrebno ažuriranje" }
+                return "Zaštićena"
+            }()
             let securityColor: Color = {
                 switch securityLabel {
-                case "Snažna", "Zaštićena": return good
+                case "Snažna", "Zaštićena", "TOTP aktivan": return good
+                case "Ponovno korištena", "TOTP greška": return danger
                 case "Potrebno ažuriranje": return warn
                 default: return muted
                 }
@@ -2821,6 +3305,7 @@ struct DetailView: View {
                         case "Kartica": return "creditcard.fill"
                         case "Identitet": return "person.text.rectangle.fill"
                         case "Wi-Fi": return "wifi"
+                        case "Autentifikator": return "shield.lefthalf.filled"
                         default: return "lock.fill"
                         }
                     }())
@@ -2841,12 +3326,31 @@ struct DetailView: View {
                             .minimumScaleFactor(0.8)
                     }
                     Spacer()
-                    if item.favorite { Image(systemName: "star.fill").foregroundStyle(warn) }
+                    Button {
+                        store.toggleSelectedFavorite()
+                    } label: {
+                        Image(systemName: item.favorite ? "star.fill" : "star")
+                            .foregroundStyle(item.favorite ? warn : ice)
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.favorite ? "Ukloni iz favorita" : "Dodaj u favorite")
                 }
                 .padding(18)
 
+                Picker("Prikaz", selection: $selectedTab) {
+                    Text("Detalji").tag("Detalji")
+                    Text("Sigurnost").tag("Sigurnost")
+                    Text("Aktivnost").tag("Aktivnost")
+                }
+                .pickerStyle(.segmented)
+                .tint(cyan)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 6)
+
                 ScrollView {
                     VStack(spacing: 10) {
+                        if selectedTab == "Detalji" {
                         if item.kind == "Prijava" {
                             if !item.website.isEmpty {
                                 DetailRow(icon: "link", title: "Web-stranica", value: item.website) {
@@ -3000,6 +3504,81 @@ struct DetailView: View {
                             }
                         }
 
+                        if item.kind == "Autentifikator" {
+                            if let config = totpConfig {
+                                TimelineView(.periodic(from: .now, by: 1)) { context in
+                                    TotpCodeCard(config: config, date: context.date) {
+                                        if let code = generateTotp(config, at: context.date) {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje 2FA koda.") {
+                                                SecureClipboard.copy(code)
+                                                store.message = "2FA kod kopiran je i automatski će se ukloniti."
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !config.issuer.isEmpty {
+                                    DetailRow(icon: "building.2", title: "Izdavatelj", value: config.issuer)
+                                }
+                                if !config.account.isEmpty {
+                                    DetailRow(icon: "person", title: "Račun", value: config.account)
+                                }
+
+                                SensitiveDetailView(
+                                    icon: "key.fill",
+                                    title: "TOTP tajna",
+                                    value: config.secret,
+                                    hidden: "••••••••" + String(config.secret.suffix(4)),
+                                    reveal: revealTotpSecret,
+                                    onReveal: {
+                                        if revealTotpSecret {
+                                            revealTotpSecret = false
+                                        } else {
+                                            store.authorizeSensitive(reason: "Potvrdite identitet za prikaz TOTP tajne.") {
+                                                revealTotpSecret = true
+                                            }
+                                        }
+                                    },
+                                    onCopy: {
+                                        store.authorizeSensitive(reason: "Potvrdite identitet za kopiranje TOTP tajne.") {
+                                            SecureClipboard.copy(config.secret)
+                                            store.message = "TOTP tajna kopirana je i automatski će se ukloniti."
+                                        }
+                                    }
+                                )
+
+                                DetailMetaCard(
+                                    icon: "clock.arrow.circlepath",
+                                    title: "TOTP postavke",
+                                    value: "\(config.algorithm) • \(config.digits) znamenki • \(config.period) s",
+                                    accent: good
+                                )
+                            } else {
+                                GlassCard {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(danger)
+                                    Text("TOTP konfiguracija nije valjana.")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                    Text("Uredite stavku i ponovno unesite Base32 tajnu ili otpauth URI.")
+                                        .foregroundStyle(muted)
+                                    Button {
+                                        store.editSelected()
+                                    } label: {
+                                        Text("Uredi autentifikator")
+                                            .fontWeight(.bold)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 11)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(midnight)
+                                    .background(cyan)
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+
                         if !item.notes.isEmpty {
                             DetailRow(icon: "doc.text", title: "Bilješke", value: item.notes)
                         }
@@ -3045,6 +3624,89 @@ struct DetailView: View {
                                 detailDeleteButton
                             }
                         }
+                        }
+
+                        if selectedTab == "Sigurnost" {
+                            GlassCard {
+                                Image(systemName: "shield.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(securityColor)
+                                Text("Ocjena sigurnosti")
+                                    .font(.caption)
+                                    .foregroundStyle(muted)
+                                Text(securityLabel)
+                                    .font(.title2.bold())
+                                    .foregroundStyle(securityColor)
+                                Text({
+                                    if duplicatedPassword {
+                                        return "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
+                                    }
+                                    if isPasswordItem && item.password.isEmpty {
+                                        return "Ova stavka nema spremljenu lozinku."
+                                    }
+                                    if isPasswordItem && !isStrongPassword(item.password) {
+                                        return "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                    }
+                                    if isPasswordItem {
+                                        return "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                    }
+                                    if item.kind == "Autentifikator", totpConfig != nil {
+                                        return "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                    }
+                                    if item.kind == "Autentifikator" {
+                                        return "TOTP konfiguracija nije valjana i treba je urediti."
+                                    }
+                                    return "Ova vrsta stavke nema lozinku za procjenu, ali je sadržaj zaštićen trezorom."
+                                }())
+                                .foregroundStyle(muted)
+                            }
+
+                            DetailMetaCard(
+                                icon: "lock.shield.fill",
+                                title: "Zaštita stavke",
+                                value: store.sensitiveReauthEnabled && store.biometricEnabled
+                                    ? "Dodatna potvrda uključena"
+                                    : "Zaštita trezora",
+                                accent: cyan
+                            )
+
+                            if isPasswordItem && (item.password.isEmpty || duplicatedPassword || !isStrongPassword(item.password)) {
+                                Button {
+                                    store.editSelected()
+                                } label: {
+                                    Label("Uredi i promijeni lozinku", systemImage: "pencil")
+                                        .fontWeight(.bold)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 54)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(midnight)
+                                .background(cyan)
+                                .clipShape(Capsule())
+                            }
+                        }
+
+                        if selectedTab == "Aktivnost" {
+                            DetailMetaCard(
+                                icon: "clock.fill",
+                                title: "Zadnja izmjena",
+                                value: item.updatedAt.formatted(date: .abbreviated, time: .shortened),
+                                accent: indigo
+                            )
+
+                            GlassCard {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(cyan)
+                                Text("Aktivnost stavke")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                Text(
+                                    "Keyra čuva samo vrijeme posljednje izmjene ove stavke. Radi privatnosti ne zapisuje povijest otvaranja, prikaza ni kopiranja osjetljivih vrijednosti."
+                                )
+                                .foregroundStyle(muted)
+                            }
+                        }
                     }
                     .padding(18)
                 }
@@ -3062,6 +3724,14 @@ struct DetailView: View {
                 Button("Odustani", role: .cancel) {}
             } message: {
                 Text("Ova radnja ne može se poništiti.")
+            }
+            .onChange(of: item.id) { _, _ in
+                selectedTab = "Detalji"
+                reveal = false
+                revealCardNumber = false
+                revealSecurityCode = false
+                revealDocumentNumber = false
+                revealTotpSecret = false
             }
         }
     }
@@ -3090,6 +3760,70 @@ struct DetailView: View {
         .buttonStyle(.plain)
         .foregroundStyle(danger)
         .overlay(Capsule().stroke(danger.opacity(0.6), lineWidth: 1))
+    }
+}
+
+struct TotpCodeCard: View {
+    let config: TotpConfig
+    let date: Date
+    let onCopy: () -> Void
+
+    var body: some View {
+        let code = generateTotp(config, at: date) ?? String(repeating: "—", count: config.digits)
+        let remaining = totpRemainingSeconds(config, at: date)
+        let progress = Double(remaining) / Double(config.period)
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "shield.lefthalf.filled")
+                    .font(.title2)
+                    .foregroundStyle(good)
+                    .frame(width: 48, height: 48)
+                    .background(good.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Vremenski 2FA kod")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Automatski se mijenja svakih \(config.period) s")
+                        .font(.caption)
+                        .foregroundStyle(muted)
+                }
+
+                Spacer()
+
+                Button(action: onCopy) {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(ice)
+                        .frame(width: 42, height: 42)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Kopiraj 2FA kod")
+            }
+
+            Text(formatTotpCode(code))
+                .font(.system(size: 38, weight: .black, design: .rounded))
+                .tracking(2)
+                .foregroundStyle(cyan)
+                .minimumScaleFactor(0.72)
+
+            ProgressView(value: progress, total: 1)
+                .tint(good)
+
+            Text("\(remaining) s do novog koda")
+                .font(.caption)
+                .foregroundStyle(muted)
+
+            Text("Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.")
+                .font(.caption)
+                .foregroundStyle(muted)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(slate)
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(good.opacity(0.65), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -3244,12 +3978,32 @@ struct DetailRow: View {
 
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
+    @Environment(\.openURL) private var openURL
     @State private var search = ""
     @State private var confirmImport = false
+    @State private var confirmErase = false
+    @State private var backupDocument = KeyraBackupDocument()
+    @State private var exportBackupFile = false
+    @State private var importBackupFile = false
+    @State private var pendingImportPayload: String?
 
     private func runProtectedImport() {
         store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             store.importBackup()
+        }
+    }
+
+    private func runProtectedFileImport(_ payload: String) {
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+            _ = store.importBackupPayload(payload)
+        }
+    }
+
+    private func prepareBackupExport() {
+        store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+            guard let payload = store.makeBackupPayload() else { return }
+            backupDocument = KeyraBackupDocument(payload: payload)
+            exportBackupFile = true
         }
     }
 
@@ -3267,7 +4021,16 @@ struct SettingsView: View {
     }
 
     private var dataVisible: Bool {
-        matches("Kopiraj sigurnosnu kopiju", "Uvezi sigurnosnu kopiju", "sigurnosna kopija")
+        matches(
+            "Kopiraj sigurnosnu kopiju",
+            "Uvezi sigurnosnu kopiju",
+            "Spremi šifriranu kopiju",
+            "Uvezi šifriranu datoteku",
+            "Proton Drive",
+            "privatni cloud",
+            "Files",
+            "sigurnosna kopija"
+        )
     }
 
     private var preferenceVisible: Bool {
@@ -3275,7 +4038,14 @@ struct SettingsView: View {
     }
 
     private var privacyVisible: Bool {
-        matches("O aplikaciji Keyra", "Zaključaj trezor", "sigurnost privatnost")
+        matches(
+            "O aplikaciji Keyra",
+            "Pravila privatnosti",
+            "Privatnost",
+            "Izbriši sve lokalne podatke",
+            "Zaključaj trezor",
+            "sigurnost privatnost"
+        )
     }
 
     var body: some View {
@@ -3377,6 +4147,38 @@ struct SettingsView: View {
                         SectionLabel("UPRAVLJANJE PODACIMA")
                     }
 
+                    if matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz") {
+                        SettingRow(
+                            icon: "externaldrive.badge.plus",
+                            title: "Spremi šifriranu kopiju",
+                            subtitle: "Spremite već šifriranu .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
+                        ) {
+                            Button {
+                                prepareBackupExport()
+                            } label: {
+                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Spremi šifriranu kopiju")
+                        }
+                    }
+
+                    if matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz") {
+                        SettingRow(
+                            icon: "externaldrive.badge.checkmark",
+                            title: "Uvezi šifriranu datoteku",
+                            subtitle: "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                        ) {
+                            Button {
+                                importBackupFile = true
+                            } label: {
+                                Image(systemName: "folder").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi šifriranu datoteku")
+                        }
+                    }
+
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
                         SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
                             Button {
@@ -3430,6 +4232,38 @@ struct SettingsView: View {
                         )
                     }
 
+                    if matches("Pravila privatnosti", "privatnost", "privacy") {
+                        Button {
+                            if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
+                                openURL(url)
+                            }
+                        } label: {
+                            SettingRow(
+                                icon: "hand.raised.fill",
+                                title: "Pravila privatnosti",
+                                subtitle: "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru."
+                            ) {
+                                Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset") {
+                        Button {
+                            confirmErase = true
+                        } label: {
+                            SettingRow(
+                                icon: "trash.slash.fill",
+                                title: "Izbriši sve lokalne podatke",
+                                subtitle: "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja."
+                            ) {
+                                Image(systemName: "chevron.right").foregroundStyle(danger)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     if matches("Zaključaj trezor", "zaključavanje") {
                         Button {
                             store.lock()
@@ -3461,6 +4295,23 @@ struct SettingsView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .confirmationDialog(
+            "Izbrisati sve lokalne podatke?",
+            isPresented: $confirmErase,
+            titleVisibility: .visible
+        ) {
+            Button("Trajno izbriši", role: .destructive) {
+                store.authorizeSensitive(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                    _ = store.eraseAllLocalData()
+                }
+            }
+            Button("Odustani", role: .cancel) {}
+        } message: {
+            Text(
+                "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+            )
+        }
+        .confirmationDialog(
             "Uvesti sigurnosnu kopiju?",
             isPresented: $confirmImport,
             titleVisibility: .visible
@@ -3473,6 +4324,64 @@ struct SettingsView: View {
             Text(
                 "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
                 "Prije nastavka provjerite da je kopija ispravna."
+            )
+        }
+        .fileExporter(
+            isPresented: $exportBackupFile,
+            document: backupDocument,
+            contentType: UTType(filenameExtension: "keyra") ?? .data,
+            defaultFilename: "Keyra-backup"
+        ) { result in
+            switch result {
+            case .success:
+                store.message = "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
+            case .failure:
+                store.message = "Sigurnosnu kopiju nije moguće spremiti na odabrano mjesto."
+            }
+        }
+        .fileImporter(
+            isPresented: $importBackupFile,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                let urls = try result.get()
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed { url.stopAccessingSecurityScopedResource() }
+                }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 2_500_000, let payload = String(data: data, encoding: .utf8) else {
+                    store.message = "Odabrana sigurnosna kopija nije valjana ili je prevelika."
+                    return
+                }
+                pendingImportPayload = payload
+            } catch {
+                store.message = "Odabranu sigurnosnu kopiju nije moguće otvoriti."
+            }
+        }
+        .confirmationDialog(
+            "Uvesti šifriranu datoteku?",
+            isPresented: Binding(
+                get: { pendingImportPayload != nil },
+                set: { if !$0 { pendingImportPayload = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Uvezi i zamijeni", role: .destructive) {
+                if let payload = pendingImportPayload {
+                    pendingImportPayload = nil
+                    runProtectedFileImport(payload)
+                }
+            }
+            Button("Odustani", role: .cancel) {
+                pendingImportPayload = nil
+            }
+        } message: {
+            Text(
+                "Odabrana .keyra kopija zamijenit će trenutačni sadržaj trezora. " +
+                "Datoteka se prvo provjerava i dešifrira prije spremanja."
             )
         }
     }

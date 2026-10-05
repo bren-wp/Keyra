@@ -37,9 +37,12 @@ Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi poda
 📋 **Zaštićeni međuspremnik** — osjetljive kopirane vrijednosti automatski istječu.  
 🔎 **Provjera sigurnosti** — prepoznaje slabe i ponovno korištene lozinke.  
 ✨ **Generator lozinki** — duljina do 64 znaka, vrste znakova i brzi presetovi jačine.  
+🔢 **TOTP / 2FA autentifikator** — vremenski kodovi kompatibilni s RFC 6238; podržani su Base32 tajne i `otpauth://totp` URI-jevi.  
 📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine; KEYRA2 kopije prenosive su između Androida i iOS-a.  
+☁️ **Privatni cloud backup** — .keyra datoteka može se spremiti ili otvoriti kroz sistemski Files/Document picker, uključujući kompatibilne privatne cloud providere bez predaje njihovih vjerodajnica Keyri.  
 📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
-🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.
+🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.  
+🗑️ **Potpuno lokalno brisanje** — korisnik može trajno ukloniti trezor, glavnu lozinku, lokalne postavke i uređajni ključ s uređaja.
 
 ## Moj trezor
 
@@ -51,14 +54,22 @@ Pretraga, tipovi stavki, favoriti, kategorije, sortiranje i sigurnosni sažetak 
 
 ## Dodavanje i detalji
 
-Podržane su prijave, bilješke, kartice, identiteti i Wi‑Fi podaci. Svaki tip prikazuje samo odgovarajuća polja. Osjetljive vrijednosti ostaju skrivene dok ih korisnik ne odluči prikazati ili kopirati.
+Podržane su prijave, bilješke, kartice, identiteti, Wi‑Fi podaci i TOTP autentifikatori. Svaki tip prikazuje samo odgovarajuća polja. Osjetljive vrijednosti ostaju skrivene dok ih korisnik ne odluči prikazati ili kopirati.
 
-Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu.
+Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu. Broj kartice dodatno prolazi Luhn provjeru, a datum isteka ne može biti u prošlosti.
 
 <div align="center">
 <img src="assets/screens/add-login.svg" alt="Dodavanje prijave" width="280">
 <img src="assets/screens/detail.svg" alt="Detalji stavke" width="280">
 </div>
+
+## 2FA autentifikator
+
+Keyra može čuvati TOTP tajnu i generirati vremenski jednokratni kod koji se automatski obnavlja. Podržan je ručni unos Base32 tajne ili lijepljenje standardnog `otpauth://totp` URI-ja. Iz URI-ja se mogu preuzeti izdavatelj, račun, algoritam, broj znamenki i vremenski period.
+
+Kod se računa lokalno na uređaju prema RFC 6238, bez slanja TOTP tajne na udaljeni poslužitelj. Podržani su SHA‑1, SHA‑256 i SHA‑512, kodovi od 6 do 8 znamenki te periodi od 15 do 120 sekundi. TOTP tajna ostaje dio šifriranog trezora, a njezin prikaz i kopiranje mogu koristiti dodatnu potvrdu identiteta.
+
+Za ispravne kodove uređaj mora imati točno postavljeno vrijeme. Ako autentifikacija ne prolazi, prvo treba provjeriti automatsku sinkronizaciju vremena operacijskog sustava.
 
 ## Generator lozinki
 
@@ -75,6 +86,14 @@ Kategorije **Osobno**, **Posao**, **Financije**, **Društvene mreže**, **Kupovi
 <div align="center">
 <img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
 </div>
+
+## Privatni cloud backup
+
+Keyra ne traži korisničko ime ni lozinku za Proton Drive, iCloud Drive, Nextcloud ili drugi cloud servis. Umjesto toga stvara već šifriranu `.keyra` datoteku i predaje je sistemskom odabiru datoteka. Time korisnik sam bira gdje će je spremiti ili iz kojeg će je providera vratiti.
+
+Na iOS-u se koristi standardni Files dokumentni tok. Na Androidu se koristi Storage Access Framework, bez široke dozvole za pristup pohrani. Dostupnost pojedinog providera ovisi o tome je li njegov servis registriran u sistemskom Files/Document sučelju na uređaju.
+
+Izravna automatska Proton Drive sinkronizacija nije ugrađena dok Protonov SDK za komercijalne/produkcijske third-party aplikacije ne bude službeno spreman. To izbjegava neslužbeno rukovanje Proton vjerodajnicama i nestabilne privatne API-je.
 
 ## Postavke i sigurnost
 
@@ -96,6 +115,9 @@ Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogu�
 - uvoz koji zamjenjuje trenutačni trezor traži izričitu potvrdu
 - oštećena ili prevelika sigurnosna kopija ne zamjenjuje postojeći trezor
 - neuspjelo spremanje ne mijenja prikazano stanje kao da je radnja uspjela
+- TOTP tajne ostaju u šifriranom trezoru, a vremenski kodovi generiraju se lokalno
+- Keyra nema široku storage dozvolu; cloud backup prolazi kroz korisnički odabrani sistemski file provider
+- Keyra ne sprema vjerodajnice privatnog cloud servisa
 - osjetljive vrijednosti ne zapisuju se u aplikacijske logove
 - novi trezor ne sadrži unaprijed umetnute račune ni lozinke
 
