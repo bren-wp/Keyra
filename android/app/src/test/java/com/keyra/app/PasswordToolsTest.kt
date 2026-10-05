@@ -131,6 +131,7 @@ class PasswordToolsTest {
         assertTrue(isValidCardNumber("4111 1111 1111 1111"))
         assertTrue(isValidCardNumber("5555555555554444"))
         assertFalse(isValidCardNumber("4111111111111112"))
+        assertFalse(isValidCardNumber("0000000000000000"))
         assertFalse(isValidCardNumber("1234"))
     }
 
