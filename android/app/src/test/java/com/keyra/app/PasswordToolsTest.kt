@@ -127,6 +127,48 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun totpMatchesRfc6238Sha1Vector() {
+        val config = TotpConfig(
+            secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            algorithm = "SHA1",
+            digits = 8,
+            period = 30
+        )
+
+        assertEquals("94287082", generateTotp(config, timeMillis = 59_000L))
+        assertEquals(1, totpRemainingSeconds(config, timeMillis = 59_000L))
+    }
+
+    @Test
+    fun totpSupportsGoogleAuthenticatorStyleSixDigitCodes() {
+        val config = TotpConfig(
+            secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            algorithm = "SHA1",
+            digits = 6,
+            period = 30
+        )
+
+        assertEquals("287082", generateTotp(config, timeMillis = 59_000L))
+        assertEquals("287 082", formatTotpCode("287082"))
+    }
+
+    @Test
+    fun otpauthUriParsesIssuerAccountAndSettings() {
+        val config = parseTotpInput(
+            "otpauth://totp/Keyra%20Test:alice%40example.com" +
+                "?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" +
+                "&issuer=Keyra%20Test&algorithm=SHA256&digits=8&period=45"
+        )
+
+        requireNotNull(config)
+        assertEquals("Keyra Test", config.issuer)
+        assertEquals("alice@example.com", config.account)
+        assertEquals("SHA256", config.algorithm)
+        assertEquals(8, config.digits)
+        assertEquals(45, config.period)
+    }
+
+    @Test
     fun cardNumberValidationUsesLuhnChecksum() {
         assertTrue(isValidCardNumber("4111 1111 1111 1111"))
         assertTrue(isValidCardNumber("5555555555554444"))
