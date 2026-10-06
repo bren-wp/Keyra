@@ -437,33 +437,55 @@ enum KeychainVault {
         return output as? Data
     }
 
-    static func key() throws -> SymmetricKey {
+    static func rawKeyData() throws -> Data {
         if let existing = existingKeyData() {
-            return SymmetricKey(data: existing)
+            guard existing.count == 32 else { throw KeyraError.keyUnavailable }
+            return existing
         }
 
         var bytes = [UInt8](repeating: 0, count: 32)
+        defer { bytes.resetBytes(in: 0..<bytes.count) }
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
         let data = Data(bytes)
-        let add: [String: Any] = [
+        try replaceKeyData(data, allowInsert: true)
+        return data
+    }
+
+    static func key() throws -> SymmetricKey {
+        SymmetricKey(data: try rawKeyData())
+    }
+
+    static func replaceKeyData(_ data: Data, allowInsert: Bool = true) throws {
+        guard data.count == 32 else { throw KeyraError.invalidData }
+
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecValueData as String: data
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let status = SecItemAdd(add as CFDictionary, nil)
-        if status == errSecSuccess {
-            return SymmetricKey(data: data)
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
         }
-        if status == errSecDuplicateItem, let existing = existingKeyData() {
-            return SymmetricKey(data: existing)
+        guard updateStatus == errSecItemNotFound, allowInsert else {
+            throw KeyraError.keyUnavailable
         }
-        throw KeyraError.keyUnavailable
+
+        var add = query
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        add[kSecValueData as String] = data
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
     }
 
     static func clear() -> Bool {
@@ -590,6 +612,34 @@ final class EncryptedVault {
             defaults.removeObject(forKey: legacyKey)
         }
         return decoded
+    }
+
+    func recoveryKeyData() throws -> Data {
+        try KeychainVault.rawKeyData()
+    }
+
+    func installRecoveryKey(_ data: Data) throws -> [VaultItem] {
+        guard data.count == 32 else { throw KeyraError.invalidData }
+
+        let url = try storageURL()
+        let encrypted: Data?
+        if FileManager.default.fileExists(atPath: url.path) {
+            encrypted = try Data(contentsOf: url)
+        } else {
+            encrypted = defaults.data(forKey: legacyKey)
+        }
+
+        let verified: [VaultItem]
+        if let encrypted {
+            let box = try AES.GCM.SealedBox(combined: encrypted)
+            let clear = try AES.GCM.open(box, using: SymmetricKey(data: data))
+            verified = try JSONDecoder().decode([VaultItem].self, from: clear)
+        } else {
+            verified = []
+        }
+
+        try KeychainVault.replaceKeyData(data)
+        return verified
     }
 
     func clear() {
@@ -825,6 +875,95 @@ enum PortableBackup {
             throw lastError
         }
         throw KeyraError.invalidBackup
+    }
+}
+
+
+func isStrongRecoveryPassphrase(_ passphrase: String) -> Bool {
+    guard passphrase.count >= 16 else { return false }
+    let classes = [
+        passphrase.contains(where: { $0.isUppercase }),
+        passphrase.contains(where: { $0.isLowercase }),
+        passphrase.contains(where: { $0.isNumber }),
+        passphrase.contains(where: { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
+    ].filter { $0 }.count
+    let words = passphrase
+        .split(whereSeparator: { $0.isWhitespace })
+        .filter { $0.count >= 3 }
+    return classes >= 3 || words.count >= 4
+}
+
+enum RecoveryKeyEnvelope {
+    private static let version = "KEYRAREC1"
+    private static let iterations = 600_000
+    private static let saltBytes = 16
+    private static let rawKeyBytes = 32
+    private static let maxPayloadBytes = 16_384
+
+    static func encrypt(_ rawKey: Data, passphrase: String) throws -> String {
+        guard rawKey.count == rawKeyBytes, isStrongRecoveryPassphrase(passphrase) else {
+            throw KeyraError.invalidData
+        }
+
+        var salt = [UInt8](repeating: 0, count: saltBytes)
+        defer { salt.resetBytes(in: 0..<salt.count) }
+        guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
+
+        let saltData = Data(salt)
+        let derived = try PasswordTools.derive(
+            passphrase,
+            salt: saltData,
+            iterations: iterations,
+            keyLength: rawKeyBytes
+        )
+        let sealed = try AES.GCM.seal(rawKey, using: SymmetricKey(data: derived))
+        guard let combined = sealed.combined else {
+            throw KeyraError.invalidBackup
+        }
+
+        return [
+            version,
+            String(iterations),
+            saltData.base64EncodedString(),
+            combined.base64EncodedString()
+        ].joined(separator: ".")
+    }
+
+    static func decrypt(_ payload: String, passphrase: String) throws -> Data {
+        guard payload.utf8.count <= maxPayloadBytes else {
+            throw KeyraError.invalidBackup
+        }
+        let parts = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ".", omittingEmptySubsequences: false)
+        guard
+            parts.count == 4,
+            parts[0] == Substring(version),
+            let rounds = Int(parts[1]),
+            (100_000...2_000_000).contains(rounds),
+            let salt = Data(base64Encoded: String(parts[2])),
+            salt.count == saltBytes,
+            let combined = Data(base64Encoded: String(parts[3])),
+            combined.count >= 12 + 16 + rawKeyBytes
+        else {
+            throw KeyraError.invalidBackup
+        }
+
+        let derived = try PasswordTools.derive(
+            passphrase,
+            salt: salt,
+            iterations: rounds,
+            keyLength: rawKeyBytes
+        )
+        let clear = try AES.GCM.open(
+            AES.GCM.SealedBox(combined: combined),
+            using: SymmetricKey(data: derived)
+        )
+        guard clear.count == rawKeyBytes else {
+            throw KeyraError.invalidBackup
+        }
+        return clear
     }
 }
 
@@ -1262,6 +1401,42 @@ final class KeyraStore: ObservableObject {
         guard let payload = makeBackupPayload() else { return }
         SecureClipboard.copy(payload)
         message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    func makeRecoveryKeyPayload(passphrase: String) -> String? {
+        guard isStrongRecoveryPassphrase(passphrase) else {
+            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
+            return nil
+        }
+        do {
+            let rawKey = try vault.recoveryKeyData()
+            return try RecoveryKeyEnvelope.encrypt(rawKey, passphrase: passphrase)
+        } catch {
+            message = "Recovery Key datoteku nije moguće izraditi."
+            return nil
+        }
+    }
+
+    @discardableResult
+    func importRecoveryKeyPayload(_ payload: String, passphrase: String) -> Bool {
+        guard !payload.isEmpty, payload.utf8.count <= 16_384 else {
+            message = "Recovery Key datoteka nije valjana."
+            return false
+        }
+        do {
+            let rawKey = try RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
+            let verifiedItems = try vault.installRecoveryKey(rawKey)
+            if !verifiedItems.isEmpty {
+                items = verifiedItems
+            }
+            message = verifiedItems.isEmpty
+                ? "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
+                : "Recovery Key je verificiran i ponovno zaštićen Keychainom ovog uređaja."
+            return true
+        } catch {
+            message = "Recovery Key je oštećen, izmijenjen, ne odgovara ovom trezoru ili recovery lozinka nije ispravna."
+            return false
+        }
     }
 
     @discardableResult
