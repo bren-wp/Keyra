@@ -4198,6 +4198,11 @@ private fun SettingsScreen(
     var confirmImport by remember { mutableStateOf(false) }
     var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
+    var pendingRecoveryExport by remember { mutableStateOf<Uri?>(null) }
+    var pendingRecoveryImport by remember { mutableStateOf<Uri?>(null) }
+    var recoveryExportPassphrase by remember { mutableStateOf("") }
+    var recoveryExportConfirm by remember { mutableStateOf("") }
+    var recoveryImportPassphrase by remember { mutableStateOf("") }
 
     val exportFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -4217,6 +4222,21 @@ private fun SettingsScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) pendingFileImport = uri
+    }
+
+    val exportRecoveryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        recoveryExportPassphrase = ""
+        recoveryExportConfirm = ""
+        pendingRecoveryExport = uri
+    }
+
+    val importRecoveryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        recoveryImportPassphrase = ""
+        pendingRecoveryImport = uri
     }
 
     fun runProtectedImport() {
@@ -4245,6 +4265,8 @@ private fun SettingsScreen(
         "Privatni cloud",
         "Proton Drive",
         "Files",
+        "Recovery Key",
+        "oporavak",
         "sigurnosna kopija"
     )
     val preferenceVisible = matches("Tamni način", "tamni izgled")
@@ -4258,6 +4280,144 @@ private fun SettingsScreen(
     )
 
     Column(Modifier.fillMaxSize()) {
+        pendingRecoveryExport?.let { uri ->
+            val strongPassphrase = isStrongRecoveryPassphrase(recoveryExportPassphrase)
+            val matchingPassphrase =
+                recoveryExportPassphrase.isNotEmpty() && recoveryExportPassphrase == recoveryExportConfirm
+
+            AlertDialog(
+                onDismissRequest = {
+                    pendingRecoveryExport = null
+                    recoveryExportPassphrase = ""
+                    recoveryExportConfirm = ""
+                },
+                icon = { Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Cyan) },
+                title = { Text("Izvezi Recovery Key") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Recovery Key štiti prijenosni ključ trezora. Ne sadrži zapise trezora i nije zamjena za šifriranu sigurnosnu kopiju podataka."
+                        )
+                        OutlinedTextField(
+                            value = recoveryExportPassphrase,
+                            onValueChange = { recoveryExportPassphrase = it },
+                            label = { Text("Recovery lozinka") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = recoveryExportConfirm,
+                            onValueChange = { recoveryExportConfirm = it },
+                            label = { Text("Ponovite recovery lozinku") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Najmanje 16 znakova i dovoljna složenost ili najmanje četiri riječi. Datoteku i lozinku čuvajte odvojeno.",
+                            color = if (strongPassphrase) Good else Muted,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = strongPassphrase && matchingPassphrase,
+                        onClick = {
+                            val passphrase = recoveryExportPassphrase
+                            pendingRecoveryExport = null
+                            recoveryExportPassphrase = ""
+                            recoveryExportConfirm = ""
+                            val export = {
+                                model.exportRecoveryKeyToUri(context, uri, passphrase)
+                            }
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za izvoz Recovery Key datoteke.", export)
+                            } else {
+                                export()
+                            }
+                        }
+                    ) {
+                        Text("Izvezi", color = if (strongPassphrase && matchingPassphrase) Cyan else Muted)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingRecoveryExport = null
+                            recoveryExportPassphrase = ""
+                            recoveryExportConfirm = ""
+                        }
+                    ) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
+        pendingRecoveryImport?.let { uri ->
+            AlertDialog(
+                onDismissRequest = {
+                    pendingRecoveryImport = null
+                    recoveryImportPassphrase = ""
+                },
+                icon = { Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Warn) },
+                title = { Text("Uvezi Recovery Key") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Keyra će prvo verificirati recovery datoteku i postojeći trezor. Lokalni kriptografski materijal neće biti zamijenjen ako provjera ne uspije."
+                        )
+                        OutlinedTextField(
+                            value = recoveryImportPassphrase,
+                            onValueChange = { recoveryImportPassphrase = it },
+                            label = { Text("Recovery lozinka") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Recovery Key ne vraća izbrisane zapise samostalno. Nakon oporavka ključa po potrebi vratite zasebnu šifriranu KEYRA2 sigurnosnu kopiju.",
+                            color = Muted,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = recoveryImportPassphrase.isNotBlank(),
+                        onClick = {
+                            val passphrase = recoveryImportPassphrase
+                            pendingRecoveryImport = null
+                            recoveryImportPassphrase = ""
+                            val importRecovery = {
+                                model.importRecoveryKeyFromUri(context, uri, passphrase)
+                            }
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za uvoz Recovery Key datoteke.", importRecovery)
+                            } else {
+                                importRecovery()
+                            }
+                        }
+                    ) {
+                        Text("Verificiraj i uvezi", color = if (recoveryImportPassphrase.isNotBlank()) Warn else Muted)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingRecoveryImport = null
+                            recoveryImportPassphrase = ""
+                        }
+                    ) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
         if (confirmErase) {
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
@@ -4466,6 +4626,44 @@ private fun SettingsScreen(
                         Icon(
                             Icons.Outlined.FolderOpen,
                             contentDescription = "Uvezi šifriranu datoteku",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
+            if (matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+                SettingRow(
+                    Icons.Outlined.VpnKey,
+                    "Izvezi Recovery Key",
+                    "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
+                ) {
+                    IconButton(onClick = {
+                        exportRecoveryLauncher.launch("Keyra-Recovery.keyra")
+                    }) {
+                        Icon(
+                            Icons.Outlined.SaveAlt,
+                            contentDescription = "Izvezi Recovery Key",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
+            if (matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+                SettingRow(
+                    Icons.Outlined.VpnKey,
+                    "Uvezi Recovery Key",
+                    "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
+                ) {
+                    IconButton(onClick = {
+                        importRecoveryLauncher.launch(
+                            arrayOf("application/octet-stream", "text/plain", "application/*")
+                        )
+                    }) {
+                        Icon(
+                            Icons.Outlined.FolderOpen,
+                            contentDescription = "Uvezi Recovery Key",
                             tint = Cyan
                         )
                     }
