@@ -1230,8 +1230,8 @@ internal object RecoveryKeyEnvelope {
         return listOf(
             VERSION,
             ITERATIONS.toString(),
-            Base64.encodeToString(salt, Base64.NO_WRAP),
-            Base64.encodeToString(combined, Base64.NO_WRAP)
+            java.util.Base64.getEncoder().encodeToString(salt),
+            java.util.Base64.getEncoder().encodeToString(combined)
         ).joinToString(".")
     }
 
@@ -1241,8 +1241,8 @@ internal object RecoveryKeyEnvelope {
         require(parts.size == 4 && parts[0] == VERSION) { "Nepodržan recovery format." }
         val iterations = parts[1].toInt()
         require(iterations in 100_000..2_000_000) { "Neispravni KDF parametri." }
-        val salt = Base64.decode(parts[2], Base64.NO_WRAP)
-        val combined = Base64.decode(parts[3], Base64.NO_WRAP)
+        val salt = java.util.Base64.getDecoder().decode(parts[2])
+        val combined = java.util.Base64.getDecoder().decode(parts[3])
         require(salt.size == SALT_BYTES) { "Neispravna recovery sol." }
         require(combined.size >= NONCE_BYTES + TAG_BYTES + RAW_KEY_BYTES) {
             "Neispravan recovery sadržaj."
