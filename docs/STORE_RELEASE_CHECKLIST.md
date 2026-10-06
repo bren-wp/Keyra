@@ -14,8 +14,10 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 - [ ] Potpuno lokalno brisanje potvrđeno je na stvarnom uređaju i nakon njega se stari trezor više ne može otvoriti.
 - [ ] KEYRA2 backup Android → iOS i iOS → Android uspješno je vraćen.
 - [ ] KEYRAREC1 Recovery Key Android → iOS i iOS → Android uspješno je verificiran.
+- [x] Recovery Key export/import i first-run recovery tok implementirani su na Androidu i iOS-u.
 - [ ] Recovery Key export/import i first-run recovery tok provjereni su na stvarnim uređajima.
-- [ ] .keyra izvoz/uvoz kroz sistemski Files/Document picker radi.
+- [x] First-run recovery koristi sistemski Files/Document picker za Recovery Key i KEYRA2 backup.
+- [ ] .keyra izvoz/uvoz kroz sistemski Files/Document picker potvrđen je na stvarnim uređajima.
 - [ ] Screenshot/screen-record zaštita ponovno provjerena.
 - [ ] Nema demo vjerodajnica, API ključeva, tokena, lozinki ili privatnih testnih podataka u repozitoriju i buildu.
 - [ ] PRIVACY.md, SECURITY.md i store deklaracije odgovaraju stvarnom kodu.
