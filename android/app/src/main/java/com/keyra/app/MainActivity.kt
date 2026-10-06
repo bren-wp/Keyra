@@ -740,6 +740,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun criticalReauthAvailable(): Boolean = deviceAuthenticationAvailable
+
     fun cycleAutoLock() {
         val next = when (autoLockSeconds) {
             0 -> 30
@@ -4769,7 +4771,7 @@ private fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+            if (model.criticalReauthAvailable()) {
                 requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
                     model.exportBackupToUri(context, uri)
                 }
@@ -4801,7 +4803,7 @@ private fun SettingsScreen(
     }
 
     fun runProtectedImport() {
-        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+        if (model.criticalReauthAvailable()) {
             requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
                 model.importBackup(context)
             }
@@ -4895,7 +4897,7 @@ private fun SettingsScreen(
                             val export = {
                                 model.exportRecoveryKeyToUri(context, uri, passphrase)
                             }
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za izvoz Recovery Key datoteke.", export)
                             } else {
                                 export()
@@ -4958,7 +4960,7 @@ private fun SettingsScreen(
                                 model.importRecoveryKeyFromUri(context, uri, passphrase)
                                 Unit
                             }
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za uvoz Recovery Key datoteke.", importRecovery)
                             } else {
                                 importRecovery()
@@ -4995,7 +4997,7 @@ private fun SettingsScreen(
                     TextButton(
                         onClick = {
                             confirmErase = false
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
                                     model.eraseAllLocalData()
                                 }
@@ -5035,7 +5037,7 @@ private fun SettingsScreen(
                     TextButton(
                         onClick = {
                             pendingFileImport = null
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
                                     model.importBackupFromUri(context, uri)
                                 }
@@ -5242,7 +5244,7 @@ private fun SettingsScreen(
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
-                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                        if (model.criticalReauthAvailable()) {
                             requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
                                 model.exportBackup(context)
                             }
