@@ -17,9 +17,25 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
+
+      - name: Provjeri Xcode i iOS SDK
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR=$(xcodebuild -version | awk '/^Xcode / { split($2, version, "."); print version[1] }')
+          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          SDK_MAJOR=${SDK_VERSION%%.*}
+          if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
+            echo "App Store release QA zahtijeva Xcode 26 ili noviji."
+            exit 1
+          fi
+          if [ -z "$SDK_MAJOR" ] || [ "$SDK_MAJOR" -lt 26 ]; then
+            echo "App Store release QA zahtijeva iOS 26 SDK ili noviji."
+            exit 1
+          fi
 
       - name: Provjeri iOS aplikaciju
         run: |

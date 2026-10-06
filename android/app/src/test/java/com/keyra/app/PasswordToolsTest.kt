@@ -252,4 +252,31 @@ class PasswordToolsTest {
     }
 
 
+
+    @Test
+    fun recoveryKeyEnvelopeRejectsUnsupportedVersion() {
+        val payload = RecoveryKeyEnvelope.encrypt(
+            ByteArray(32) { index -> (index + 31).toByte() },
+            "Keyra-Recovery-2026!"
+        )
+        val unsupported = payload.replaceFirst("KEYRAREC1.", "KEYRAREC9.")
+
+        assertTrue(
+            runCatching {
+                RecoveryKeyEnvelope.decrypt(unsupported, "Keyra-Recovery-2026!")
+            }.isFailure
+        )
+    }
+
+    @Test
+    fun recoveryKeyEnvelopeRejectsOversizedInputBeforeDecrypting() {
+        val oversized = "KEYRAREC1.600000." + "A".repeat(20_000)
+
+        assertTrue(
+            runCatching {
+                RecoveryKeyEnvelope.decrypt(oversized, "Keyra-Recovery-2026!")
+            }.isFailure
+        )
+    }
+
 }
