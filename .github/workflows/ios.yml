@@ -177,5 +177,22 @@ jobs:
           sleep 3
           if ! xcrun simctl spawn "$UDID" /bin/kill -0 "$PID" >/dev/null 2>&1; then
             echo "Keyra se pokrenula, ali proces nije ostao živ nakon launch smoke testa."
+            echo "::group::Keyra simulator log"
+            xcrun simctl spawn "$UDID" log show \
+              --last 3m \
+              --style compact \
+              --predicate 'process == "Keyra" OR eventMessage CONTAINS[c] "com.keyra.app" OR eventMessage CONTAINS[c] "Keyra"' \
+              || true
+            echo "::endgroup::"
+
+            echo "::group::Keyra crash reports"
+            DEVICE_CRASH_DIR="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/CrashReporter"
+            if [ -d "$DEVICE_CRASH_DIR" ]; then
+              find "$DEVICE_CRASH_DIR" -type f -maxdepth 2 -mmin -10 -print -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; || true
+            fi
+            if [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
+              find "$HOME/Library/Logs/DiagnosticReports" -type f -name 'Keyra*' -mmin -10 -print -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; || true
+            fi
+            echo "::endgroup::"
             exit 1
           fi
