@@ -141,6 +141,58 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun totpMatchesRfc6238Sha256AndSha512Vectors() {
+        val sha256 = TotpConfig(
+            secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
+            algorithm = "SHA256",
+            digits = 8,
+            period = 30
+        )
+        val sha512 = TotpConfig(
+            secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA",
+            algorithm = "SHA512",
+            digits = 8,
+            period = 30
+        )
+
+        val vectors = listOf(
+            Triple(59L, "46119246", "90693936"),
+            Triple(1_111_111_109L, "68084774", "25091201"),
+            Triple(1_111_111_111L, "67062674", "99943326"),
+            Triple(1_234_567_890L, "91819424", "93441116"),
+            Triple(2_000_000_000L, "90698825", "38618901"),
+            Triple(20_000_000_000L, "77737706", "47863826")
+        )
+
+        vectors.forEach { (seconds, expectedSha256, expectedSha512) ->
+            assertEquals(expectedSha256, generateTotp(sha256, timeMillis = seconds * 1000L))
+            assertEquals(expectedSha512, generateTotp(sha512, timeMillis = seconds * 1000L))
+        }
+    }
+
+    @Test
+    fun base32DecoderMatchesRfc4648KnownValue() {
+        assertArrayEquals(
+            "foobar".toByteArray(Charsets.US_ASCII),
+            decodeBase32("MZXW6YTBOI======")
+        )
+        assertTrue(decodeBase32("MZXW6YTB0I") == null)
+    }
+
+    @Test
+    fun totpCountdownResetsExactlyOnPeriodBoundary() {
+        val config = TotpConfig(
+            secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            period = 30
+        )
+
+        assertEquals(30, totpRemainingSeconds(config, timeMillis = 0L))
+        assertEquals(1, totpRemainingSeconds(config, timeMillis = 29_999L))
+        assertEquals(30, totpRemainingSeconds(config, timeMillis = 30_000L))
+        assertEquals(15, totpRemainingSeconds(config, timeMillis = 45_000L))
+    }
+
+    @Test
     fun totpSupportsGoogleAuthenticatorStyleSixDigitCodes() {
         val config = TotpConfig(
             secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
