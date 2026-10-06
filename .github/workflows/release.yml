@@ -168,7 +168,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$SIM_APP" "dist/Keyra-${VERSION}-iOS-Simulator.zip"
 
       - name: iOS simulator launch smoke
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           set -euo pipefail
 
@@ -236,7 +236,7 @@ jobs:
 
           python3 - "$UDID" <<'PY'
           import subprocess, sys
-          subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=300)
+          subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=600)
           PY
 
           xcrun simctl install "$UDID" "$SIM_APP"
