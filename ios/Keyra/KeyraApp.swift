@@ -1591,7 +1591,17 @@ struct RootView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            midnight.ignoresSafeArea()
+            LinearGradient(
+                colors: [
+                    midnight,
+                    Color(hex: 0x07172A),
+                    Color(hex: 0x091426),
+                    midnight
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
             if splash {
                 SplashView()
@@ -1777,32 +1787,58 @@ struct BrandHeader: View {
             header(compact: false)
             header(compact: true)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
     private func header(compact: Bool) -> some View {
         HStack(spacing: compact ? 8 : 12) {
             KeyraMark(size: compact ? 42 : 50)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Keyra")
-                    .font(.system(size: compact ? 27 : 31, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: compact ? 9 : 10, weight: .medium))
-                    .tracking(compact ? 1.2 : 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text("Keyra")
+                        .font(.system(size: compact ? 27 : 31, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    if !compact {
+                        HStack(spacing: 4) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 8, weight: .bold))
+                            Text("LOCAL")
+                                .font(.system(size: 8, weight: .bold))
+                                .tracking(0.8)
+                        }
+                        .foregroundStyle(good)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(cyan.opacity(0.09))
+                        .overlay(Capsule().stroke(cyan.opacity(0.22), lineWidth: 1))
+                        .clipShape(Capsule())
+                    }
+                }
+
+                Text(subtitle.uppercased())
+                    .font(.system(size: compact ? 9 : 10, weight: .semibold))
+                    .tracking(compact ? 1.2 : 1.8)
                     .foregroundStyle(muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
+
             Spacer(minLength: 4)
+
             Button {
                 store.open(.security)
             } label: {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: "bell")
+                    Image(systemName: "bell.fill")
                         .foregroundStyle(.white)
-                        .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
+                        .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
+                        .background(midnight.opacity(0.72))
+                        .clipShape(Circle())
 
                     if notificationCount > 0 {
                         Text(notificationCount > 9 ? "9+" : "\(notificationCount)")
@@ -1812,7 +1848,7 @@ struct BrandHeader: View {
                             .padding(.vertical, 1)
                             .background(danger)
                             .clipShape(Capsule())
-                            .offset(x: 4, y: -3)
+                            .offset(x: 3, y: -3)
                     }
                 }
             }
@@ -1822,13 +1858,43 @@ struct BrandHeader: View {
                     ? "Sigurnosna upozorenja: \(notificationCount)"
                     : "Nema sigurnosnih upozorenja"
             )
+
             Text("K")
-                .font(.system(size: compact ? 12 : 14, weight: .bold))
-                .frame(width: compact ? 36 : 42, height: compact ? 36 : 42)
-                .overlay(Circle().stroke(cyan, lineWidth: 1))
+                .font(.system(size: compact ? 12 : 14, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
+                .background(
+                    LinearGradient(
+                        colors: [cyan.opacity(0.18), indigo.opacity(0.20)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(Circle().stroke(cyan.opacity(0.62), lineWidth: 1))
+                .clipShape(Circle())
         }
-        .padding(.horizontal, compact ? 12 : 18)
-        .padding(.vertical, compact ? 7 : 10)
+        .padding(.horizontal, compact ? 12 : 16)
+        .padding(.vertical, compact ? 9 : 11)
+        .background(
+            LinearGradient(
+                colors: [slate2.opacity(0.98), Color(hex: 0x101B2F).opacity(0.98)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26)
+                .stroke(
+                    LinearGradient(
+                        colors: [cyan.opacity(0.42), ice.opacity(0.16), indigo.opacity(0.28)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .shadow(color: .black.opacity(0.22), radius: 10, y: 6)
     }
 }
 
@@ -1836,11 +1902,29 @@ struct GlassCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) { content }
-            .padding(20)
-            .background(slate.opacity(0.94))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(ice.opacity(0.36), lineWidth: 1))
+        VStack(alignment: .leading, spacing: 10) { content }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .background(
+                LinearGradient(
+                    colors: [slate2.opacity(0.98), slate.opacity(0.94)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 26)
+                    .stroke(
+                        LinearGradient(
+                            colors: [cyan.opacity(0.42), ice.opacity(0.14), indigo.opacity(0.28)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 26))
+            .shadow(color: .black.opacity(0.20), radius: 9, y: 5)
     }
 }
 
@@ -2407,7 +2491,11 @@ struct SecretField: View {
     @Binding var reveal: Bool
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(cyan)
+                .frame(width: 24)
+
             Group {
                 if reveal {
                     TextField(title, text: $text)
@@ -2421,11 +2509,22 @@ struct SecretField: View {
             Button { reveal.toggle() } label: {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
+                    .frame(width: 32, height: 32)
+                    .background(midnight.opacity(0.48))
+                    .clipShape(Circle())
             }
+            .buttonStyle(.plain)
         }
-        .padding()
-        .background(midnight.opacity(0.62))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(ice.opacity(0.38), lineWidth: 1))
+        .padding(.horizontal, 14)
+        .frame(minHeight: 56)
+        .background(
+            LinearGradient(
+                colors: [slate2.opacity(0.88), slate.opacity(0.72)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(ice.opacity(0.24), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .foregroundStyle(.white)
     }
@@ -2435,18 +2534,25 @@ struct BottomBar: View {
     @EnvironmentObject var store: KeyraStore
 
     var body: some View {
-        HStack(spacing: 2) {
-            BottomItem(icon: "house", title: "Trezor", screen: .vault)
+        HStack(spacing: 4) {
+            BottomItem(icon: "house.fill", title: "Trezor", screen: .vault)
             BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
-            BottomItem(icon: "square.grid.2x2", title: "Kolekcije", screen: .collections)
-            BottomItem(icon: "gearshape", title: "Postavke", screen: .settings)
+            BottomItem(icon: "square.grid.2x2.fill", title: "Kolekcije", screen: .collections)
+            BottomItem(icon: "gearshape.fill", title: "Postavke", screen: .settings)
         }
-        .padding(.vertical, 7)
-        .background(slate.opacity(0.97))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(ice.opacity(0.25), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .padding(6)
+        .background(
+            LinearGradient(
+                colors: [slate2.opacity(0.99), slate.opacity(0.98)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(RoundedRectangle(cornerRadius: 26).stroke(cyan.opacity(0.22), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 26))
+        .shadow(color: .black.opacity(0.28), radius: 12, y: 7)
         .padding(.horizontal, 12)
-        .padding(.bottom, 3)
+        .padding(.bottom, 4)
         .frame(maxWidth: 820)
         .frame(maxWidth: .infinity)
     }
@@ -2457,27 +2563,34 @@ struct BottomBar: View {
         Button {
             store.open(screen)
         } label: {
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .semibold))
                 Text(title)
                     .font(.caption2)
-                    .fontWeight(selected ? .bold : .regular)
+                    .fontWeight(selected ? .bold : .medium)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
                 Capsule()
                     .fill(cyan)
-                    .frame(width: selected ? 24 : 0, height: 2)
-                    .padding(.top, 1)
+                    .frame(width: selected ? 26 : 0, height: 2)
             }
             .foregroundStyle(selected ? cyan : muted)
-            .frame(maxWidth: .infinity, minHeight: 46)
-            .background(selected ? cyan.opacity(0.11) : Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 17)
-                    .stroke(selected ? cyan.opacity(0.30) : Color.clear, lineWidth: 1)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(
+                selected
+                    ? LinearGradient(
+                        colors: [cyan.opacity(0.17), indigo.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    : LinearGradient(colors: [.clear, .clear], startPoint: .leading, endPoint: .trailing)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 17))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(selected ? cyan.opacity(0.36) : Color.clear, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
     }
@@ -2730,16 +2843,48 @@ struct Summary: View {
     let label: String
     let accent: Color
 
+    private var icon: String {
+        switch label {
+        case "Slabe": return "exclamationmark.triangle.fill"
+        case "Ponovljene": return "doc.on.doc.fill"
+        default: return "shield.fill"
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.system(size: 30, weight: .black)).foregroundStyle(.white)
-            Text(label).font(.caption).foregroundStyle(muted)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(accent)
+                    .frame(width: 30, height: 30)
+                    .background(accent.opacity(0.13))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                Spacer()
+                Circle()
+                    .fill(accent)
+                    .frame(width: 7, height: 7)
+            }
+            Text(value)
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(slate)
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(accent.opacity(0.65), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .background(
+            LinearGradient(
+                colors: [slate2.opacity(0.98), slate.opacity(0.92)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(accent.opacity(0.42), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.16), radius: 6, y: 3)
     }
 }
 
@@ -3425,19 +3570,46 @@ struct AddEditView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Button {
                     store.open(original == nil ? .vault : .detail)
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.title2)
+                        .font(.headline.bold())
                         .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(midnight.opacity(0.72))
+                        .clipShape(Circle())
                 }
-                KeyraMark(size: 38)
-                Text("Keyra").font(.title.bold()).foregroundStyle(.white)
+                .buttonStyle(.plain)
+
+                KeyraMark(size: 36)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Keyra")
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text(original == nil ? "NOVA STAVKA" : "UREĐIVANJE STAVKE")
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(1.4)
+                        .foregroundStyle(muted)
+                }
                 Spacer()
             }
-            .padding()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                LinearGradient(
+                    colors: [slate2.opacity(0.98), Color(hex: 0x101B2F).opacity(0.98)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(cyan.opacity(0.24), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .shadow(color: .black.opacity(0.18), radius: 7, y: 4)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -3750,10 +3922,17 @@ struct KeyraField: View {
     var body: some View {
         TextField(title, text: $text, axis: axis)
             .lineLimit(axis == .vertical ? 3...6 : 1...1)
-            .padding()
+            .padding(.horizontal, 14)
+            .frame(minHeight: axis == .vertical ? 76 : 56)
             .foregroundStyle(.white)
-            .background(slate)
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(ice.opacity(0.35), lineWidth: 1))
+            .background(
+                LinearGradient(
+                    colors: [slate2.opacity(0.88), slate.opacity(0.72)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(ice.opacity(0.24), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }
@@ -3794,10 +3973,16 @@ struct DetailView: View {
                 }
             }()
             VStack(spacing: 0) {
-                HStack {
+                HStack(spacing: 10) {
                     Button { store.open(.vault) } label: {
-                        Image(systemName: "chevron.left").font(.title2).foregroundStyle(.white)
+                        Image(systemName: "chevron.left")
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(midnight.opacity(0.72))
+                            .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
 
                     Image(systemName: {
                         switch item.kind {
@@ -3810,17 +3995,25 @@ struct DetailView: View {
                         }
                     }())
                     .foregroundStyle(cyan)
-                    .frame(width: 52, height: 52)
-                    .background(cyan.opacity(0.12))
+                    .frame(width: 50, height: 50)
+                    .background(
+                        LinearGradient(
+                            colors: [cyan.opacity(0.18), indigo.opacity(0.13)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
-                            .font(.system(size: 32, weight: .black))
+                            .font(.system(size: 28, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
                             .lineLimit(2)
                             .minimumScaleFactor(0.72)
-                        Text(item.kind + " • " + item.category)
+                        Text((item.kind + " • " + item.category).uppercased())
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(0.7)
                             .foregroundStyle(muted)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -3832,11 +4025,26 @@ struct DetailView: View {
                         Image(systemName: item.favorite ? "star.fill" : "star")
                             .foregroundStyle(item.favorite ? warn : ice)
                             .frame(width: 40, height: 40)
+                            .background(item.favorite ? warn.opacity(0.12) : midnight.opacity(0.58))
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.favorite ? "Ukloni iz favorita" : "Dodaj u favorite")
                 }
-                .padding(18)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [slate2.opacity(0.98), Color(hex: 0x101B2F).opacity(0.98)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(cyan.opacity(0.22), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .shadow(color: .black.opacity(0.18), radius: 7, y: 4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
 
                 Picker("Prikaz", selection: $selectedTab) {
                     Text("Detalji").tag("Detalji")
@@ -4806,7 +5014,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji Keyra",
-                            subtitle: "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                            subtitle: "Verzija 0.6.0 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                         )
                     }
 
@@ -5194,11 +5402,23 @@ struct SectionLabel: View {
     init(_ value: String) { self.value = value }
 
     var body: some View {
-        Text(value)
-            .font(.caption)
-            .tracking(2)
-            .foregroundStyle(ice)
-            .padding(.top, 8)
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(
+                    LinearGradient(
+                        colors: [cyan, indigo],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 4, height: 18)
+            Text(value.uppercased())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(1.7)
+                .foregroundStyle(ice)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 }
 
@@ -5236,9 +5456,16 @@ struct SettingRow<Trailing: View>: View {
             }
         }
         .padding(14)
-        .background(slate)
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(ice.opacity(0.18), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .background(
+            LinearGradient(
+                colors: [slate2.opacity(0.96), slate.opacity(0.92)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(ice.opacity(0.17), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.14), radius: 5, y: 2)
     }
 
     private var settingIcon: some View {
