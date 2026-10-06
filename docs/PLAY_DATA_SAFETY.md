@@ -9,7 +9,8 @@ Keyra je lokalni password manager i TOTP autentifikator bez Keyra korisničkog r
 Trenutačni Android manifest:
 
 - nema `INTERNET` dozvolu
-- koristi samo `USE_BIOMETRIC` za lokalnu potvrdu identiteta
+- koristi `USE_BIOMETRIC` za lokalnu potvrdu identiteta
+- na Androidu 12+ deklarira `HIDE_OVERLAY_WINDOWS` kako bi aplikacija mogla blokirati nepouzdane overlay prozore iznad osjetljivog UI-ja; ta dozvola ne daje Keyri pristup korisničkim podacima
 - nema broad storage/read-media dozvole
 - backup datoteku bira korisnik kroz Storage Access Framework
 - nema advertising ID, analytics ili ads SDK
@@ -28,6 +29,7 @@ Google Play traži da Data safety odgovori budu potpuni, točni i usklađeni s p
 - PBKDF2-HMAC-SHA-256 za derivaciju iz glavne lozinke
 - Android Keystore za lokalni uređajni ključ
 - `FLAG_SECURE` protiv screenshots/screen recording gdje ga Android poštuje
+- `setHideOverlayWindows(true)` na Androidu 12+ za dodatnu zaštitu od overlay/tapjacking scenarija
 - automatsko zaključavanje
 - rate limiting pogrešnih pokušaja otključavanja
 - dodatna biometrijska/device-credential potvrda za osjetljive radnje
