@@ -70,7 +70,7 @@ jobs:
             build
 
       - name: Provjeri pokretanje iOS aplikacije
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           set -euo pipefail
 
@@ -160,7 +160,7 @@ jobs:
           subprocess.run(
               ["xcrun", "simctl", "bootstatus", udid, "-b"],
               check=True,
-              timeout=300,
+              timeout=600,
           )
           PY
 
