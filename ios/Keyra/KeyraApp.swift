@@ -5141,7 +5141,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji Keyra",
-                            subtitle: "Verzija 0.6.1 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                            subtitle: "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                         )
                     }
 
