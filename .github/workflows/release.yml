@@ -1,23 +1,61 @@
-name: Ručno GitHub izdanje
+name: Keyra GitHub izdanje
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "android/app/build.gradle.kts"
+      - "ios/Keyra.xcodeproj/project.pbxproj"
   workflow_dispatch:
     inputs:
       version:
-        description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji, npr. 0.5.0"
-        required: true
-        default: "0.5.0"
+        description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
+        required: false
+        default: "0.6.0"
 
 permissions:
   contents: write
 
-env:
-  VERSION: ${{ inputs.version }}
+concurrency:
+  group: keyra-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Provjeri verziju
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: version
+        name: Uskladi Android i iOS verziju
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ANDROID_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
+          IOS_VERSION=$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' ios/Keyra.xcodeproj/project.pbxproj | head -n 1 | tr -d '[:space:]')
+          REQUESTED="${{ inputs.version }}"
+
+          if [ -n "$REQUESTED" ]; then
+            VERSION="$REQUESTED"
+          else
+            VERSION="$ANDROID_VERSION"
+          fi
+
+          test -n "$VERSION"
+          test "$ANDROID_VERSION" = "$VERSION"
+          test "$IOS_VERSION" = "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   android:
     name: Android paketi
+    needs: prepare
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v6
 
@@ -26,25 +64,28 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.13"
 
-      - name: Provjeri usklađenost verzije
+      - name: Izradi i provjeri Android pakete
         run: |
           set -euo pipefail
-          grep -F "versionName = \"${VERSION}\"" android/app/build.gradle.kts
-          grep -F "MARKETING_VERSION = ${VERSION};" ios/Keyra.xcodeproj/project.pbxproj
+          gradle -p android \
+            :app:lintRelease \
+            :app:testDebugUnitTest \
+            :app:assembleDebug \
+            :app:assembleRelease \
+            :app:bundleRelease
 
-      - name: Izradi APK i AAB
-        run: |
-          gradle -p android :app:lintRelease :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Keyra-${VERSION}-Android.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Keyra-${VERSION}-Android-debug.apk"
           cp android/app/build/outputs/apk/release/app-release-unsigned.apk "dist/Keyra-${VERSION}-Android-unsigned.apk"
           cp android/app/build/outputs/bundle/release/app-release.aab "dist/Keyra-${VERSION}-Android.aab"
-          cd dist
-          sha256sum * > SHA256SUMS-Android.txt
+          (
+            cd dist
+            sha256sum * > SHA256SUMS-Android.txt
+          )
 
       - uses: actions/upload-artifact@v4
         with:
@@ -54,13 +95,34 @@ jobs:
 
   ios:
     name: iOS paketi
-    runs-on: macos-15
+    needs: prepare
+    runs-on: macos-26
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v6
 
-      - name: Izradi paket za iPhone i iPad
+      - name: Provjeri Xcode i iOS SDK
         run: |
           set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR=$(xcodebuild -version | awk '/^Xcode / { split($2, version, "."); print version[1] }')
+          SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          SDK_MAJOR=${SDK_VERSION%%.*}
+
+          if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
+            echo "Release zahtijeva Xcode 26 ili noviji."
+            exit 1
+          fi
+          if [ -z "$SDK_MAJOR" ] || [ "$SDK_MAJOR" -lt 26 ]; then
+            echo "Release zahtijeva iOS 26 SDK ili noviji."
+            exit 1
+          fi
+
+      - name: Izradi i provjeri iOS pakete
+        run: |
+          set -euo pipefail
+          rm -rf build/release-device build/release-simulator build/release-analyze build/release-package
           mkdir -p dist
 
           xcodebuild \
@@ -68,26 +130,17 @@ jobs:
             -scheme Keyra \
             -sdk iphoneos \
             -configuration Release \
-            -derivedDataPath build/device \
+            -derivedDataPath build/release-device \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
 
-          APP_PATH="build/device/Build/Products/Release-iphoneos/Keyra.app"
-          test -d "$APP_PATH"
-          mkdir -p build/package/Payload
-          cp -R "$APP_PATH" build/package/Payload/
-          (
-            cd build/package
-            zip -qry "../../dist/Keyra-${VERSION}-iOS-unsigned.ipa" Payload
-          )
-
           xcodebuild \
             -project ios/Keyra.xcodeproj \
             -scheme Keyra \
             -sdk iphonesimulator \
             -configuration Release \
-            -derivedDataPath build/simulator \
+            -derivedDataPath build/release-simulator \
             CODE_SIGNING_ALLOWED=NO \
             build
 
@@ -96,35 +149,116 @@ jobs:
             -scheme Keyra \
             -sdk iphonesimulator \
             -configuration Release \
-            -derivedDataPath build/analyze \
+            -derivedDataPath build/release-analyze \
             CODE_SIGNING_ALLOWED=NO \
             analyze
 
-          SIM_APP="build/simulator/Build/Products/Release-iphonesimulator/Keyra.app"
+          APP_PATH="build/release-device/Build/Products/Release-iphoneos/Keyra.app"
+          SIM_APP="build/release-simulator/Build/Products/Release-iphonesimulator/Keyra.app"
+          test -d "$APP_PATH"
           test -d "$SIM_APP"
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$SIM_APP/Info.plist")
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          devices = json.load(sys.stdin).get("devices", {})
-          for runtime_devices in devices.values():
-              for device in runtime_devices:
-                  if device.get("isAvailable") and str(device.get("name", "")).startswith("iPhone"):
-                      print(device["udid"])
-                      raise SystemExit(0)
-          raise SystemExit(1)
-          ')
-          xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" "$SIM_APP"
-          xcrun simctl launch "$UDID" "$BUNDLE_ID"
-          sleep 3
-          xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
-          xcrun simctl shutdown "$UDID" || true
+
+          mkdir -p build/release-package/Payload
+          cp -R "$APP_PATH" build/release-package/Payload/
+          (
+            cd build/release-package
+            zip -qry "../../dist/Keyra-${VERSION}-iOS-unsigned.ipa" Payload
+          )
 
           ditto -c -k --sequesterRsrc --keepParent "$SIM_APP" "dist/Keyra-${VERSION}-iOS-Simulator.zip"
 
-          cd dist
-          shasum -a 256 * > SHA256SUMS-iOS.txt
+      - name: iOS simulator launch smoke
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+
+          SIM_APP="build/release-simulator/Build/Products/Release-iphonesimulator/Keyra.app"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$SIM_APP/Info.plist")
+
+          RUNTIME_ID=$(xcrun simctl list runtimes available -j | python3 -c '
+          import json, re, sys
+          runtimes = json.load(sys.stdin).get("runtimes", [])
+          ios = []
+          for runtime in runtimes:
+              if not runtime.get("isAvailable"):
+                  continue
+              identifier = str(runtime.get("identifier", ""))
+              if "iOS" not in identifier:
+                  continue
+              version = tuple(int(x) for x in re.findall(r"\d+", str(runtime.get("version", "0"))))
+              ios.append((version, identifier))
+          if not ios:
+              raise SystemExit("Nije pronađen dostupan iOS simulator runtime.")
+          print(max(ios)[1])
+          ')
+
+          DEVICE_TYPE_ID=$(xcrun simctl list devicetypes -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin).get("devicetypes", [])
+          for prefix in ("iPhone 16", "iPhone 15", "iPhone 14", "iPhone"):
+              for device in devices:
+                  name = str(device.get("name", ""))
+                  if name == prefix or name.startswith(prefix + " "):
+                      print(device["identifier"])
+                      raise SystemExit(0)
+          raise SystemExit("Nije pronađen iPhone simulator device type.")
+          ')
+
+          SIM_NAME="Keyra-Release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          UDID=$(xcrun simctl create "$SIM_NAME" "$DEVICE_TYPE_ID" "$RUNTIME_ID")
+          export UDID
+
+          cleanup() {
+            python3 - "$UDID" "$BUNDLE_ID" <<'PY'
+          import subprocess, sys
+          udid, bundle_id = sys.argv[1], sys.argv[2]
+          for command in (
+              ["xcrun", "simctl", "terminate", udid, bundle_id],
+              ["xcrun", "simctl", "shutdown", udid],
+              ["xcrun", "simctl", "delete", udid],
+          ):
+              try:
+                  subprocess.run(command, check=False, timeout=20, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+              except subprocess.TimeoutExpired:
+                  pass
+          PY
+          }
+          trap cleanup EXIT
+
+          python3 - "$UDID" <<'PY'
+          import subprocess, sys
+          udid = sys.argv[1]
+          try:
+              subprocess.run(["xcrun", "simctl", "boot", udid], check=False, timeout=30, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          except subprocess.TimeoutExpired:
+              print("simctl boot je prekoračio 30 s; nastavljam pratiti stvarni boot status.")
+          PY
+
+          python3 - "$UDID" <<'PY'
+          import subprocess, sys
+          subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=300)
+          PY
+
+          xcrun simctl install "$UDID" "$SIM_APP"
+          LAUNCH_OUTPUT=$(xcrun simctl launch "$UDID" "$BUNDLE_ID")
+          echo "$LAUNCH_OUTPUT"
+          PID=$(echo "$LAUNCH_OUTPUT" | awk -F': ' 'NF > 1 {print $NF}' | tail -n 1)
+
+          if ! [[ "$PID" =~ ^[0-9]+$ ]]; then
+            echo "Nije dobiven valjan PID nakon pokretanja Keyre."
+            exit 1
+          fi
+
+          sleep 3
+          /bin/kill -0 "$PID"
+
+      - name: SHA-256 kontrolne sume
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            shasum -a 256 * > SHA256SUMS-iOS.txt
+          )
 
       - uses: actions/upload-artifact@v4
         with:
@@ -134,8 +268,10 @@ jobs:
 
   release:
     name: Objavi izdanje
-    needs: [android, ios]
+    needs: [prepare, android, ios]
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v6
 
@@ -150,12 +286,12 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo GitHub izdanje sadrži provjerene razvojne pakete iz točnog release commita.
+          Ovo izdanje donosi objedinjeni Keyra brand i UI/UX polish na Androidu i iOS-u, uključujući poboljšani header, navigaciju, kartice, sigurnosne metrike i forme. Uključuje i first-run Recovery Key + KEYRA2 restore tok uveden nakon verzije 0.5.0.
 
           ## Provjere
           - Android lint i unit testovi
           - Android debug/release APK i release AAB
-          - iOS Release build i analyze
+          - iOS Release build i analyze na Xcode 26+ / iOS 26 SDK+
           - iOS simulator launch smoke test
           - SHA-256 kontrolne sume artefakata
 
@@ -169,6 +305,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             gh release upload "v${VERSION}" dist/* --clobber
             gh release edit "v${VERSION}" --title "Keyra ${VERSION}" --notes-file RELEASE_NOTES.md
