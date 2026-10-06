@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.0"
+        default: "0.6.1"
 
 permissions:
   contents: write
@@ -286,7 +286,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje donosi objedinjeni Keyra brand i UI/UX polish na Androidu i iOS-u, uključujući poboljšani header, navigaciju, kartice, sigurnosne metrike i forme. Uključuje i first-run Recovery Key + KEYRA2 restore tok uveden nakon verzije 0.5.0.
+          Ovo izdanje donosi full dead-code audit i cleanup nakon 0.6.0: uklonjene su nepotrebne Android dependency varijante i Compose tooling/preview dependencyji, zadržane su samo stvarno aktivne legacy migration/backup putanje, a sigurnosna dokumentacija usklađena je sa stvarnim stanjem implementacije.
 
           ## Provjere
           - Android lint i unit testovi
