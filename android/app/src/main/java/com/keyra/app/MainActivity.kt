@@ -4000,27 +4000,65 @@ private fun DetailScreen(
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
-        Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { model.open(Screen.VAULT) }) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
-            }
-            Box(
-                Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Cyan.copy(alpha=.12f)),
-                contentAlignment = Alignment.Center
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Slate2.copy(alpha = .96f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .22f)),
+            shadowElevation = 6.dp
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(titleIcon, null, tint = Cyan)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(current.title, color = Color.White, fontSize = if (compact) 23.sp else 30.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
-                Text(current.type + " • " + current.category, color = Muted)
-            }
-            IconButton(onClick = model::toggleSelectedFavorite) {
-                Icon(
-                    if (current.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (current.favorite) "Ukloni iz favorita" else "Dodaj u favorite",
-                    tint = if (current.favorite) Warn else Ice
-                )
+                FilledIconButton(
+                    onClick = { model.open(Screen.VAULT) },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Midnight.copy(alpha = .76f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Natrag")
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .size(if (compact) 46.dp else 52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Brush.linearGradient(listOf(Cyan.copy(alpha=.18f), Indigo.copy(alpha=.13f)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(titleIcon, null, tint = Cyan)
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        current.title,
+                        color = Color.White,
+                        fontSize = if (compact) 21.sp else 27.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2
+                    )
+                    Text(
+                        (current.type + " • " + current.category).uppercase(),
+                        color = Muted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = .7.sp
+                    )
+                }
+                FilledIconButton(
+                    onClick = model::toggleSelectedFavorite,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = if (current.favorite) Warn.copy(alpha = .14f) else Midnight.copy(alpha = .62f),
+                        contentColor = if (current.favorite) Warn else Ice
+                    )
+                ) {
+                    Icon(
+                        if (current.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (current.favorite) "Ukloni iz favorita" else "Dodaj u favorite"
+                    )
+                }
             }
         }
 
