@@ -444,7 +444,7 @@ enum KeychainVault {
         }
 
         var bytes = [UInt8](repeating: 0, count: 32)
-        defer { bytes.resetBytes(in: 0..<bytes.count) }
+        defer { for index in bytes.indices { bytes[index] = 0 } }
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
@@ -906,7 +906,7 @@ enum RecoveryKeyEnvelope {
         }
 
         var salt = [UInt8](repeating: 0, count: saltBytes)
-        defer { salt.resetBytes(in: 0..<salt.count) }
+        defer { for index in salt.indices { salt[index] = 0 } }
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
@@ -939,7 +939,7 @@ enum RecoveryKeyEnvelope {
             .split(separator: ".", omittingEmptySubsequences: false)
         guard
             parts.count == 4,
-            parts[0] == Substring(version),
+            String(parts[0]) == version,
             let rounds = Int(parts[1]),
             (100_000...2_000_000).contains(rounds),
             let salt = Data(base64Encoded: String(parts[2])),
