@@ -278,6 +278,22 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun firstRunRecoveryKeepsRecoveryAndBackupPasswordsIndependent() {
+        val rawKey = ByteArray(32) { index -> (index + 7).toByte() }
+        val recoveryPassphrase = "Correct Horse Battery Staple"
+        val backupPassword = "Backup-Password-2026!"
+        val vaultJson = """[{"id":"item-1","title":"Primjer"}]"""
+
+        val recoveryPayload = RecoveryKeyEnvelope.encrypt(rawKey, recoveryPassphrase)
+        val backupPayload = PortableBackup.encrypt(vaultJson, backupPassword)
+
+        assertArrayEquals(rawKey, RecoveryKeyEnvelope.decrypt(recoveryPayload, recoveryPassphrase))
+        assertEquals(vaultJson, PortableBackup.decrypt(backupPayload, backupPassword))
+        assertTrue(runCatching { RecoveryKeyEnvelope.decrypt(recoveryPayload, backupPassword) }.isFailure)
+        assertTrue(runCatching { PortableBackup.decrypt(backupPayload, recoveryPassphrase) }.isFailure)
+    }
+
+    @Test
     fun recoveryKeyEnvelopeRejectsWrongPassphrase() {
         val rawKey = ByteArray(32) { index -> (index + 11).toByte() }
         val payload = RecoveryKeyEnvelope.encrypt(rawKey, "Keyra-Recovery-2026!")
