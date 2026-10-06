@@ -43,3 +43,12 @@ Keyra trenutačno nema account creation. Googleov zahtjev za in-app i web accoun
 ## Obavezna provjera prije svake objave
 
 Ako se doda internet pristup, crash reporting, analytics, telemetry, push, cloud SDK, login/account sustav ili bilo koji novi third-party SDK, ovaj dokument i Play Console Data safety moraju se ponovno pregledati prije releasea.
+
+
+### 0.6.2 sigurnosne napomene
+- nema INTERNET permissiona
+- Android backup je onemogućen
+- screenshot/screen recording aplikacijskog sadržaja blokiran je s `FLAG_SECURE`
+- overlay prozori skrivaju se na podržanim Android verzijama
+- master-password verifier vezan je uz Android Keystore
+- nema novih kategorija prikupljenih ili dijeljenih podataka
