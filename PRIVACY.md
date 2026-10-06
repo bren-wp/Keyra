@@ -21,7 +21,7 @@ Keyra ne umeće probne vjerodajnice u novi trezor.
 
 ## Podaci koje Keyra ne prikuplja
 
-U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za mrežni pristup na Androidu, ne koristi oglašavanje, analitiku, identifikatore za praćenje, lokaciju, kontakte, mikrofon ni fotografije. Sadržaj trezora, glavna lozinka i TOTP tajne ne šalju se razvojnom programeru.
+U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za mrežni pristup na Androidu, ne koristi oglašavanje, analitiku, identifikatore za praćenje, lokaciju, kontakte, mikrofon ni fotografije. Na Androidu 12+ koristi sistemsku overlay-zaštitu kako bi spriječila prikaz nepouzdanih prozora iznad osjetljivog Keyra sučelja; ta zaštita ne prikuplja korisničke podatke. Sadržaj trezora, glavna lozinka i TOTP tajne ne šalju se razvojnom programeru.
 
 Ako se u budućnosti uvede opcionalna mrežna sinkronizacija koju pruža Keyra, ova pravila privatnosti i deklaracije u Google Playu/App Storeu moraju se ažurirati prije objave te funkcije.
 
@@ -37,3 +37,10 @@ Za pitanja o privatnosti, sigurnosti ili načinu obrade podataka korisnik se mo�
 ## Brisanje lokalnih podataka
 
 U postavkama postoji radnja **Izbriši sve lokalne podatke**. Ona uklanja lokalni trezor, podatke za provjeru glavne lozinke, lokalne sigurnosne postavke i uređajni ključ šifriranja te vraća aplikaciju na početni onboarding. Vanjske `.keyra` kopije koje je korisnik prethodno spremio u Files ili cloud provider nisu pod kontrolom Keyre i ne brišu se tom radnjom.
+
+
+## Dodatno očvršćivanje u verziji 0.6.2
+
+Keyra i dalje ne koristi oglašavanje, analitiku, tracking SDK-ove, crash-reporting servise ni vlastiti backend. Master-password verifier dodatno je vezan uz uređaj: Android ga štiti Android Keystore ključem, a iOS ga sprema u `ThisDeviceOnly` Data Protection Keychain. To smanjuje vrijednost kopiranog app-data direktorija za offline napad na glavnu lozinku.
+
+Kritični izvoz/uvoz sigurnosnih kopija i Recovery Key datoteka te trajno brisanje podataka koriste device-owner potvrdu kada je dostupna. Clipboard ostaje local-only/privremeni kanal i automatski se čisti.

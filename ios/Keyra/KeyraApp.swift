@@ -500,12 +500,76 @@ enum KeychainVault {
     }
 }
 
+enum AuthVerifierKeychain {
+    private static let service = "com.keyra.app.auth"
+    private static let account = "master-verifier-v1"
+
+    static func read() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var output: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &output) == errSecSuccess else {
+            return nil
+        }
+        return output as? Data
+    }
+
+    static func write(_ data: Data) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecSuccess { return }
+        guard status == errSecItemNotFound else { throw KeyraError.keyUnavailable }
+
+        var add = query
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
+    }
+
+    static func clear() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+}
+
 final class AuthStore {
     private let defaults = UserDefaults.standard
     private let legacyIterations = 120_000
 
+    private struct Verifier: Codable {
+        let version: Int
+        let salt: Data
+        let hash: Data
+        let iterations: Int
+    }
+
     var isSetup: Bool {
-        defaults.data(forKey: "master_hash") != nil && defaults.data(forKey: "master_salt") != nil
+        AuthVerifierKeychain.read() != nil ||
+            (defaults.data(forKey: "master_hash") != nil && defaults.data(forKey: "master_salt") != nil)
     }
 
     func create(password: String) -> Bool {
@@ -513,13 +577,20 @@ final class AuthStore {
         guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
             return false
         }
+        defer { salt.indices.forEach { salt[$0] = 0 } }
 
         do {
             let saltData = Data(salt)
             let hash = try PasswordTools.derive(password, salt: saltData)
-            defaults.set(saltData, forKey: "master_salt")
-            defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
-            defaults.set(hash, forKey: "master_hash")
+            let verifier = Verifier(
+                version: 1,
+                salt: saltData,
+                hash: hash,
+                iterations: PasswordTools.currentIterations
+            )
+            let encoded = try PropertyListEncoder().encode(verifier)
+            try AuthVerifierKeychain.write(encoded)
+            clearLegacyDefaults()
             return true
         } catch {
             return false
@@ -527,12 +598,35 @@ final class AuthStore {
     }
 
     func clear() {
-        defaults.removeObject(forKey: "master_hash")
-        defaults.removeObject(forKey: "master_salt")
-        defaults.removeObject(forKey: "master_iterations")
+        _ = AuthVerifierKeychain.clear()
+        clearLegacyDefaults()
     }
 
     func verify(password: String) -> Bool {
+        if let encoded = AuthVerifierKeychain.read() {
+            guard
+                let verifier = try? PropertyListDecoder().decode(Verifier.self, from: encoded),
+                verifier.version == 1,
+                verifier.salt.count == 16,
+                verifier.hash.count == 32,
+                (100_000...2_000_000).contains(verifier.iterations),
+                let actual = try? PasswordTools.derive(
+                    password,
+                    salt: verifier.salt,
+                    iterations: verifier.iterations
+                )
+            else {
+                return false
+            }
+
+            let ok = constantTimeEqual(actual, verifier.hash)
+            if ok && verifier.iterations < PasswordTools.currentIterations {
+                return create(password: password)
+            }
+            return ok
+        }
+
+        // 0.6.x i stariji verifier: seli se u ThisDeviceOnly Keychain tek nakon točne lozinke.
         guard
             let salt = defaults.data(forKey: "master_salt"),
             let expected = defaults.data(forKey: "master_hash")
@@ -546,14 +640,27 @@ final class AuthStore {
         guard let actual = try? PasswordTools.derive(password, salt: salt, iterations: iterations) else {
             return false
         }
-        let ok = actual == expected
 
-        if ok && iterations < PasswordTools.currentIterations,
-           let upgraded = try? PasswordTools.derive(password, salt: salt) {
-            defaults.set(PasswordTools.currentIterations, forKey: "master_iterations")
-            defaults.set(upgraded, forKey: "master_hash")
+        let ok = constantTimeEqual(actual, expected)
+        if ok {
+            return create(password: password)
         }
-        return ok
+        return false
+    }
+
+    private func clearLegacyDefaults() {
+        defaults.removeObject(forKey: "master_hash")
+        defaults.removeObject(forKey: "master_salt")
+        defaults.removeObject(forKey: "master_iterations")
+    }
+
+    private func constantTimeEqual(_ lhs: Data, _ rhs: Data) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        var difference: UInt8 = 0
+        for index in lhs.indices {
+            difference |= lhs[index] ^ rhs[index]
+        }
+        return difference == 0
     }
 }
 
@@ -1427,6 +1534,26 @@ final class KeyraStore: ObservableObject {
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             message = "Potvrda identiteta nije dostupna na ovom uređaju."
+            return
+        }
+
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    completion()
+                } else if let error {
+                    self.message = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func authorizeCritical(reason: String, completion: @escaping () -> Void) {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            // Uređaji bez owner-auth zaštite i dalje koriste aktivnu glavnu lozinku sesije.
+            completion()
             return
         }
 
@@ -4704,19 +4831,19 @@ struct SettingsView: View {
     @State private var recoveryImportPassphrase = ""
 
     private func runProtectedImport() {
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             store.importBackup()
         }
     }
 
     private func runProtectedFileImport(_ payload: String) {
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             _ = store.importBackupPayload(payload)
         }
     }
 
     private func prepareBackupExport() {
-        store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
             guard let payload = store.makeBackupPayload() else { return }
             backupDocument = KeyraBackupDocument(payload: payload)
             exportBackupFile = true
@@ -4730,7 +4857,7 @@ struct SettingsView: View {
             return
         }
 
-        store.authorizeSensitive(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
             defer {
                 recoveryExportPassphrase = ""
                 recoveryExportConfirm = ""
@@ -4744,7 +4871,7 @@ struct SettingsView: View {
     private func runProtectedRecoveryImport(_ payload: String) {
         let passphrase = recoveryImportPassphrase
         recoveryImportPassphrase = ""
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
             _ = store.importRecoveryKeyPayload(payload, passphrase: passphrase)
         }
     }
@@ -4968,7 +5095,7 @@ struct SettingsView: View {
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
                         SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
                             Button {
-                                store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+                                store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
                                     store.copyBackup()
                                 }
                             } label: {
@@ -5014,7 +5141,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji Keyra",
-                            subtitle: "Verzija 0.6.1 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                            subtitle: "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                         )
                     }
 
@@ -5086,7 +5213,7 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Trajno izbriši", role: .destructive) {
-                store.authorizeSensitive(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                store.authorizeCritical(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }

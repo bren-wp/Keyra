@@ -61,3 +61,11 @@ Reviewer treba moći testirati aplikaciju bez računa:
 4. otvoriti Settings za privacy/backup funkcije
 
 Biometrija ovisi o tome je li Face ID/Touch ID/device credential konfiguriran na uređaju ili simulatoru.
+
+
+### 0.6.2 sigurnosne napomene
+- master-password verifier nalazi se u `ThisDeviceOnly` Data Protection Keychainu
+- vault datoteka koristi complete file protection i isključena je iz backupiranja
+- app switcher / inactive-scene / active-screen-capture shield skriva sadržaj trezora
+- kritične backup/recovery/erase akcije koriste device-owner autentikaciju kada je dostupna
+- nema promjene u izjavi: Keyra ne prikuplja korisničke podatke niti koristi tracking

@@ -118,6 +118,9 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            window.setHideOverlayWindows(true)
+        }
         setContent {
             KeyraTheme {
                 KeyraRoot(model = model, requestBiometric = { reason, onSuccess ->
@@ -737,6 +740,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun criticalReauthAvailable(): Boolean = deviceAuthenticationAvailable
+
     fun cycleAutoLock() {
         val next = when (autoLockSeconds) {
             0 -> 30
@@ -793,51 +798,145 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
     companion object {
         private const val CURRENT_ITERATIONS = 600_000
         private const val LEGACY_ITERATIONS = 180_000
+        private const val VERIFIER_PREF = "master_auth_v2"
+        private const val VERIFIER_VERSION = "KEYRAAUTH1"
+        private const val KEY_ALIAS = "keyra-auth-verifier-key"
     }
 
-    fun isSetup() = prefs.contains("master_hash")
+    fun isSetup(): Boolean =
+        !prefs.getString(VERIFIER_PREF, null).isNullOrBlank() ||
+            (prefs.contains("master_hash") && prefs.contains("master_salt"))
 
     fun create(password: String): Boolean {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        val saved = prefs.edit()
-            .putString("master_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            .putInt("master_iterations", CURRENT_ITERATIONS)
-            .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
-            .commit()
-        if (!saved) clear()
-        return saved
+        val hash = derive(password, salt, CURRENT_ITERATIONS)
+        return try {
+            val payload = listOf(
+                VERIFIER_VERSION,
+                CURRENT_ITERATIONS.toString(),
+                Base64.encodeToString(salt, Base64.NO_WRAP),
+                Base64.encodeToString(hash, Base64.NO_WRAP)
+            ).joinToString(".")
+            val wrapped = encryptVerifier(payload)
+            val saved = prefs.edit()
+                .putString(VERIFIER_PREF, wrapped)
+                .remove("master_salt")
+                .remove("master_iterations")
+                .remove("master_hash")
+                .commit()
+            if (!saved) clear()
+            saved
+        } catch (_: Exception) {
+            false
+        } finally {
+            salt.fill(0)
+            hash.fill(0)
+        }
     }
 
-    fun clear(): Boolean = prefs.edit()
-        .remove("master_salt")
-        .remove("master_iterations")
-        .remove("master_hash")
-        .commit()
+    fun clear(): Boolean {
+        val prefsCleared = prefs.edit()
+            .remove(VERIFIER_PREF)
+            .remove("master_salt")
+            .remove("master_iterations")
+            .remove("master_hash")
+            .commit()
+        val keyCleared = runCatching {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
+            true
+        }.getOrDefault(false)
+        return prefsCleared && keyCleared
+    }
 
     fun verify(password: String): Boolean {
+        val current = prefs.getString(VERIFIER_PREF, null)
+        if (!current.isNullOrBlank()) {
+            return runCatching {
+                val parts = decryptVerifier(current).split(".")
+                require(parts.size == 4 && parts[0] == VERIFIER_VERSION)
+                val iterations = parts[1].toInt().coerceIn(100_000, 2_000_000)
+                val salt = Base64.decode(parts[2], Base64.NO_WRAP)
+                val expected = Base64.decode(parts[3], Base64.NO_WRAP)
+                require(salt.size == 16 && expected.size == 32)
+                val actual = derive(password, salt, iterations)
+                try {
+                    val ok = MessageDigest.isEqual(expected, actual)
+                    if (ok && iterations < CURRENT_ITERATIONS) {
+                        create(password)
+                    }
+                    ok
+                } finally {
+                    salt.fill(0)
+                    expected.fill(0)
+                    actual.fill(0)
+                }
+            }.getOrDefault(false)
+        }
+
+        // 0.6.x i stariji verifier: uspješna prijava ga automatski seli pod Keystore.
         return runCatching {
             val encodedSalt = prefs.getString("master_salt", null) ?: return false
             val salt = Base64.decode(encodedSalt, Base64.NO_WRAP)
-            val expected = prefs.getString("master_hash", null) ?: return false
+            val expected = Base64.decode(prefs.getString("master_hash", null) ?: return false, Base64.NO_WRAP)
             val iterations = prefs.getInt("master_iterations", LEGACY_ITERATIONS)
                 .coerceIn(100_000, 2_000_000)
             val actual = derive(password, salt, iterations)
-            val ok = MessageDigest.isEqual(expected.toByteArray(), actual.toByteArray())
-            if (ok && iterations < CURRENT_ITERATIONS) {
-                prefs.edit()
-                    .putInt("master_iterations", CURRENT_ITERATIONS)
-                    .putString("master_hash", derive(password, salt, CURRENT_ITERATIONS))
-                    .apply()
+            try {
+                val ok = MessageDigest.isEqual(expected, actual)
+                if (ok && !create(password)) return false
+                ok
+            } finally {
+                salt.fill(0)
+                expected.fill(0)
+                actual.fill(0)
             }
-            ok
         }.getOrDefault(false)
     }
 
-    private fun derive(password: String, salt: ByteArray, iterations: Int): String {
+    private fun verifierKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        val builder = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setRandomizedEncryptionRequired(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            builder.setUnlockedDeviceRequired(true)
+        }
+        generator.init(builder.build())
+        return generator.generateKey()
+    }
+
+    private fun encryptVerifier(clear: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, verifierKey())
+        val encrypted = cipher.doFinal(clear.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + "." +
+            Base64.encodeToString(encrypted, Base64.NO_WRAP)
+    }
+
+    private fun decryptVerifier(payload: String): String {
+        val parts = payload.split(".")
+        require(parts.size == 2)
+        val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+        val encrypted = Base64.decode(parts[1], Base64.NO_WRAP)
+        require(iv.size == 12 && encrypted.size >= 16)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, verifierKey(), GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+    }
+
+    private fun derive(password: String, salt: ByteArray, iterations: Int): ByteArray {
         val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
         return try {
-            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
         } finally {
             spec.clearPassword()
         }
@@ -4672,7 +4771,7 @@ private fun SettingsScreen(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+            if (model.criticalReauthAvailable()) {
                 requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
                     model.exportBackupToUri(context, uri)
                 }
@@ -4704,7 +4803,7 @@ private fun SettingsScreen(
     }
 
     fun runProtectedImport() {
-        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+        if (model.criticalReauthAvailable()) {
             requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
                 model.importBackup(context)
             }
@@ -4798,7 +4897,7 @@ private fun SettingsScreen(
                             val export = {
                                 model.exportRecoveryKeyToUri(context, uri, passphrase)
                             }
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za izvoz Recovery Key datoteke.", export)
                             } else {
                                 export()
@@ -4861,7 +4960,7 @@ private fun SettingsScreen(
                                 model.importRecoveryKeyFromUri(context, uri, passphrase)
                                 Unit
                             }
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za uvoz Recovery Key datoteke.", importRecovery)
                             } else {
                                 importRecovery()
@@ -4898,7 +4997,7 @@ private fun SettingsScreen(
                     TextButton(
                         onClick = {
                             confirmErase = false
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
                                     model.eraseAllLocalData()
                                 }
@@ -4938,7 +5037,7 @@ private fun SettingsScreen(
                     TextButton(
                         onClick = {
                             pendingFileImport = null
-                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                            if (model.criticalReauthAvailable()) {
                                 requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
                                     model.importBackupFromUri(context, uri)
                                 }
@@ -5145,7 +5244,7 @@ private fun SettingsScreen(
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
-                        if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                        if (model.criticalReauthAvailable()) {
                             requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
                                 model.exportBackup(context)
                             }
@@ -5180,7 +5279,7 @@ private fun SettingsScreen(
 
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
-                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.1 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
             }
             if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
                 SettingRow(

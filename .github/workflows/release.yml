@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.1"
+        default: "0.6.2"
 
 permissions:
   contents: write
@@ -286,7 +286,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje donosi full dead-code audit i cleanup nakon 0.6.0: uklonjene su nepotrebne Android dependency varijante i Compose tooling/preview dependencyji, zadržane su samo stvarno aktivne legacy migration/backup putanje, a sigurnosna dokumentacija usklađena je sa stvarnim stanjem implementacije.
+          Ovo izdanje donosi privacy/security hardening: device-bound master verifier na Androidu i iOS-u, strožu owner-auth zaštitu kritičnih backup/recovery/erase akcija i dodatnu Android overlay zaštitu.
 
           ## Provjere
           - Android lint i unit testovi

@@ -43,3 +43,14 @@ Keyra 0.6.0 uključuje kriptografsku jezgru prijenosnog vault ključa, zajednič
 PBKDF2-HMAC-SHA-256 s 600.000 iteracija trenutačno je odabran kao kompatibilni KDF jer obje platforme imaju zajedničku implementaciju bez dodavanja novog kriptografskog dependencyja. Argon2id ostaje preferirana buduća opcija tek kada bude uvedena održavana, međusobno kompatibilna Android/iOS implementacija i potvrđena migracija formata.
 
 Preostali release gateovi za potpuno označavanje Recovery Key funkcionalnosti kao provjerene odnose se na stvarni Android ↔ iOS device interoperability, Keychain/Keystore re-wrapping na fizičkim uređajima i store-signing/device QA.
+
+
+## 0.6.2 privacy/security hardening
+
+- Android master-password verifier više se ne sprema čitljivo kao salt/hash u običnom SharedPreferences storageu. Novi `KEYRAAUTH1` verifier šifriran je zasebnim Android Keystore AES-GCM ključem s `setUnlockedDeviceRequired(true)` gdje platforma podržava tu zaštitu.
+- iOS master-password verifier premješten je iz UserDefaults u zaseban Data Protection Keychain zapis s `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
+- Postojeći 0.6.x verifieri migriraju se tek nakon uspješne provjere glavne lozinke; ne postoji silent migration bez autentikacije.
+- Usporedba iOS password verifiera koristi constant-time byte comparison.
+- Android blokira screen capture preko `FLAG_SECURE` i od Androida 12 skriva app prozor od overlay prozora preko `setHideOverlayWindows(true)`.
+- iOS skriva Keyra sadržaj u app switcheru, pri neaktivnoj sceni i tijekom aktivnog screen capturea.
+- Backup export/import, Recovery Key export/import i trajno brisanje lokalnog trezora traže device-owner autentikaciju kada je uređaj može pružiti, neovisno o opcionalnom toggleu za svakodnevne sensitive akcije.
