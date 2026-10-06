@@ -96,7 +96,7 @@ private const val MAX_BACKUP_CHARS = 2_500_000
 private const val MAX_RECOVERY_CHARS = 16_384
 private const val MAX_VAULT_ITEMS = 10_000
 
-enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
+enum class Screen { ONBOARDING, RECOVERY, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
     val id: String = UUID.randomUUID().toString(),
@@ -212,6 +212,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.UNLOCK
     }
 
+    fun startRecovery() {
+        importingNewVault = false
+        screen = Screen.RECOVERY
+    }
+
     fun cancelSetup() {
         importingNewVault = false
         if (!isSetup) screen = Screen.ONBOARDING
@@ -303,6 +308,78 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         finishInitialSetup(password, imported)
         message = "Keyra trezor uspješno je uvezen."
         return true
+    }
+
+    fun recoverInitialVault(
+        recoveryPayload: String,
+        recoveryPassphrase: String,
+        backupPayload: String,
+        backupPassword: String,
+        newPassword: String
+    ): Boolean {
+        if (isSetup) {
+            message = "Recovery postavljanje dostupno je samo prije izrade trezora."
+            return false
+        }
+        if (newPassword.length < 12) {
+            message = "Nova glavna lozinka mora imati najmanje 12 znakova."
+            return false
+        }
+        if (recoveryPayload.isBlank() || recoveryPayload.length > MAX_RECOVERY_CHARS) {
+            message = "Recovery Key datoteka nije valjana."
+            return false
+        }
+        if (backupPayload.isBlank() || backupPayload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS) {
+            message = "KEYRA2 sigurnosna kopija nije valjana ili je prevelika."
+            return false
+        }
+        if (recoveryPassphrase.isBlank() || backupPassword.isBlank()) {
+            message = "Unesite recovery lozinku i lozinku sigurnosne kopije."
+            return false
+        }
+
+        val rawKey = runCatching {
+            RecoveryKeyEnvelope.decrypt(recoveryPayload, recoveryPassphrase)
+        }.getOrElse {
+            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
+            return false
+        }
+
+        val imported = runCatching {
+            val json = PortableBackup.decrypt(backupPayload, backupPassword)
+            store.fromJson(json)
+        }.getOrElse {
+            rawKey.fill(0)
+            message = "KEYRA2 sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            return false
+        }
+
+        return try {
+            // Sve se prvo provjerava u memoriji. Tek nakon uspješne provjere oba artefakta
+            // uklanjamo eventualno nedovršeno first-run stanje i spremamo novi uređaj.
+            auth.clear()
+            store.destroy()
+            store.installRecoveryKey(rawKey)
+            store.save(imported)
+
+            if (!auth.create(newPassword)) {
+                store.destroy()
+                auth.clear()
+                message = "Novu glavnu lozinku nije moguće trajno spremiti. Recovery je poništen."
+                false
+            } else {
+                finishInitialSetup(newPassword, imported)
+                message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
+                true
+            }
+        } catch (_: Exception) {
+            store.destroy()
+            auth.clear()
+            message = "Recovery nije moguće sigurno dovršiti. Na uređaju nije zadržano djelomično obnovljeno stanje."
+            false
+        } finally {
+            rawKey.fill(0)
+        }
     }
 
     private fun finishInitialSetup(password: String, initialItems: List<VaultItem>) {
@@ -1307,6 +1384,7 @@ private fun KeyraRoot(
         if (splash) SplashScreen()
         else when (model.screen) {
             Screen.ONBOARDING -> OnboardingScreen(model)
+            Screen.RECOVERY -> RecoverySetupScreen(model)
             Screen.UNLOCK -> UnlockScreen(model, requestBiometric)
             Screen.VAULT -> MainScaffold(model, Screen.VAULT) { VaultScreen(model) }
             Screen.COLLECTIONS -> MainScaffold(model, Screen.COLLECTIONS) { CollectionsScreen(model) }
@@ -1667,7 +1745,216 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     Spacer(Modifier.width(8.dp))
                     Text("Uvezi Keyra trezor", color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
+                TextButton(
+                    onClick = model::startRecovery,
+                    modifier = Modifier.fillMaxWidth().height(if (compact) 44.dp else 50.dp)
+                ) {
+                    Icon(Icons.Outlined.Key, contentDescription = null, tint = Ice)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Imam Recovery Key", color = Ice, fontWeight = FontWeight.SemiBold)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun RecoverySetupScreen(model: KeyraViewModel) {
+    val context = LocalContext.current
+    var recoveryPayload by remember { mutableStateOf<String?>(null) }
+    var backupPayload by remember { mutableStateOf<String?>(null) }
+    var recoveryPassphrase by remember { mutableStateOf("") }
+    var backupPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var reveal by remember { mutableStateOf(false) }
+
+    val recoveryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                readUtf8Limited(context, uri, MAX_RECOVERY_CHARS)
+            }.onSuccess {
+                recoveryPayload = it
+                model.message = "Recovery Key datoteka je učitana."
+            }.onFailure {
+                recoveryPayload = null
+                model.message = "Recovery Key datoteku nije moguće pročitati ili je prevelika."
+            }
+        }
+    }
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                readUtf8Limited(context, uri, MAX_BACKUP_CHARS)
+            }.onSuccess {
+                backupPayload = it
+                model.message = "KEYRA2 sigurnosna kopija je učitana."
+            }.onFailure {
+                backupPayload = null
+                model.message = "KEYRA2 sigurnosnu kopiju nije moguće pročitati ili je prevelika."
+            }
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxHeight < 720.dp || maxWidth < 360.dp
+        Column(
+            Modifier
+                .fillMaxSize()
+                .widthIn(max = 680.dp)
+                .align(Alignment.TopCenter)
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = if (maxWidth >= 600.dp) 72.dp else 20.dp)
+                .padding(bottom = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = model::cancelSetup) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Natrag", tint = Ice)
+                }
+                Spacer(Modifier.weight(1f))
+            }
+
+            KeyraMark(if (compact) 58.dp else 72.dp)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Obnovite Keyra trezor",
+                color = Color.White,
+                fontSize = if (compact) 26.sp else 31.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                "Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.",
+                color = Muted,
+                fontSize = if (compact) 13.sp else 15.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                color = Slate.copy(alpha = .96f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .34f))
+            ) {
+                Column(
+                    Modifier.padding(if (compact) 14.dp else 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("1. Recovery Key", color = Color.White, fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = { recoveryLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Outlined.Key, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (recoveryPayload == null) "Odaberi Keyra-Recovery.keyra" else "Recovery Key učitan")
+                    }
+                    OutlinedTextField(
+                        value = recoveryPassphrase,
+                        onValueChange = { recoveryPassphrase = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Recovery lozinka") },
+                        singleLine = true,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                    )
+
+                    HorizontalDivider(color = Ice.copy(alpha = .18f))
+                    Text("2. KEYRA2 sigurnosna kopija", color = Color.White, fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = { backupLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Outlined.Inventory2, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (backupPayload == null) "Odaberi .keyra sigurnosnu kopiju" else "KEYRA2 kopija učitana")
+                    }
+                    OutlinedTextField(
+                        value = backupPassword,
+                        onValueChange = { backupPassword = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Lozinka sigurnosne kopije") },
+                        singleLine = true,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                    )
+
+                    HorizontalDivider(color = Ice.copy(alpha = .18f))
+                    Text("3. Nova glavna lozinka", color = Color.White, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nova glavna lozinka") },
+                        supportingText = { Text("Najmanje 12 znakova.") },
+                        singleLine = true,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                    )
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Ponovite novu glavnu lozinku") },
+                        singleLine = true,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                    )
+                    TextButton(onClick = { reveal = !reveal }) {
+                        Icon(
+                            if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (reveal) "Sakrij lozinke" else "Prikaži lozinke")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (newPassword != confirmPassword) {
+                                model.message = "Nove glavne lozinke se ne podudaraju."
+                            } else {
+                                model.recoverInitialVault(
+                                    recoveryPayload = recoveryPayload.orEmpty(),
+                                    recoveryPassphrase = recoveryPassphrase,
+                                    backupPayload = backupPayload.orEmpty(),
+                                    backupPassword = backupPassword,
+                                    newPassword = newPassword
+                                )
+                            }
+                        },
+                        enabled = recoveryPayload != null &&
+                            backupPayload != null &&
+                            recoveryPassphrase.isNotBlank() &&
+                            backupPassword.isNotBlank() &&
+                            newPassword.length >= 12 &&
+                            confirmPassword.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(54.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                        shape = RoundedCornerShape(27.dp)
+                    ) {
+                        Icon(Icons.Outlined.Restore, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Obnovi trezor", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Text(
+                "Oba artefakta provjeravaju se prije spremanja. Recovery Key nije sigurnosna kopija podataka i ne šalje se na Keyra poslužitelje.",
+                color = Muted,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 14.dp)
+            )
         }
     }
 }
