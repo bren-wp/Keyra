@@ -4161,6 +4161,14 @@ struct SettingsView: View {
     @State private var exportBackupFile = false
     @State private var importBackupFile = false
     @State private var pendingImportPayload: String?
+    @State private var recoveryDocument = KeyraBackupDocument()
+    @State private var exportRecoveryFile = false
+    @State private var importRecoveryFile = false
+    @State private var showRecoveryExportPrompt = false
+    @State private var recoveryExportPassphrase = ""
+    @State private var recoveryExportConfirm = ""
+    @State private var pendingRecoveryImportPayload: String?
+    @State private var recoveryImportPassphrase = ""
 
     private func runProtectedImport() {
         store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
@@ -4179,6 +4187,32 @@ struct SettingsView: View {
             guard let payload = store.makeBackupPayload() else { return }
             backupDocument = KeyraBackupDocument(payload: payload)
             exportBackupFile = true
+        }
+    }
+
+    private func prepareRecoveryExport() {
+        let passphrase = recoveryExportPassphrase
+        guard isStrongRecoveryPassphrase(passphrase), passphrase == recoveryExportConfirm else {
+            store.message = "Recovery lozinka nije dovoljno jaka ili se potvrda ne podudara."
+            return
+        }
+
+        store.authorizeSensitive(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
+            defer {
+                recoveryExportPassphrase = ""
+                recoveryExportConfirm = ""
+            }
+            guard let payload = store.makeRecoveryKeyPayload(passphrase: passphrase) else { return }
+            recoveryDocument = KeyraBackupDocument(payload: payload)
+            exportRecoveryFile = true
+        }
+    }
+
+    private func runProtectedRecoveryImport(_ payload: String) {
+        let passphrase = recoveryImportPassphrase
+        recoveryImportPassphrase = ""
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
+            _ = store.importRecoveryKeyPayload(payload, passphrase: passphrase)
         }
     }
 
@@ -4204,6 +4238,8 @@ struct SettingsView: View {
             "Proton Drive",
             "privatni cloud",
             "Files",
+            "Recovery Key",
+            "oporavak",
             "sigurnosna kopija"
         )
     }
@@ -4351,6 +4387,40 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Uvezi šifriranu datoteku")
+                        }
+                    }
+
+                    if matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
+                        SettingRow(
+                            icon: "key.fill",
+                            title: "Izvezi Recovery Key",
+                            subtitle: "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
+                        ) {
+                            Button {
+                                recoveryExportPassphrase = ""
+                                recoveryExportConfirm = ""
+                                showRecoveryExportPrompt = true
+                            } label: {
+                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Izvezi Recovery Key")
+                        }
+                    }
+
+                    if matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
+                        SettingRow(
+                            icon: "key.fill",
+                            title: "Uvezi Recovery Key",
+                            subtitle: "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
+                        ) {
+                            Button {
+                                importRecoveryFile = true
+                            } label: {
+                                Image(systemName: "folder").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi Recovery Key")
                         }
                     }
 
@@ -4508,6 +4578,92 @@ struct SettingsView: View {
                 "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
                 "Prije nastavka provjerite da je kopija ispravna."
             )
+        }
+        .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
+            SecureField("Recovery lozinka", text: $recoveryExportPassphrase)
+            SecureField("Ponovite recovery lozinku", text: $recoveryExportConfirm)
+            Button("Izvezi") {
+                prepareRecoveryExport()
+            }
+            .disabled(
+                !isStrongRecoveryPassphrase(recoveryExportPassphrase) ||
+                recoveryExportPassphrase != recoveryExportConfirm
+            )
+            Button("Odustani", role: .cancel) {
+                recoveryExportPassphrase = ""
+                recoveryExportConfirm = ""
+            }
+        } message: {
+            Text(
+                "Recovery Key štiti prijenosni vault ključ, ne podatke trezora. " +
+                "Koristite najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi; datoteku i lozinku čuvajte odvojeno."
+            )
+        }
+        .alert(
+            "Uvezi Recovery Key",
+            isPresented: Binding(
+                get: { pendingRecoveryImportPayload != nil },
+                set: {
+                    if !$0 {
+                        pendingRecoveryImportPayload = nil
+                        recoveryImportPassphrase = ""
+                    }
+                }
+            )
+        ) {
+            SecureField("Recovery lozinka", text: $recoveryImportPassphrase)
+            Button("Verificiraj i uvezi") {
+                if let payload = pendingRecoveryImportPayload {
+                    pendingRecoveryImportPayload = nil
+                    runProtectedRecoveryImport(payload)
+                }
+            }
+            .disabled(recoveryImportPassphrase.isEmpty)
+            Button("Odustani", role: .cancel) {
+                pendingRecoveryImportPayload = nil
+                recoveryImportPassphrase = ""
+            }
+        } message: {
+            Text(
+                "Keyra prvo verificira recovery datoteku i postojeći trezor. " +
+                "Recovery Key ne vraća izbrisane zapise samostalno; za to koristite zasebnu šifriranu KEYRA2 sigurnosnu kopiju."
+            )
+        }
+        .fileExporter(
+            isPresented: $exportRecoveryFile,
+            document: recoveryDocument,
+            contentType: UTType(filenameExtension: "keyra") ?? .data,
+            defaultFilename: "Keyra-Recovery"
+        ) { result in
+            switch result {
+            case .success:
+                store.message = "Šifrirani Recovery Key spremljen je na odabrano mjesto."
+            case .failure:
+                store.message = "Recovery Key nije moguće spremiti na odabrano mjesto."
+            }
+        }
+        .fileImporter(
+            isPresented: $importRecoveryFile,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                let urls = try result.get()
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed { url.stopAccessingSecurityScopedResource() }
+                }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 16_384, let payload = String(data: data, encoding: .utf8) else {
+                    store.message = "Recovery Key datoteka nije valjana ili je prevelika."
+                    return
+                }
+                recoveryImportPassphrase = ""
+                pendingRecoveryImportPayload = payload
+            } catch {
+                store.message = "Recovery Key datoteku nije moguće otvoriti."
+            }
         }
         .fileExporter(
             isPresented: $exportBackupFile,
