@@ -1501,76 +1501,128 @@ private fun BrandHeader(
     notificationCount: Int = 0,
     onNotifications: () -> Unit = {}
 ) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 370.dp
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = if (compact) 14.dp else 20.dp,
-                    vertical = if (compact) 8.dp else 12.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        val compact = maxWidth < 390.dp
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(26.dp),
+            color = Slate2.copy(alpha = .96f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .28f)),
+            shadowElevation = 8.dp
         ) {
-            KeyraMark(if (compact) 44.dp else 54.dp)
-            Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Keyra",
-                    fontSize = if (compact) 28.sp else 32.sp,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1
+            Column {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Cyan.copy(alpha = .88f), Indigo.copy(alpha = .68f), Color.Transparent)
+                            )
+                        )
                 )
-                Text(
-                    subtitle,
-                    color = Muted,
-                    fontSize = if (compact) 9.sp else 11.sp,
-                    letterSpacing = if (compact) 1.4.sp else 2.2.sp,
-                    maxLines = 1
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = onNotifications,
-                    modifier = Modifier.size(if (compact) 38.dp else 44.dp)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = if (compact) 12.dp else 16.dp,
+                            vertical = if (compact) 9.dp else 11.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Outlined.Notifications,
-                        contentDescription = if (notificationCount > 0)
-                            "Sigurnosna upozorenja: $notificationCount"
-                        else
-                            "Nema sigurnosnih upozorenja",
-                        tint = Color.White
-                    )
-                }
-                if (notificationCount > 0) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 2.dp, y = (-2).dp),
-                        shape = CircleShape,
-                        color = Danger
-                    ) {
+                    KeyraMark(if (compact) 42.dp else 50.dp)
+                    Spacer(Modifier.width(if (compact) 10.dp else 12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Keyra",
+                                fontSize = if (compact) 27.sp else 31.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1
+                            )
+                            if (!compact) {
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Cyan.copy(alpha = .10f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .24f))
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Outlined.Lock, null, tint = Good, modifier = Modifier.size(11.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("LOCAL", color = Good, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
+                                    }
+                                }
+                            }
+                        }
                         Text(
-                            if (notificationCount > 9) "9+" else notificationCount.toString(),
-                            color = Color.White,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            subtitle.uppercase(),
+                            color = Muted,
+                            fontSize = if (compact) 9.sp else 10.sp,
+                            letterSpacing = if (compact) 1.2.sp else 1.8.sp,
+                            maxLines = 1
                         )
                     }
+                    Box {
+                        FilledIconButton(
+                            onClick = onNotifications,
+                            modifier = Modifier.size(if (compact) 38.dp else 42.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Midnight.copy(alpha = .72f),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(
+                                Icons.Outlined.Notifications,
+                                contentDescription = if (notificationCount > 0)
+                                    "Sigurnosna upozorenja: $notificationCount"
+                                else
+                                    "Nema sigurnosnih upozorenja",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        if (notificationCount > 0) {
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 2.dp, y = (-2).dp),
+                                shape = CircleShape,
+                                color = Danger
+                            ) {
+                                Text(
+                                    if (notificationCount > 9) "9+" else notificationCount.toString(),
+                                    color = Color.White,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(if (compact) 5.dp else 8.dp))
+                    Box(
+                        Modifier
+                            .size(if (compact) 38.dp else 42.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Cyan.copy(alpha = .18f), Indigo.copy(alpha = .20f))
+                                )
+                            )
+                            .border(1.dp, Cyan.copy(alpha = .62f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("K", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 13.sp else 14.sp)
+                    }
                 }
-            }
-            Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
-            Box(
-                Modifier
-                    .size(if (compact) 38.dp else 44.dp)
-                    .clip(CircleShape)
-                    .border(1.dp, Cyan, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("K", color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 14.sp)
             }
         }
     }
@@ -2174,23 +2226,45 @@ private fun KeyraPasswordField(
 @Composable
 private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = Slate.copy(alpha=.92f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.45f))
+        shape = RoundedCornerShape(26.dp),
+        color = Slate2.copy(alpha = .96f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha = .24f)),
+        shadowElevation = 7.dp
     ) {
-        Column(Modifier.padding(22.dp), content = content)
+        Column {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Cyan.copy(alpha = .72f), Indigo.copy(alpha = .46f), Color.Transparent)
+                        )
+                    )
+            )
+            Column(
+                Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = content
+            )
+        }
     }
 }
 
 @Composable
 private fun MainScaffold(model: KeyraViewModel, active: Screen, content: @Composable () -> Unit) {
     Scaffold(
-        containerColor = Midnight,
+        containerColor = Color.Transparent,
         bottomBar = { BottomNav(model, active) }
     ) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Midnight, Color(0xFF07172A), Color(0xFF091426), Midnight)
+                    )
+                )
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
@@ -2217,10 +2291,10 @@ private fun BottomNav(model: KeyraViewModel, active: Screen) {
         val compact = maxWidth < 360.dp
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Slate.copy(alpha = .98f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha = .28f)),
-            shadowElevation = 8.dp
+            shape = RoundedCornerShape(26.dp),
+            color = Slate2.copy(alpha = .98f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .22f)),
+            shadowElevation = 12.dp
         ) {
             Row(
                 Modifier
@@ -2250,10 +2324,15 @@ private fun RowScope.NavItem(
             .weight(1f)
             .height(if (compact) 52.dp else 58.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) Cyan.copy(alpha = .11f) else Color.Transparent)
+            .background(
+                if (selected)
+                    Brush.linearGradient(listOf(Cyan.copy(alpha = .18f), Indigo.copy(alpha = .11f)))
+                else
+                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+            )
             .border(
                 width = 1.dp,
-                color = if (selected) Cyan.copy(alpha = .30f) else Color.Transparent,
+                color = if (selected) Cyan.copy(alpha = .38f) else Color.Transparent,
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick),
@@ -2539,10 +2618,40 @@ private fun VaultScreen(model: KeyraViewModel) {
 
 @Composable
 private fun SummaryCard(value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(20.dp), color = Slate, border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha=.6f))) {
-        Column(Modifier.padding(14.dp)) {
+    val icon = when (label) {
+        "Slabe" -> Icons.Outlined.WarningAmber
+        "Ponovljene" -> Icons.Outlined.ContentCopy
+        else -> Icons.Outlined.Shield
+    }
+    Surface(
+        modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = Slate2.copy(alpha = .96f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = .42f)),
+        shadowElevation = 4.dp
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accent.copy(alpha = .14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = accent, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(7.dp).clip(CircleShape).background(accent))
+            }
             Text(value, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
-            Text(label, color = Muted, fontSize = 12.sp)
+            Text(
+                label.uppercase(),
+                color = Muted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = .8.sp
+            )
         }
     }
 }
@@ -2593,9 +2702,10 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
 
     Surface(
         Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = Slate,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
+        shape = RoundedCornerShape(22.dp),
+        color = Slate2.copy(alpha = .94f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = .22f)),
+        shadowElevation = 3.dp
     ) {
         BoxWithConstraints {
             val compact = maxWidth < 380.dp
@@ -3477,13 +3587,42 @@ private fun AddScreen(model: KeyraViewModel) {
 
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
-        Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) }) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Slate2.copy(alpha = .96f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .24f)),
+            shadowElevation = 6.dp
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledIconButton(
+                    onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = Midnight.copy(alpha = .76f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Natrag")
+                }
+                Spacer(Modifier.width(8.dp))
+                KeyraMark(36.dp)
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Keyra", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        if (original == null) "NOVA STAVKA" else "UREĐIVANJE STAVKE",
+                        color = Muted,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.4.sp
+                    )
+                }
             }
-            KeyraMark(38.dp)
-            Spacer(Modifier.width(10.dp))
-            Text("Keyra", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         }
 
         LazyColumn(
@@ -5003,7 +5142,7 @@ private fun SettingsScreen(
 
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
-                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.5.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.0 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
             }
             if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
                 SettingRow(
@@ -5048,7 +5187,26 @@ private fun SettingsScreen(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, color = Ice, fontSize = 13.sp, letterSpacing = 2.sp, modifier = Modifier.padding(top = 8.dp))
+    Row(
+        Modifier.padding(top = 10.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .height(18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Brush.verticalGradient(listOf(Cyan, Indigo)))
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text.uppercase(),
+            color = Ice,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.7.sp
+        )
+    }
 }
 
 @Composable
@@ -5063,9 +5221,10 @@ private fun SettingRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        shape = RoundedCornerShape(20.dp),
-        color = Slate,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha=.2f))
+        shape = RoundedCornerShape(22.dp),
+        color = Slate2.copy(alpha = .94f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Ice.copy(alpha = .18f)),
+        shadowElevation = 3.dp
     ) {
         BoxWithConstraints {
             val compact = maxWidth < 380.dp
@@ -5076,7 +5235,7 @@ private fun SettingRow(
                             Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(13.dp))
-                                .background(Color(0xFF0B3551)),
+                                .background(Brush.linearGradient(listOf(Cyan.copy(alpha = .17f), Indigo.copy(alpha = .13f)))),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(icon, null, tint = Cyan)
@@ -5101,7 +5260,7 @@ private fun SettingRow(
                         Modifier
                             .size(if (compact) 44.dp else 48.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF0B3551)),
+                            .background(Brush.linearGradient(listOf(Cyan.copy(alpha = .17f), Indigo.copy(alpha = .13f)))),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(icon, null, tint = Cyan)
@@ -5255,14 +5414,20 @@ private fun SecurityScreen(model: KeyraViewModel) {
 
 @Composable
 private fun keyraFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = Cyan,
-    unfocusedBorderColor = Ice.copy(alpha=.4f),
+    focusedBorderColor = Cyan.copy(alpha = .92f),
+    unfocusedBorderColor = Ice.copy(alpha = .26f),
+    focusedContainerColor = Slate2.copy(alpha = .74f),
+    unfocusedContainerColor = Slate.copy(alpha = .72f),
     focusedTextColor = Color.White,
     unfocusedTextColor = Color.White,
     focusedLabelColor = Cyan,
     unfocusedLabelColor = Muted,
     focusedLeadingIconColor = Cyan,
     unfocusedLeadingIconColor = Ice,
+    focusedTrailingIconColor = Cyan,
+    unfocusedTrailingIconColor = Ice,
+    focusedPlaceholderColor = Muted,
+    unfocusedPlaceholderColor = Muted.copy(alpha = .88f),
     cursorColor = Cyan
 )
 
