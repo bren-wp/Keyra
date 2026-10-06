@@ -92,3 +92,14 @@ Svaka od ovih promjena automatski zahtijeva novu provjeru store deklaracija prij
 - bilo kakvo slanje podataka iz trezora izvan korisnički pokrenutog izvoza
 
 Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end šifrirana prije prijenosa, imati jasnu politiku konflikata i brisanja te ažurirane Google Play Data safety i Apple App Privacy deklaracije.
+
+
+## 0.6.2 security gate
+- [x] Android master verifier vezan uz Keystore i legacy verifier migrira tek nakon uspješne prijave.
+- [x] iOS master verifier premješten u ThisDeviceOnly Keychain uz constant-time usporedbu.
+- [x] Android FLAG_SECURE + overlay protection aktivni.
+- [x] iOS privacy shield aktivan za inactive scene i screen capture.
+- [x] Backup/Recovery/Erase critical operations koriste owner-auth kada je dostupan.
+- [ ] Android 0.6.2 CI zelen na završnom commitu.
+- [ ] iOS 0.6.2 CI zelen na završnom commitu.
+- [ ] GitHub release v0.6.2 objavljen tek nakon oba release builda.
