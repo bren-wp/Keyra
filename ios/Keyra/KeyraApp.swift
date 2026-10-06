@@ -3973,10 +3973,16 @@ struct DetailView: View {
                 }
             }()
             VStack(spacing: 0) {
-                HStack {
+                HStack(spacing: 10) {
                     Button { store.open(.vault) } label: {
-                        Image(systemName: "chevron.left").font(.title2).foregroundStyle(.white)
+                        Image(systemName: "chevron.left")
+                            .font(.headline.bold())
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(midnight.opacity(0.72))
+                            .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
 
                     Image(systemName: {
                         switch item.kind {
@@ -3989,17 +3995,25 @@ struct DetailView: View {
                         }
                     }())
                     .foregroundStyle(cyan)
-                    .frame(width: 52, height: 52)
-                    .background(cyan.opacity(0.12))
+                    .frame(width: 50, height: 50)
+                    .background(
+                        LinearGradient(
+                            colors: [cyan.opacity(0.18), indigo.opacity(0.13)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
-                            .font(.system(size: 32, weight: .black))
+                            .font(.system(size: 28, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
                             .lineLimit(2)
                             .minimumScaleFactor(0.72)
-                        Text(item.kind + " • " + item.category)
+                        Text((item.kind + " • " + item.category).uppercased())
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(0.7)
                             .foregroundStyle(muted)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -4011,11 +4025,26 @@ struct DetailView: View {
                         Image(systemName: item.favorite ? "star.fill" : "star")
                             .foregroundStyle(item.favorite ? warn : ice)
                             .frame(width: 40, height: 40)
+                            .background(item.favorite ? warn.opacity(0.12) : midnight.opacity(0.58))
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.favorite ? "Ukloni iz favorita" : "Dodaj u favorite")
                 }
-                .padding(18)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [slate2.opacity(0.98), Color(hex: 0x101B2F).opacity(0.98)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(cyan.opacity(0.22), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .shadow(color: .black.opacity(0.18), radius: 7, y: 4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
 
                 Picker("Prikaz", selection: $selectedTab) {
                     Text("Detalji").tag("Detalji")
