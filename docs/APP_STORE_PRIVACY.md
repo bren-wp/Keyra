@@ -27,7 +27,7 @@ Trenutačni iOS build:
 - TOTP se računa lokalno
 - .keyra backup šifrira se prije nego što ga korisnik preda Files/cloud provideru
 
-Za App Store Connect to tehnički odgovara modelu "No, we do not collect data from this app", sve dok se prije predaje nije promijenio kod ili dodao third-party SDK koji prikuplja podatke.
+Za App Store Connect to trenutačno odgovara modelu "No, we do not collect data from this app", sve dok se prije predaje nije promijenio kod ili dodao third-party SDK koji podatke prenosi developera ili partnerima. Privacy policy i App Privacy odgovori moraju ostati međusobno usklađeni.
 
 ## Privacy Policy
 

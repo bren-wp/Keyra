@@ -2,6 +2,8 @@
 
 Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. Konzole trgovina i njihova pravila mogu se mijenjati, pa prije svakog izdanja treba ponovno provjeriti aktualne obrasce i zahtjeve.
 
+**Posljednja provjera javnih store pravila: 6. listopada 2026.**
+
 ## Zajednički release gate
 
 - [ ] Android i iOS CI su zeleni na točnom release commitu.
@@ -11,6 +13,8 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 - [ ] TOTP kodovi potvrđeni su RFC 6238 testovima i barem jednim stvarnim servisom.
 - [ ] Potpuno lokalno brisanje potvrđeno je na stvarnom uređaju i nakon njega se stari trezor više ne može otvoriti.
 - [ ] KEYRA2 backup Android → iOS i iOS → Android uspješno je vraćen.
+- [ ] KEYRAREC1 Recovery Key Android → iOS i iOS → Android uspješno je verificiran.
+- [ ] Recovery Key export/import i first-run recovery tok provjereni su na stvarnim uređajima.
 - [ ] .keyra izvoz/uvoz kroz sistemski Files/Document picker radi.
 - [ ] Screenshot/screen-record zaštita ponovno provjerena.
 - [ ] Nema demo vjerodajnica, API ključeva, tokena, lozinki ili privatnih testnih podataka u repozitoriju i buildu.
@@ -34,7 +38,7 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 
 ### Play Console
 
-- [ ] Privacy Policy URL: javno dostupna verzija `PRIVACY.md` (preporuka: stabilna branded HTTPS stranica prije produkcijske objave).
+- [ ] Privacy Policy URL: javno dostupna verzija `PRIVACY.md`; Google zahtijeva da privacy policy bude dostupan u Play Consoleu i unutar aplikacije te da odgovara stvarnoj obradi podataka. Za produkciju je poželjna stabilna branded HTTPS stranica.
 - [ ] Data safety obrazac uskladiti s `docs/PLAY_DATA_SAFETY.md`.
 - [ ] Ads: označiti da aplikacija ne sadrži oglase.
 - [ ] App access: opisati da aplikacija ne traži Keyra račun; reviewer može izraditi lokalni trezor.
@@ -50,6 +54,7 @@ Google od 31. kolovoza 2026. za nove aplikacije i ažuriranja mobilnih aplikacij
 
 ### Tehnički
 
+- [ ] Završni CI koristi Xcode 26 ili noviji i iOS 26 SDK ili noviji, kako zahtijevaju aktualna App Store Connect pravila za upload od 28. travnja 2026.
 - [x] Release build i simulator launch smoke test postoje u CI-ju.
 - [x] `PrivacyInfo.xcprivacy` je dio iOS targeta.
 - [x] Privacy manifest prijavljuje `UserDefaults` required-reason API s razlogom `CA92.1`.
@@ -63,7 +68,7 @@ Google od 31. kolovoza 2026. za nove aplikacije i ažuriranja mobilnih aplikacij
 ### App Store Connect
 
 - [ ] Privacy Policy URL postaviti na javnu, stabilnu HTTPS stranicu.
-- [ ] App Privacy: prema trenutačnom buildu Keyra ne prikuplja podatke za developera i ne prati korisnika; prije predaje potvrditi da nisu dodani novi SDK-ovi ili mrežne funkcije.
+- [ ] App Privacy: prema trenutačnom buildu Keyra ne prikuplja podatke za developera i ne prati korisnika; prije predaje potvrditi da nisu dodani novi SDK-ovi ili mrežne funkcije te da App Store Connect deklaracija ostaje potpuno usklađena s privacy policyjem.
 - [ ] User Privacy Choices URL nije obavezan bez Keyra računa/backenda, ali ga se može dodati uz javnu privacy stranicu.
 - [ ] Account deletion nije primjenjiv dok Keyra nema account creation.
 - [ ] Export Compliance pitanja odgovoriti točno prema stvarnom buildu i državama distribucije.

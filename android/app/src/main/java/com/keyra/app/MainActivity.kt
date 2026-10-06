@@ -35,6 +35,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,6 +93,7 @@ private val Good = Color(0xFF22E3B0)
 private val Warn = Color(0xFFFFC247)
 private val Danger = Color(0xFFFF5B6E)
 private const val MAX_BACKUP_CHARS = 2_500_000
+private const val MAX_RECOVERY_CHARS = 16_384
 private const val MAX_VAULT_ITEMS = 10_000
 
 enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
@@ -246,7 +250,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (!auth.create(password)) {
-            store.clear()
+            store.destroy()
             message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Pokušajte ponovno."
             return false
         }
@@ -290,7 +294,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (!auth.create(password)) {
-            store.clear()
+            store.destroy()
             message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
             return false
         }
@@ -492,6 +496,77 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun makeRecoveryKeyPayload(passphrase: String): String? {
+        if (!isStrongRecoveryPassphrase(passphrase)) {
+            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
+            return null
+        }
+        val rawKey = runCatching { store.recoveryKeyBytes() }.getOrElse {
+            message = "Recovery ključ nije moguće dohvatiti iz zaštićenog trezora."
+            return null
+        }
+        return try {
+            RecoveryKeyEnvelope.encrypt(rawKey, passphrase)
+        } catch (_: Exception) {
+            message = "Recovery Key datoteku nije moguće izraditi."
+            null
+        } finally {
+            rawKey.fill(0)
+        }
+    }
+
+    fun exportRecoveryKeyToUri(context: Context, uri: Uri, passphrase: String) {
+        val payload = makeRecoveryKeyPayload(passphrase) ?: return
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(payload.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
+        }.onSuccess {
+            message = "Šifrirani Recovery Key spremljen je. Čuvajte datoteku i recovery lozinku odvojeno."
+        }.onFailure {
+            message = "Recovery Key nije moguće spremiti u odabranu datoteku."
+        }
+    }
+
+    fun importRecoveryKeyPayload(payload: String, passphrase: String): Boolean {
+        if (payload.isBlank() || payload.length > MAX_RECOVERY_CHARS) {
+            message = "Recovery Key datoteka nije valjana."
+            return false
+        }
+        val rawKey = runCatching { RecoveryKeyEnvelope.decrypt(payload, passphrase) }.getOrElse {
+            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
+            return false
+        }
+        return try {
+            val verifiedItems = store.installRecoveryKey(rawKey)
+            if (verifiedItems.isNotEmpty()) {
+                items.clear()
+                items.addAll(verifiedItems)
+            }
+            message = if (verifiedItems.isEmpty()) {
+                "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
+            } else {
+                "Recovery Key je verificiran i ponovno zaštićen ključem ovog uređaja."
+            }
+            true
+        } catch (_: Exception) {
+            message = "Recovery Key ne odgovara ovom trezoru ili ga nije moguće sigurno obnoviti."
+            false
+        } finally {
+            rawKey.fill(0)
+        }
+    }
+
+    fun importRecoveryKeyFromUri(context: Context, uri: Uri, passphrase: String): Boolean =
+        runCatching {
+            val payload = readUtf8Limited(context, uri, MAX_RECOVERY_CHARS)
+            importRecoveryKeyPayload(payload, passphrase)
+        }.getOrElse {
+            message = "Recovery Key datoteku nije moguće pročitati."
+            false
+        }
+
     fun importBackupPayload(payload: String): Boolean {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
@@ -692,10 +767,16 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
     }
 }
 
-private class CryptoStore {
+private class CryptoStore(private val prefs: android.content.SharedPreferences) {
+    companion object {
+        private const val WRAPPED_KEY_PREF = "vault_portable_key_wrapped_v1"
+        private const val WRAP_VERSION = "KEYRAW1"
+        private const val RAW_KEY_BYTES = 32
+    }
+
     private val alias = "keyra-vault-key"
 
-    private fun key(): SecretKey {
+    private fun wrappingKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
@@ -714,32 +795,125 @@ private class CryptoStore {
         return generator.generateKey()
     }
 
-    fun encrypt(text: String): String {
+    fun hasPortableKey(): Boolean = !prefs.getString(WRAPPED_KEY_PREF, null).isNullOrBlank()
+
+    private fun wrapRawKey(rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravna duljina vault ključa." }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
+        cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
+        val encrypted = cipher.doFinal(rawKey)
+        return listOf(
+            WRAP_VERSION,
+            Base64.encodeToString(cipher.iv, Base64.NO_WRAP),
+            Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        ).joinToString(".")
+    }
+
+    private fun unwrapRawKey(payload: String): ByteArray {
+        val parts = payload.split(".")
+        require(parts.size == 3 && parts[0] == WRAP_VERSION) { "Neispravan omot vault ključa." }
+        val iv = Base64.decode(parts[1], Base64.NO_WRAP)
+        val encrypted = Base64.decode(parts[2], Base64.NO_WRAP)
+        require(iv.size == 12 && encrypted.size >= 16) { "Neispravan omot vault ključa." }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, wrappingKey(), GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).also {
+            require(it.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        }
+    }
+
+    fun portableKeyBytes(): ByteArray {
+        val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
+        if (!wrapped.isNullOrBlank()) {
+            return unwrapRawKey(wrapped)
+        }
+
+        val raw = ByteArray(RAW_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        val encoded = wrapRawKey(raw)
+        check(prefs.edit().putString(WRAPPED_KEY_PREF, encoded).commit()) {
+            "Prijenosni vault ključ nije moguće trajno spremiti."
+        }
+        return raw
+    }
+
+    fun installPortableKey(rawKey: ByteArray) {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravna duljina recovery ključa." }
+        val encoded = wrapRawKey(rawKey)
+        check(prefs.edit().putString(WRAPPED_KEY_PREF, encoded).commit()) {
+            "Recovery ključ nije moguće zaštititi uređajnim ključem."
+        }
+    }
+
+    fun migrateLegacyVault(clearText: String, blobPreference: String): Boolean {
+        val raw = ByteArray(RAW_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        return try {
+            val wrapped = wrapRawKey(raw)
+            val encrypted = encryptWithRawKey(clearText, raw)
+            prefs.edit()
+                .putString(WRAPPED_KEY_PREF, wrapped)
+                .putString(blobPreference, encrypted)
+                .commit()
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun encrypt(text: String): String {
+        val raw = portableKeyBytes()
+        return try {
+            encryptWithRawKey(text, raw)
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun decrypt(payload: String): String {
+        val raw = portableKeyBytes()
+        return try {
+            decryptWithRawKey(payload, raw)
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun decryptWithRawKey(payload: String, rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        return decryptWithKey(payload, javax.crypto.spec.SecretKeySpec(rawKey, "AES"))
+    }
+
+    fun encryptWithRawKey(text: String, rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        return encryptWithKey(text, javax.crypto.spec.SecretKeySpec(rawKey, "AES"))
+    }
+
+    fun decryptLegacy(payload: String): String = decryptWithKey(payload, wrappingKey())
+
+    private fun encryptWithKey(text: String, key: SecretKey): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         val encrypted = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + "." +
             Base64.encodeToString(encrypted, Base64.NO_WRAP)
     }
 
-    fun decrypt(payload: String): String {
+    private fun decryptWithKey(payload: String, key: SecretKey): String {
         val parts = payload.split(".")
         require(parts.size == 2)
+        val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+        val encrypted = Base64.decode(parts[1], Base64.NO_WRAP)
+        require(iv.size == 12 && encrypted.size >= 16) { "Neispravan šifrirani trezor." }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(
-            Cipher.DECRYPT_MODE,
-            key(),
-            GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP))
-        )
-        return cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)).toString(Charsets.UTF_8)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
     }
 
     fun clearKey(): Boolean = runCatching {
+        val prefCleared = prefs.edit().remove(WRAPPED_KEY_PREF).commit()
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (keyStore.containsAlias(alias)) {
             keyStore.deleteEntry(alias)
         }
-        true
+        prefCleared
     }.getOrDefault(false)
 }
 
@@ -759,7 +933,7 @@ internal fun normalizePortableUpdatedAt(
 }
 
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
-    private val crypto = CryptoStore()
+    private val crypto = CryptoStore(prefs)
 
     fun save(items: List<VaultItem>) {
         val encrypted = crypto.encrypt(toJson(items))
@@ -776,9 +950,33 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         return blobCleared && keyCleared
     }
 
+    fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
+
+    fun installRecoveryKey(rawKey: ByteArray): List<VaultItem> {
+        val blob = prefs.getString("vault_blob", null)
+        val verified = if (blob.isNullOrBlank()) {
+            emptyList()
+        } else {
+            fromJson(crypto.decryptWithRawKey(blob, rawKey))
+        }
+        crypto.installPortableKey(rawKey)
+        return verified
+    }
+
     fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
-        return runCatching { fromJson(crypto.decrypt(blob)) }.getOrNull()
+        return runCatching {
+            if (crypto.hasPortableKey()) {
+                fromJson(crypto.decrypt(blob))
+            } else {
+                val clear = crypto.decryptLegacy(blob)
+                val decoded = fromJson(clear)
+                if (!crypto.migrateLegacyVault(clear, "vault_blob")) {
+                    error("Migraciju prijenosnog vault ključa nije moguće trajno spremiti.")
+                }
+                decoded
+            }
+        }.getOrNull()
     }
 
     fun toJson(items: List<VaultItem>): String {
@@ -994,6 +1192,84 @@ internal object PortableBackup {
         val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
         return try {
             val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            javax.crypto.spec.SecretKeySpec(bytes, "AES")
+        } finally {
+            spec.clearPassword()
+        }
+    }
+}
+
+
+internal fun isStrongRecoveryPassphrase(passphrase: String): Boolean {
+    if (passphrase.length < 16) return false
+    val classes = listOf(
+        passphrase.any(Char::isUpperCase),
+        passphrase.any(Char::isLowerCase),
+        passphrase.any(Char::isDigit),
+        passphrase.any { !it.isLetterOrDigit() && !it.isWhitespace() }
+    ).count { it }
+    val words = passphrase.trim().split(Regex("\\s+")).filter { it.length >= 3 }
+    return classes >= 3 || words.size >= 4
+}
+
+internal object RecoveryKeyEnvelope {
+    private const val VERSION = "KEYRAREC1"
+    private const val ITERATIONS = 600_000
+    private const val SALT_BYTES = 16
+    private const val NONCE_BYTES = 12
+    private const val TAG_BYTES = 16
+    private const val RAW_KEY_BYTES = 32
+
+    fun encrypt(rawKey: ByteArray, passphrase: String): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan recovery ključ." }
+        require(isStrongRecoveryPassphrase(passphrase)) { "Recovery lozinka nije dovoljno jaka." }
+        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val nonce = ByteArray(NONCE_BYTES).also { SecureRandom().nextBytes(it) }
+        val key = derive(passphrase, salt, ITERATIONS)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, nonce))
+        val encrypted = cipher.doFinal(rawKey)
+        val combined = nonce + encrypted
+        return listOf(
+            VERSION,
+            ITERATIONS.toString(),
+            java.util.Base64.getEncoder().encodeToString(salt),
+            java.util.Base64.getEncoder().encodeToString(combined)
+        ).joinToString(".")
+    }
+
+    fun decrypt(payload: String, passphrase: String): ByteArray {
+        require(payload.length <= MAX_RECOVERY_CHARS) { "Recovery datoteka je prevelika." }
+        val parts = payload.trim().split(".")
+        require(parts.size == 4 && parts[0] == VERSION) { "Nepodržan recovery format." }
+        val iterations = parts[1].toInt()
+        require(iterations in 100_000..2_000_000) { "Neispravni KDF parametri." }
+        val salt = java.util.Base64.getDecoder().decode(parts[2])
+        val combined = java.util.Base64.getDecoder().decode(parts[3])
+        require(salt.size == SALT_BYTES) { "Neispravna recovery sol." }
+        require(combined.size >= NONCE_BYTES + TAG_BYTES + RAW_KEY_BYTES) {
+            "Neispravan recovery sadržaj."
+        }
+
+        val nonce = combined.copyOfRange(0, NONCE_BYTES)
+        val encrypted = combined.copyOfRange(NONCE_BYTES, combined.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            derive(passphrase, salt, iterations),
+            GCMParameterSpec(128, nonce)
+        )
+        return cipher.doFinal(encrypted).also {
+            require(it.size == RAW_KEY_BYTES) { "Neispravan recovery ključ." }
+        }
+    }
+
+    private fun derive(passphrase: String, salt: ByteArray, iterations: Int): SecretKey {
+        val spec = PBEKeySpec(passphrase.toCharArray(), salt, iterations, 256)
+        return try {
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(spec)
+                .encoded
             javax.crypto.spec.SecretKeySpec(bytes, "AES")
         } finally {
             spec.clearPassword()
@@ -1379,7 +1655,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Text("Izradi trezor", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                 }
                 OutlinedButton(
                     onClick = model::startImport,
@@ -1572,7 +1848,7 @@ private fun UnlockScreen(
                 }
                 if (creating) {
                     TextButton(onClick = model::cancelSetup) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = null, tint = Ice)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = Ice)
                         Spacer(Modifier.width(6.dp))
                         Text("Natrag", color = Ice)
                     }
@@ -2916,7 +3192,7 @@ private fun AddScreen(model: KeyraViewModel) {
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
         Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) }) {
-                Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
             }
             KeyraMark(38.dp)
             Spacer(Modifier.width(10.dp))
@@ -3300,7 +3576,7 @@ private fun DetailScreen(
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
         Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(Screen.VAULT) }) {
-                Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
             }
             Box(
                 Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Cyan.copy(alpha=.12f)),
@@ -3922,6 +4198,11 @@ private fun SettingsScreen(
     var confirmImport by remember { mutableStateOf(false) }
     var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
+    var pendingRecoveryExport by remember { mutableStateOf<Uri?>(null) }
+    var pendingRecoveryImport by remember { mutableStateOf<Uri?>(null) }
+    var recoveryExportPassphrase by remember { mutableStateOf("") }
+    var recoveryExportConfirm by remember { mutableStateOf("") }
+    var recoveryImportPassphrase by remember { mutableStateOf("") }
 
     val exportFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -3941,6 +4222,21 @@ private fun SettingsScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) pendingFileImport = uri
+    }
+
+    val exportRecoveryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        recoveryExportPassphrase = ""
+        recoveryExportConfirm = ""
+        pendingRecoveryExport = uri
+    }
+
+    val importRecoveryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        recoveryImportPassphrase = ""
+        pendingRecoveryImport = uri
     }
 
     fun runProtectedImport() {
@@ -3969,6 +4265,8 @@ private fun SettingsScreen(
         "Privatni cloud",
         "Proton Drive",
         "Files",
+        "Recovery Key",
+        "oporavak",
         "sigurnosna kopija"
     )
     val preferenceVisible = matches("Tamni način", "tamni izgled")
@@ -3982,6 +4280,145 @@ private fun SettingsScreen(
     )
 
     Column(Modifier.fillMaxSize()) {
+        pendingRecoveryExport?.let { uri ->
+            val strongPassphrase = isStrongRecoveryPassphrase(recoveryExportPassphrase)
+            val matchingPassphrase =
+                recoveryExportPassphrase.isNotEmpty() && recoveryExportPassphrase == recoveryExportConfirm
+
+            AlertDialog(
+                onDismissRequest = {
+                    pendingRecoveryExport = null
+                    recoveryExportPassphrase = ""
+                    recoveryExportConfirm = ""
+                },
+                icon = { Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Cyan) },
+                title = { Text("Izvezi Recovery Key") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Recovery Key štiti prijenosni ključ trezora. Ne sadrži zapise trezora i nije zamjena za šifriranu sigurnosnu kopiju podataka."
+                        )
+                        OutlinedTextField(
+                            value = recoveryExportPassphrase,
+                            onValueChange = { recoveryExportPassphrase = it },
+                            label = { Text("Recovery lozinka") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = recoveryExportConfirm,
+                            onValueChange = { recoveryExportConfirm = it },
+                            label = { Text("Ponovite recovery lozinku") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Najmanje 16 znakova i dovoljna složenost ili najmanje četiri riječi. Datoteku i lozinku čuvajte odvojeno.",
+                            color = if (strongPassphrase) Good else Muted,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = strongPassphrase && matchingPassphrase,
+                        onClick = {
+                            val passphrase = recoveryExportPassphrase
+                            pendingRecoveryExport = null
+                            recoveryExportPassphrase = ""
+                            recoveryExportConfirm = ""
+                            val export = {
+                                model.exportRecoveryKeyToUri(context, uri, passphrase)
+                            }
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za izvoz Recovery Key datoteke.", export)
+                            } else {
+                                export()
+                            }
+                        }
+                    ) {
+                        Text("Izvezi", color = if (strongPassphrase && matchingPassphrase) Cyan else Muted)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingRecoveryExport = null
+                            recoveryExportPassphrase = ""
+                            recoveryExportConfirm = ""
+                        }
+                    ) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
+        pendingRecoveryImport?.let { uri ->
+            AlertDialog(
+                onDismissRequest = {
+                    pendingRecoveryImport = null
+                    recoveryImportPassphrase = ""
+                },
+                icon = { Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Warn) },
+                title = { Text("Uvezi Recovery Key") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Keyra će prvo verificirati recovery datoteku i postojeći trezor. Lokalni kriptografski materijal neće biti zamijenjen ako provjera ne uspije."
+                        )
+                        OutlinedTextField(
+                            value = recoveryImportPassphrase,
+                            onValueChange = { recoveryImportPassphrase = it },
+                            label = { Text("Recovery lozinka") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            colors = keyraFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Recovery Key ne vraća izbrisane zapise samostalno. Nakon oporavka ključa po potrebi vratite zasebnu šifriranu KEYRA2 sigurnosnu kopiju.",
+                            color = Muted,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = recoveryImportPassphrase.isNotBlank(),
+                        onClick = {
+                            val passphrase = recoveryImportPassphrase
+                            pendingRecoveryImport = null
+                            recoveryImportPassphrase = ""
+                            val importRecovery: () -> Unit = {
+                                model.importRecoveryKeyFromUri(context, uri, passphrase)
+                                Unit
+                            }
+                            if (model.sensitiveReauthEnabled && model.biometricEnabled) {
+                                requestBiometric("Potvrdite identitet za uvoz Recovery Key datoteke.", importRecovery)
+                            } else {
+                                importRecovery()
+                            }
+                        }
+                    ) {
+                        Text("Verificiraj i uvezi", color = if (recoveryImportPassphrase.isNotBlank()) Warn else Muted)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingRecoveryImport = null
+                            recoveryImportPassphrase = ""
+                        }
+                    ) { Text("Odustani") }
+                },
+                containerColor = Slate
+            )
+        }
+
         if (confirmErase) {
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
@@ -4163,7 +4600,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudUpload,
                     "Spremi šifriranu kopiju",
-                    "Spremite već šifriranu .keyra datoteku u Files ili odabrani cloud provider. Keyra ne traži lozinku vašeg cloud računa."
+                    "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
                 ) {
                     IconButton(onClick = {
                         exportFileLauncher.launch("Keyra-backup.keyra")
@@ -4180,7 +4617,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.CloudDownload,
                     "Uvezi šifriranu datoteku",
-                    "Odaberite šifriranu .keyra kopiju iz Files ili cloud providera i vratite trezor tek nakon izričite potvrde."
+                    "Odaberite šifriranu .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor tek nakon izričite potvrde."
                 ) {
                     IconButton(onClick = {
                         importFileLauncher.launch(
@@ -4196,6 +4633,51 @@ private fun SettingsScreen(
                 }
             }
 
+            if (matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+                SettingRow(
+                    Icons.Outlined.VpnKey,
+                    "Izvezi Recovery Key",
+                    "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
+                ) {
+                    IconButton(onClick = {
+                        exportRecoveryLauncher.launch("Keyra-Recovery.keyra")
+                    }) {
+                        Icon(
+                            Icons.Outlined.SaveAlt,
+                            contentDescription = "Izvezi Recovery Key",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
+            if (matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+                SettingRow(
+                    Icons.Outlined.VpnKey,
+                    "Uvezi Recovery Key",
+                    "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
+                ) {
+                    IconButton(onClick = {
+                        importRecoveryLauncher.launch(
+                            arrayOf("application/octet-stream", "text/plain", "application/*")
+                        )
+                    }) {
+                        Icon(
+                            Icons.Outlined.FolderOpen,
+                            contentDescription = "Uvezi Recovery Key",
+                            tint = Cyan
+                        )
+                    }
+                }
+            }
+
+            if (matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud")) item {
+                SettingRow(
+                    Icons.Outlined.CloudSync,
+                    "Privatni cloud bez Keyra računa",
+                    "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka preko sistemskog odabira lokacije; sinkronizaciju zatim obavlja odabrani provider."
+                )
+            }
             if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
                 SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
                     IconButton(onClick = {
@@ -4258,7 +4740,7 @@ private fun SettingsScreen(
             }
             if (matches("Zaključaj trezor", "zaključavanje")) item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Logout, null)
+                    Icon(Icons.AutoMirrored.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Zaključaj trezor")
                 }

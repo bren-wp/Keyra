@@ -437,33 +437,55 @@ enum KeychainVault {
         return output as? Data
     }
 
-    static func key() throws -> SymmetricKey {
+    static func rawKeyData() throws -> Data {
         if let existing = existingKeyData() {
-            return SymmetricKey(data: existing)
+            guard existing.count == 32 else { throw KeyraError.keyUnavailable }
+            return existing
         }
 
         var bytes = [UInt8](repeating: 0, count: 32)
+        defer { for index in bytes.indices { bytes[index] = 0 } }
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw KeyraError.keyUnavailable
         }
         let data = Data(bytes)
-        let add: [String: Any] = [
+        try replaceKeyData(data, allowInsert: true)
+        return data
+    }
+
+    static func key() throws -> SymmetricKey {
+        SymmetricKey(data: try rawKeyData())
+    }
+
+    static func replaceKeyData(_ data: Data, allowInsert: Bool = true) throws {
+        guard data.count == 32 else { throw KeyraError.invalidData }
+
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecValueData as String: data
+            kSecUseDataProtectionKeychain as String: true
+        ]
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let status = SecItemAdd(add as CFDictionary, nil)
-        if status == errSecSuccess {
-            return SymmetricKey(data: data)
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
         }
-        if status == errSecDuplicateItem, let existing = existingKeyData() {
-            return SymmetricKey(data: existing)
+        guard updateStatus == errSecItemNotFound, allowInsert else {
+            throw KeyraError.keyUnavailable
         }
-        throw KeyraError.keyUnavailable
+
+        var add = query
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        add[kSecValueData as String] = data
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
     }
 
     static func clear() -> Bool {
@@ -590,6 +612,34 @@ final class EncryptedVault {
             defaults.removeObject(forKey: legacyKey)
         }
         return decoded
+    }
+
+    func recoveryKeyData() throws -> Data {
+        try KeychainVault.rawKeyData()
+    }
+
+    func installRecoveryKey(_ data: Data) throws -> [VaultItem] {
+        guard data.count == 32 else { throw KeyraError.invalidData }
+
+        let url = try storageURL()
+        let encrypted: Data?
+        if FileManager.default.fileExists(atPath: url.path) {
+            encrypted = try Data(contentsOf: url)
+        } else {
+            encrypted = defaults.data(forKey: legacyKey)
+        }
+
+        let verified: [VaultItem]
+        if let encrypted {
+            let box = try AES.GCM.SealedBox(combined: encrypted)
+            let clear = try AES.GCM.open(box, using: SymmetricKey(data: data))
+            verified = try JSONDecoder().decode([VaultItem].self, from: clear)
+        } else {
+            verified = []
+        }
+
+        try KeychainVault.replaceKeyData(data)
+        return verified
     }
 
     func clear() {
@@ -825,6 +875,95 @@ enum PortableBackup {
             throw lastError
         }
         throw KeyraError.invalidBackup
+    }
+}
+
+
+func isStrongRecoveryPassphrase(_ passphrase: String) -> Bool {
+    guard passphrase.count >= 16 else { return false }
+    let classes = [
+        passphrase.contains(where: { $0.isUppercase }),
+        passphrase.contains(where: { $0.isLowercase }),
+        passphrase.contains(where: { $0.isNumber }),
+        passphrase.contains(where: { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
+    ].filter { $0 }.count
+    let words = passphrase
+        .split(whereSeparator: { $0.isWhitespace })
+        .filter { $0.count >= 3 }
+    return classes >= 3 || words.count >= 4
+}
+
+enum RecoveryKeyEnvelope {
+    private static let version = "KEYRAREC1"
+    private static let iterations = 600_000
+    private static let saltBytes = 16
+    private static let rawKeyBytes = 32
+    private static let maxPayloadBytes = 16_384
+
+    static func encrypt(_ rawKey: Data, passphrase: String) throws -> String {
+        guard rawKey.count == rawKeyBytes, isStrongRecoveryPassphrase(passphrase) else {
+            throw KeyraError.invalidData
+        }
+
+        var salt = [UInt8](repeating: 0, count: saltBytes)
+        defer { for index in salt.indices { salt[index] = 0 } }
+        guard SecRandomCopyBytes(kSecRandomDefault, salt.count, &salt) == errSecSuccess else {
+            throw KeyraError.keyUnavailable
+        }
+
+        let saltData = Data(salt)
+        let derived = try PasswordTools.derive(
+            passphrase,
+            salt: saltData,
+            iterations: iterations,
+            keyLength: rawKeyBytes
+        )
+        let sealed = try AES.GCM.seal(rawKey, using: SymmetricKey(data: derived))
+        guard let combined = sealed.combined else {
+            throw KeyraError.invalidBackup
+        }
+
+        return [
+            version,
+            String(iterations),
+            saltData.base64EncodedString(),
+            combined.base64EncodedString()
+        ].joined(separator: ".")
+    }
+
+    static func decrypt(_ payload: String, passphrase: String) throws -> Data {
+        guard payload.utf8.count <= maxPayloadBytes else {
+            throw KeyraError.invalidBackup
+        }
+        let parts = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ".", omittingEmptySubsequences: false)
+        guard
+            parts.count == 4,
+            String(parts[0]) == version,
+            let rounds = Int(parts[1]),
+            (100_000...2_000_000).contains(rounds),
+            let salt = Data(base64Encoded: String(parts[2])),
+            salt.count == saltBytes,
+            let combined = Data(base64Encoded: String(parts[3])),
+            combined.count >= 12 + 16 + rawKeyBytes
+        else {
+            throw KeyraError.invalidBackup
+        }
+
+        let derived = try PasswordTools.derive(
+            passphrase,
+            salt: salt,
+            iterations: rounds,
+            keyLength: rawKeyBytes
+        )
+        let clear = try AES.GCM.open(
+            AES.GCM.SealedBox(combined: combined),
+            using: SymmetricKey(data: derived)
+        )
+        guard clear.count == rawKeyBytes else {
+            throw KeyraError.invalidBackup
+        }
+        return clear
     }
 }
 
@@ -1262,6 +1401,42 @@ final class KeyraStore: ObservableObject {
         guard let payload = makeBackupPayload() else { return }
         SecureClipboard.copy(payload)
         message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
+    }
+
+    func makeRecoveryKeyPayload(passphrase: String) -> String? {
+        guard isStrongRecoveryPassphrase(passphrase) else {
+            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
+            return nil
+        }
+        do {
+            let rawKey = try vault.recoveryKeyData()
+            return try RecoveryKeyEnvelope.encrypt(rawKey, passphrase: passphrase)
+        } catch {
+            message = "Recovery Key datoteku nije moguće izraditi."
+            return nil
+        }
+    }
+
+    @discardableResult
+    func importRecoveryKeyPayload(_ payload: String, passphrase: String) -> Bool {
+        guard !payload.isEmpty, payload.utf8.count <= 16_384 else {
+            message = "Recovery Key datoteka nije valjana."
+            return false
+        }
+        do {
+            let rawKey = try RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
+            let verifiedItems = try vault.installRecoveryKey(rawKey)
+            if !verifiedItems.isEmpty {
+                items = verifiedItems
+            }
+            message = verifiedItems.isEmpty
+                ? "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
+                : "Recovery Key je verificiran i ponovno zaštićen Keychainom ovog uređaja."
+            return true
+        } catch {
+            message = "Recovery Key je oštećen, izmijenjen, ne odgovara ovom trezoru ili recovery lozinka nije ispravna."
+            return false
+        }
     }
 
     @discardableResult
@@ -3986,6 +4161,14 @@ struct SettingsView: View {
     @State private var exportBackupFile = false
     @State private var importBackupFile = false
     @State private var pendingImportPayload: String?
+    @State private var recoveryDocument = KeyraBackupDocument()
+    @State private var exportRecoveryFile = false
+    @State private var importRecoveryFile = false
+    @State private var showRecoveryExportPrompt = false
+    @State private var recoveryExportPassphrase = ""
+    @State private var recoveryExportConfirm = ""
+    @State private var pendingRecoveryImportPayload: String?
+    @State private var recoveryImportPassphrase = ""
 
     private func runProtectedImport() {
         store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
@@ -4004,6 +4187,32 @@ struct SettingsView: View {
             guard let payload = store.makeBackupPayload() else { return }
             backupDocument = KeyraBackupDocument(payload: payload)
             exportBackupFile = true
+        }
+    }
+
+    private func prepareRecoveryExport() {
+        let passphrase = recoveryExportPassphrase
+        guard isStrongRecoveryPassphrase(passphrase), passphrase == recoveryExportConfirm else {
+            store.message = "Recovery lozinka nije dovoljno jaka ili se potvrda ne podudara."
+            return
+        }
+
+        store.authorizeSensitive(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
+            defer {
+                recoveryExportPassphrase = ""
+                recoveryExportConfirm = ""
+            }
+            guard let payload = store.makeRecoveryKeyPayload(passphrase: passphrase) else { return }
+            recoveryDocument = KeyraBackupDocument(payload: payload)
+            exportRecoveryFile = true
+        }
+    }
+
+    private func runProtectedRecoveryImport(_ payload: String) {
+        let passphrase = recoveryImportPassphrase
+        recoveryImportPassphrase = ""
+        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
+            _ = store.importRecoveryKeyPayload(payload, passphrase: passphrase)
         }
     }
 
@@ -4029,6 +4238,8 @@ struct SettingsView: View {
             "Proton Drive",
             "privatni cloud",
             "Files",
+            "Recovery Key",
+            "oporavak",
             "sigurnosna kopija"
         )
     }
@@ -4151,7 +4362,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "externaldrive.badge.plus",
                             title: "Spremi šifriranu kopiju",
-                            subtitle: "Spremite već šifriranu .keyra datoteku u Files ili cloud provider poput Proton Drivea. Keyra ne traži lozinku vašeg cloud računa."
+                            subtitle: "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
                         ) {
                             Button {
                                 prepareBackupExport()
@@ -4167,7 +4378,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "externaldrive.badge.checkmark",
                             title: "Uvezi šifriranu datoteku",
-                            subtitle: "Odaberite .keyra kopiju iz Files ili cloud providera i vratite trezor nakon potvrde."
+                            subtitle: "Odaberite .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor nakon potvrde."
                         ) {
                             Button {
                                 importBackupFile = true
@@ -4177,6 +4388,48 @@ struct SettingsView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Uvezi šifriranu datoteku")
                         }
+                    }
+
+                    if matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
+                        SettingRow(
+                            icon: "key.fill",
+                            title: "Izvezi Recovery Key",
+                            subtitle: "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
+                        ) {
+                            Button {
+                                recoveryExportPassphrase = ""
+                                recoveryExportConfirm = ""
+                                showRecoveryExportPrompt = true
+                            } label: {
+                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Izvezi Recovery Key")
+                        }
+                    }
+
+                    if matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
+                        SettingRow(
+                            icon: "key.fill",
+                            title: "Uvezi Recovery Key",
+                            subtitle: "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
+                        ) {
+                            Button {
+                                importRecoveryFile = true
+                            } label: {
+                                Image(systemName: "folder").foregroundStyle(cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Uvezi Recovery Key")
+                        }
+                    }
+
+                    if matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud") {
+                        SettingRow(
+                            icon: "icloud.and.arrow.up",
+                            title: "Privatni cloud bez Keyra računa",
+                            subtitle: "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka kroz sistemski odabir lokacije; sinkronizaciju zatim obavlja odabrani provider."
+                        )
                     }
 
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
@@ -4325,6 +4578,92 @@ struct SettingsView: View {
                 "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
                 "Prije nastavka provjerite da je kopija ispravna."
             )
+        }
+        .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
+            SecureField("Recovery lozinka", text: $recoveryExportPassphrase)
+            SecureField("Ponovite recovery lozinku", text: $recoveryExportConfirm)
+            Button("Izvezi") {
+                prepareRecoveryExport()
+            }
+            .disabled(
+                !isStrongRecoveryPassphrase(recoveryExportPassphrase) ||
+                recoveryExportPassphrase != recoveryExportConfirm
+            )
+            Button("Odustani", role: .cancel) {
+                recoveryExportPassphrase = ""
+                recoveryExportConfirm = ""
+            }
+        } message: {
+            Text(
+                "Recovery Key štiti prijenosni vault ključ, ne podatke trezora. " +
+                "Koristite najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi; datoteku i lozinku čuvajte odvojeno."
+            )
+        }
+        .alert(
+            "Uvezi Recovery Key",
+            isPresented: Binding(
+                get: { pendingRecoveryImportPayload != nil },
+                set: {
+                    if !$0 {
+                        pendingRecoveryImportPayload = nil
+                        recoveryImportPassphrase = ""
+                    }
+                }
+            )
+        ) {
+            SecureField("Recovery lozinka", text: $recoveryImportPassphrase)
+            Button("Verificiraj i uvezi") {
+                if let payload = pendingRecoveryImportPayload {
+                    pendingRecoveryImportPayload = nil
+                    runProtectedRecoveryImport(payload)
+                }
+            }
+            .disabled(recoveryImportPassphrase.isEmpty)
+            Button("Odustani", role: .cancel) {
+                pendingRecoveryImportPayload = nil
+                recoveryImportPassphrase = ""
+            }
+        } message: {
+            Text(
+                "Keyra prvo verificira recovery datoteku i postojeći trezor. " +
+                "Recovery Key ne vraća izbrisane zapise samostalno; za to koristite zasebnu šifriranu KEYRA2 sigurnosnu kopiju."
+            )
+        }
+        .fileExporter(
+            isPresented: $exportRecoveryFile,
+            document: recoveryDocument,
+            contentType: UTType(filenameExtension: "keyra") ?? .data,
+            defaultFilename: "Keyra-Recovery"
+        ) { result in
+            switch result {
+            case .success:
+                store.message = "Šifrirani Recovery Key spremljen je na odabrano mjesto."
+            case .failure:
+                store.message = "Recovery Key nije moguće spremiti na odabrano mjesto."
+            }
+        }
+        .fileImporter(
+            isPresented: $importRecoveryFile,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                let urls = try result.get()
+                guard let url = urls.first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessed { url.stopAccessingSecurityScopedResource() }
+                }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 16_384, let payload = String(data: data, encoding: .utf8) else {
+                    store.message = "Recovery Key datoteka nije valjana ili je prevelika."
+                    return
+                }
+                recoveryImportPassphrase = ""
+                pendingRecoveryImportPayload = payload
+            } catch {
+                store.message = "Recovery Key datoteku nije moguće otvoriti."
+            }
         }
         .fileExporter(
             isPresented: $exportBackupFile,
