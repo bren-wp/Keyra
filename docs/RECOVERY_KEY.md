@@ -2,7 +2,7 @@
 
 ## Status
 
-Ovaj dokument opisuje aktualnu kriptografsku jezgru Recovery Key sustava na razvojnom branchu PR-a #4. Funkcionalnost se ne smatra release-ready dok korisnički export/import tok, first-run recovery i cross-platform QA nisu dovršeni i CI nije zelen.
+Ovaj dokument opisuje aktualni Recovery Key sustav. Export/import UI postoji na obje platforme, a first-run tok sada vodi kroz Recovery Key, zasebni KEYRA2 backup i novu glavnu lozinku. Funkcionalnost se i dalje ne smatra release-ready dok cross-platform device QA i završni CI na istom commitu ne budu zeleni.
 
 ## Što Recovery Key jest
 
@@ -91,9 +91,11 @@ Ponovno instalirana Keyra
 → odaberi Keyra-Recovery.keyra
 → unesi recovery passphrase
 → verificiraj KEYRAREC1
-→ zaštiti vault ključ novim uređajnim Keychain/Keystore materijalom
-→ odaberi pripadajući šifrirani KEYRA2 backup ako lokalni vault više ne postoji
-→ validiraj backup
+→ odaberi pripadajući šifrirani KEYRA2 backup
+→ unesi lozinku sigurnosne kopije i validiraj backup
+→ postavi novu glavnu lozinku za novi uređaj
+→ tek nakon pune provjere zaštiti vault ključ novim uređajnim Keychain/Keystore materijalom
+→ ponovno šifriraj vraćene zapise prijenosnim vault ključem
 → otvori obnovljeni trezor
 ```
 
@@ -103,14 +105,15 @@ Recovery Key sam po sebi ne može vratiti zapise koji su fizički izbrisani zaje
 
 Prije označavanja funkcionalnosti spremnom potrebno je najmanje:
 
-- Android export/import UI
-- iOS export/import UI
-- first-run recovery flow na obje platforme
+- [x] Android export/import UI
+- [x] iOS export/import UI
+- [x] first-run recovery flow na obje platforme
 - Android → iOS KEYRAREC1 interoperability test
 - iOS → Android KEYRAREC1 interoperability test
 - pogrešna passphrase test
 - tampered file test
 - oversized/malformed input test
-- restore bez izmjene postojećeg vaulta prije pune verifikacije
+- [x] first-run restore provjerava KEYRAREC1 i KEYRA2 prije trajne izmjene uređajnog stanja
+- restore postojećeg aktivnog vaulta bez izmjene prije pune verifikacije
 - stvarni device test Keychain/Keystore re-wrappinga
 - zelen Android CI i iOS CI na istom završnom commitu
