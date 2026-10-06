@@ -21,7 +21,7 @@ Keyra ne umeće probne vjerodajnice u novi trezor.
 
 ## Podaci koje Keyra ne prikuplja
 
-U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za mrežni pristup na Androidu, ne koristi oglašavanje, analitiku, identifikatore za praćenje, lokaciju, kontakte, mikrofon ni fotografije. Sadržaj trezora, glavna lozinka i TOTP tajne ne šalju se razvojnom programeru.
+U trenutnoj implementaciji Keyra nema vlastiti mrežni backend niti dozvolu za mrežni pristup na Androidu, ne koristi oglašavanje, analitiku, identifikatore za praćenje, lokaciju, kontakte, mikrofon ni fotografije. Na Androidu 12+ koristi sistemsku overlay-zaštitu kako bi spriječila prikaz nepouzdanih prozora iznad osjetljivog Keyra sučelja; ta zaštita ne prikuplja korisničke podatke. Sadržaj trezora, glavna lozinka i TOTP tajne ne šalju se razvojnom programeru.
 
 Ako se u budućnosti uvede opcionalna mrežna sinkronizacija koju pruža Keyra, ova pravila privatnosti i deklaracije u Google Playu/App Storeu moraju se ažurirati prije objave te funkcije.
 
