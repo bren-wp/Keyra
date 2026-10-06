@@ -4393,8 +4393,9 @@ private fun SettingsScreen(
                             val passphrase = recoveryImportPassphrase
                             pendingRecoveryImport = null
                             recoveryImportPassphrase = ""
-                            val importRecovery = {
+                            val importRecovery: () -> Unit = {
                                 model.importRecoveryKeyFromUri(context, uri, passphrase)
+                                Unit
                             }
                             if (model.sensitiveReauthEnabled && model.biometricEnabled) {
                                 requestBiometric("Potvrdite identitet za uvoz Recovery Key datoteke.", importRecovery)

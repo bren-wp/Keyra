@@ -175,7 +175,7 @@ jobs:
           fi
 
           sleep 3
-          if ! xcrun simctl spawn "$UDID" /bin/kill -0 "$PID" >/dev/null 2>&1; then
+          if ! /bin/kill -0 "$PID" >/dev/null 2>&1; then
             echo "Keyra se pokrenula, ali proces nije ostao živ nakon launch smoke testa."
             echo "::group::Keyra simulator log"
             xcrun simctl spawn "$UDID" log show \
