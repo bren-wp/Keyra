@@ -38,8 +38,8 @@ Sigurnosne tvrdnje odnose se na implementirani model zaštite i ne znače da je 
 
 ## Recovery Key — granice trenutne implementacije
 
-Aktualni razvojni branch uvodi kriptografsku jezgru prijenosnog vault ključa i zajednički `KEYRAREC1` envelope za Android i iOS. Recovery datoteka ne izvozi Android Keystore ili Apple Keychain hardverski/uređajni ključ i nikada ne sadrži vault ključ u plaintextu.
+Keyra 0.6.0 uključuje kriptografsku jezgru prijenosnog vault ključa, zajednički `KEYRAREC1` envelope za Android i iOS, korisnički export/import ekran te first-run tok **Imam Recovery Key**. Recovery datoteka ne izvozi Android Keystore ili Apple Keychain hardverski/uređajni ključ i nikada ne sadrži vault ključ u plaintextu.
 
-PBKDF2-HMAC-SHA-256 s 600.000 iteracija trenutačno je odabran kao kompatibilni KDF jer obje postojeće platforme već imaju provjerenu zajedničku implementaciju bez dodavanja novog kriptografskog dependencyja. Argon2id ostaje preferirana buduća opcija tek kada bude uvedena održavana, međusobno kompatibilna Android/iOS implementacija i potvrđena migracija formata.
+PBKDF2-HMAC-SHA-256 s 600.000 iteracija trenutačno je odabran kao kompatibilni KDF jer obje platforme imaju zajedničku implementaciju bez dodavanja novog kriptografskog dependencyja. Argon2id ostaje preferirana buduća opcija tek kada bude uvedena održavana, međusobno kompatibilna Android/iOS implementacija i potvrđena migracija formata.
 
-Korisnički export/import ekran, first-run "Imam Recovery Key" tok i end-to-end Android ↔ iOS recovery QA moraju proći prije nego što se Recovery Key smatra release-ready funkcionalnošću.
+Preostali release gateovi za potpuno označavanje Recovery Key funkcionalnosti kao provjerene odnose se na stvarni Android ↔ iOS device interoperability, Keychain/Keystore re-wrapping na fizičkim uređajima i store-signing/device QA.
