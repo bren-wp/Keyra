@@ -5279,7 +5279,7 @@ private fun SettingsScreen(
 
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
-                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.1 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
             }
             if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
                 SettingRow(
