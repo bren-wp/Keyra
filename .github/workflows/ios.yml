@@ -70,7 +70,7 @@ jobs:
             build
 
       - name: Provjeri pokretanje iOS aplikacije
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: |
           set -euo pipefail
 
@@ -113,9 +113,27 @@ jobs:
           export UDID
 
           cleanup() {
-            xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
-            xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
-            xcrun simctl delete "$UDID" >/dev/null 2>&1 || true
+            python3 - "$UDID" "$BUNDLE_ID" <<'PY'
+          import subprocess, sys
+
+          udid, bundle_id = sys.argv[1], sys.argv[2]
+          commands = [
+              ["xcrun", "simctl", "terminate", udid, bundle_id],
+              ["xcrun", "simctl", "shutdown", udid],
+              ["xcrun", "simctl", "delete", udid],
+          ]
+          for command in commands:
+              try:
+                  subprocess.run(
+                      command,
+                      check=False,
+                      timeout=20,
+                      stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL,
+                  )
+              except subprocess.TimeoutExpired:
+                  pass
+          PY
           }
           trap cleanup EXIT
 
@@ -127,12 +145,12 @@ jobs:
               subprocess.run(
                   ["xcrun", "simctl", "boot", udid],
                   check=False,
-                  timeout=45,
+                  timeout=30,
                   stdout=subprocess.DEVNULL,
                   stderr=subprocess.DEVNULL,
               )
           except subprocess.TimeoutExpired:
-              print("simctl boot je prekoračio 45 s; provjeravam boot status.")
+              print("simctl boot je prekoračio 30 s; nastavljam pratiti stvarni boot status.")
           PY
 
           python3 - "$UDID" <<'PY'
@@ -142,7 +160,7 @@ jobs:
           subprocess.run(
               ["xcrun", "simctl", "bootstatus", udid, "-b"],
               check=True,
-              timeout=120,
+              timeout=300,
           )
           PY
 
@@ -157,7 +175,7 @@ jobs:
           fi
 
           sleep 3
-          if ! xcrun simctl spawn "$UDID" launchctl print "gui/501/$BUNDLE_ID" >/dev/null 2>&1; then
-            echo "Keyra nije ostala pokrenuta nakon launch smoke testa."
+          if ! xcrun simctl spawn "$UDID" /bin/kill -0 "$PID" >/dev/null 2>&1; then
+            echo "Keyra se pokrenula, ali proces nije ostao živ nakon launch smoke testa."
             exit 1
           fi
