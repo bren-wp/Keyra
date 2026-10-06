@@ -321,7 +321,7 @@ enum SecureClipboard {
 }
 
 enum KeyraScreen: Equatable {
-    case onboarding, unlock, vault, collections, generator, add, detail, settings, security
+    case onboarding, recovery, unlock, vault, collections, generator, add, detail, settings, security
 }
 
 struct VaultItem: Identifiable, Codable, Equatable {
@@ -1067,6 +1067,11 @@ final class KeyraStore: ObservableObject {
         screen = .unlock
     }
 
+    func startRecovery() {
+        importingNewVault = false
+        screen = .recovery
+    }
+
     func cancelSetup() {
         importingNewVault = false
         if !isSetup { screen = .onboarding }
@@ -1150,6 +1155,79 @@ final class KeyraStore: ObservableObject {
         }
         finishInitialSetup(password: password, initialItems: imported)
         message = "Keyra trezor uspješno je uvezen."
+        return true
+    }
+
+    func recoverInitialVault(
+        recoveryPayload: String,
+        recoveryPassphrase: String,
+        backupPayload: String,
+        backupPassword: String,
+        newPassword: String
+    ) -> Bool {
+        guard !isSetup else {
+            message = "Recovery postavljanje dostupno je samo prije izrade trezora."
+            return false
+        }
+        guard newPassword.count >= 12 else {
+            message = "Nova glavna lozinka mora imati najmanje 12 znakova."
+            return false
+        }
+        guard
+            !recoveryPayload.isEmpty,
+            recoveryPayload.utf8.count <= 16_384,
+            !backupPayload.isEmpty,
+            backupPayload.utf8.count <= 2_500_000,
+            !recoveryPassphrase.isEmpty,
+            !backupPassword.isEmpty
+        else {
+            message = "Odaberite valjani Recovery Key i KEYRA2 sigurnosnu kopiju te unesite obje lozinke."
+            return false
+        }
+
+        var rawKey: Data
+        do {
+            rawKey = try RecoveryKeyEnvelope.decrypt(recoveryPayload, passphrase: recoveryPassphrase)
+        } catch {
+            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
+            return false
+        }
+        defer { rawKey.resetBytes(in: 0..<rawKey.count) }
+
+        let imported: [VaultItem]
+        do {
+            imported = try PortableBackup.decrypt(backupPayload, password: backupPassword)
+        } catch {
+            message = "KEYRA2 sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+            return false
+        }
+
+        do {
+            // Oba artefakta provjerena su prije izmjene uređaja. Ovo je first-run tok,
+            // pa uklanjamo samo eventualno nedovršeno lokalno stanje bez aktivne prijave.
+            auth.clear()
+            vault.clear()
+            _ = KeychainVault.clear()
+            _ = try vault.installRecoveryKey(rawKey)
+            try vault.save(imported)
+        } catch {
+            vault.clear()
+            _ = KeychainVault.clear()
+            auth.clear()
+            message = "Recovery nije moguće sigurno dovršiti. Na uređaju nije zadržano djelomično obnovljeno stanje."
+            return false
+        }
+
+        guard auth.create(password: newPassword) else {
+            vault.clear()
+            _ = KeychainVault.clear()
+            auth.clear()
+            message = "Novu glavnu lozinku nije moguće trajno spremiti. Recovery je poništen."
+            return false
+        }
+
+        finishInitialSetup(password: newPassword, initialItems: imported)
+        message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
         return true
     }
 
@@ -1520,6 +1598,7 @@ struct RootView: View {
             } else {
                 switch store.screen {
                 case .onboarding: OnboardingView().keyraPageWidth(680)
+                case .recovery: RecoverySetupView().keyraPageWidth(680)
                 case .unlock: UnlockView().keyraPageWidth(620)
                 case .vault: VaultView().keyraPageWidth()
                 case .collections: CollectionsView().keyraPageWidth()
@@ -1959,10 +2038,256 @@ struct OnboardingView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
                     .overlay(Capsule().stroke(cyan.opacity(0.72), lineWidth: 1))
+
+                    Button {
+                        store.startRecovery()
+                    } label: {
+                        HStack {
+                            Image(systemName: "key.horizontal.fill")
+                            Text("Imam Recovery Key").fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 42 : 48)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(ice)
                 }
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
+            }
+        }
+    }
+}
+
+struct RecoverySetupView: View {
+    @EnvironmentObject var store: KeyraStore
+    @State private var recoveryPayload: String?
+    @State private var backupPayload: String?
+    @State private var recoveryPassphrase = ""
+    @State private var backupPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var reveal = false
+    @State private var showRecoveryPicker = false
+    @State private var showBackupPicker = false
+
+    private var canRestore: Bool {
+        recoveryPayload != nil &&
+        backupPayload != nil &&
+        !recoveryPassphrase.isEmpty &&
+        !backupPassword.isEmpty &&
+        newPassword.count >= 12 &&
+        !confirmPassword.isEmpty
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let compact = proxy.size.height < 720 || proxy.size.width < 360
+
+            ScrollView {
+                VStack(spacing: compact ? 10 : 14) {
+                    HStack {
+                        Button {
+                            store.cancelSetup()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.headline)
+                                .frame(width: 42, height: 42)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(ice)
+                        Spacer()
+                    }
+
+                    KeyraMark(size: compact ? 58 : 72)
+                    Text("Obnovite Keyra trezor")
+                        .font(.system(size: compact ? 26 : 31, weight: .black))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text("Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.")
+                        .font(compact ? .footnote : .subheadline)
+                        .foregroundStyle(muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 4)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("1. Recovery Key")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Button {
+                            showRecoveryPicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "key.horizontal.fill")
+                                Text(recoveryPayload == nil ? "Odaberi Keyra-Recovery.keyra" : "Recovery Key učitan")
+                                Spacer()
+                                Image(systemName: recoveryPayload == nil ? "chevron.right" : "checkmark.circle.fill")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(14)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(recoveryPayload == nil ? .white : good)
+                        .background(slate2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                        SecureField("Recovery lozinka", text: $recoveryPassphrase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(14)
+                            .background(slate2)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                        Divider().overlay(ice.opacity(0.18))
+
+                        Text("2. KEYRA2 sigurnosna kopija")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Button {
+                            showBackupPicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "archivebox")
+                                Text(backupPayload == nil ? "Odaberi .keyra sigurnosnu kopiju" : "KEYRA2 kopija učitana")
+                                Spacer()
+                                Image(systemName: backupPayload == nil ? "chevron.right" : "checkmark.circle.fill")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(14)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(backupPayload == nil ? .white : good)
+                        .background(slate2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                        SecureField("Lozinka sigurnosne kopije", text: $backupPassword)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(14)
+                            .background(slate2)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                        Divider().overlay(ice.opacity(0.18))
+
+                        Text("3. Nova glavna lozinka")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Group {
+                            if reveal {
+                                TextField("Nova glavna lozinka", text: $newPassword)
+                                TextField("Ponovite novu glavnu lozinku", text: $confirmPassword)
+                            } else {
+                                SecureField("Nova glavna lozinka", text: $newPassword)
+                                SecureField("Ponovite novu glavnu lozinku", text: $confirmPassword)
+                            }
+                        }
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(14)
+                        .background(slate2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                        HStack {
+                            Text("Najmanje 12 znakova.")
+                                .font(.caption)
+                                .foregroundStyle(muted)
+                            Spacer()
+                            Button(reveal ? "Sakrij lozinke" : "Prikaži lozinke") {
+                                reveal.toggle()
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(ice)
+                        }
+
+                        Button {
+                            guard newPassword == confirmPassword else {
+                                store.message = "Nove glavne lozinke se ne podudaraju."
+                                return
+                            }
+                            _ = store.recoverInitialVault(
+                                recoveryPayload: recoveryPayload ?? "",
+                                recoveryPassphrase: recoveryPassphrase,
+                                backupPayload: backupPayload ?? "",
+                                backupPassword: backupPassword,
+                                newPassword: newPassword
+                            )
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.clockwise.circle.fill")
+                                Text("Obnovi trezor").fontWeight(.bold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(midnight)
+                        .background(canRestore ? cyan : cyan.opacity(0.35))
+                        .clipShape(Capsule())
+                        .disabled(!canRestore)
+                    }
+                    .padding(compact ? 14 : 18)
+                    .background(slate.opacity(0.96))
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .overlay(RoundedRectangle(cornerRadius: 22).stroke(cyan.opacity(0.34), lineWidth: 1))
+
+                    Text("Oba artefakta provjeravaju se prije spremanja. Recovery Key nije sigurnosna kopija podataka i ne šalje se na Keyra poslužitelje.")
+                        .font(.caption)
+                        .foregroundStyle(muted)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 2)
+                }
+                .padding(.horizontal, compact ? 16 : 22)
+                .padding(.top, 8)
+                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 16))
+            }
+        }
+        .fileImporter(
+            isPresented: $showRecoveryPicker,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 16_384, let text = String(data: data, encoding: .utf8) else {
+                    store.message = "Recovery Key datoteka nije valjana ili je prevelika."
+                    recoveryPayload = nil
+                    return
+                }
+                recoveryPayload = text
+                store.message = "Recovery Key datoteka je učitana."
+            } catch {
+                recoveryPayload = nil
+                store.message = "Recovery Key datoteku nije moguće otvoriti."
+            }
+        }
+        .fileImporter(
+            isPresented: $showBackupPicker,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 2_500_000, let text = String(data: data, encoding: .utf8) else {
+                    store.message = "KEYRA2 sigurnosna kopija nije valjana ili je prevelika."
+                    backupPayload = nil
+                    return
+                }
+                backupPayload = text
+                store.message = "KEYRA2 sigurnosna kopija je učitana."
+            } catch {
+                backupPayload = nil
+                store.message = "KEYRA2 sigurnosnu kopiju nije moguće otvoriti."
             }
         }
     }
