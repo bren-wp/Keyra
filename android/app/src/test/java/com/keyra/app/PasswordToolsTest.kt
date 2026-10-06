@@ -1,5 +1,6 @@
 package com.keyra.app
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -203,4 +204,52 @@ class PasswordToolsTest {
         )
         assertTrue(isStrongPassword(password))
     }
+
+    @Test
+    fun recoveryPassphraseRejectsWeakSecretsAndAcceptsStrongPassphrases() {
+        assertFalse(isStrongRecoveryPassphrase("kratko"))
+        assertFalse(isStrongRecoveryPassphrase("abcdefghijklmnop"))
+        assertTrue(isStrongRecoveryPassphrase("Correct Horse Battery Staple"))
+        assertTrue(isStrongRecoveryPassphrase("Keyra-Recovery-2026!"))
+    }
+
+    @Test
+    fun recoveryKeyEnvelopeRoundTripsPortableVaultKey() {
+        val rawKey = ByteArray(32) { index -> (index + 1).toByte() }
+        val passphrase = "Correct Horse Battery Staple"
+
+        val payload = RecoveryKeyEnvelope.encrypt(rawKey, passphrase)
+        val restored = RecoveryKeyEnvelope.decrypt(payload, passphrase)
+
+        assertTrue(payload.startsWith("KEYRAREC1.600000."))
+        assertArrayEquals(rawKey, restored)
+    }
+
+    @Test
+    fun recoveryKeyEnvelopeRejectsWrongPassphrase() {
+        val rawKey = ByteArray(32) { index -> (index + 11).toByte() }
+        val payload = RecoveryKeyEnvelope.encrypt(rawKey, "Keyra-Recovery-2026!")
+
+        assertTrue(
+            runCatching {
+                RecoveryKeyEnvelope.decrypt(payload, "Wrong-Recovery-2026!")
+            }.isFailure
+        )
+    }
+
+    @Test
+    fun recoveryKeyEnvelopeRejectsTampering() {
+        val rawKey = ByteArray(32) { index -> (index + 21).toByte() }
+        val passphrase = "Four private recovery words"
+        val payload = RecoveryKeyEnvelope.encrypt(rawKey, passphrase)
+        val parts = payload.split(".").toMutableList()
+        val encrypted = java.util.Base64.getDecoder().decode(parts[3])
+        encrypted[encrypted.lastIndex] = (encrypted.last().toInt() xor 0x01).toByte()
+        parts[3] = java.util.Base64.getEncoder().encodeToString(encrypted)
+        val tampered = parts.joinToString(".")
+
+        assertTrue(runCatching { RecoveryKeyEnvelope.decrypt(tampered, passphrase) }.isFailure)
+    }
+
+
 }
