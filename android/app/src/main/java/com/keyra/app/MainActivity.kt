@@ -90,6 +90,7 @@ private val Good = Color(0xFF22E3B0)
 private val Warn = Color(0xFFFFC247)
 private val Danger = Color(0xFFFF5B6E)
 private const val MAX_BACKUP_CHARS = 2_500_000
+private const val MAX_RECOVERY_CHARS = 16_384
 private const val MAX_VAULT_ITEMS = 10_000
 
 enum class Screen { ONBOARDING, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
@@ -246,7 +247,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (!auth.create(password)) {
-            store.clear()
+            store.destroy()
             message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Pokušajte ponovno."
             return false
         }
@@ -290,7 +291,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         if (!auth.create(password)) {
-            store.clear()
+            store.destroy()
             message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
             return false
         }
@@ -492,6 +493,77 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun makeRecoveryKeyPayload(passphrase: String): String? {
+        if (!isStrongRecoveryPassphrase(passphrase)) {
+            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
+            return null
+        }
+        val rawKey = runCatching { store.recoveryKeyBytes() }.getOrElse {
+            message = "Recovery ključ nije moguće dohvatiti iz zaštićenog trezora."
+            return null
+        }
+        return try {
+            RecoveryKeyEnvelope.encrypt(rawKey, passphrase)
+        } catch (_: Exception) {
+            message = "Recovery Key datoteku nije moguće izraditi."
+            null
+        } finally {
+            rawKey.fill(0)
+        }
+    }
+
+    fun exportRecoveryKeyToUri(context: Context, uri: Uri, passphrase: String) {
+        val payload = makeRecoveryKeyPayload(passphrase) ?: return
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(payload.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
+        }.onSuccess {
+            message = "Šifrirani Recovery Key spremljen je. Čuvajte datoteku i recovery lozinku odvojeno."
+        }.onFailure {
+            message = "Recovery Key nije moguće spremiti u odabranu datoteku."
+        }
+    }
+
+    fun importRecoveryKeyPayload(payload: String, passphrase: String): Boolean {
+        if (payload.isBlank() || payload.length > MAX_RECOVERY_CHARS) {
+            message = "Recovery Key datoteka nije valjana."
+            return false
+        }
+        val rawKey = runCatching { RecoveryKeyEnvelope.decrypt(payload, passphrase) }.getOrElse {
+            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
+            return false
+        }
+        return try {
+            val verifiedItems = store.installRecoveryKey(rawKey)
+            if (verifiedItems.isNotEmpty()) {
+                items.clear()
+                items.addAll(verifiedItems)
+            }
+            message = if (verifiedItems.isEmpty()) {
+                "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
+            } else {
+                "Recovery Key je verificiran i ponovno zaštićen ključem ovog uređaja."
+            }
+            true
+        } catch (_: Exception) {
+            message = "Recovery Key ne odgovara ovom trezoru ili ga nije moguće sigurno obnoviti."
+            false
+        } finally {
+            rawKey.fill(0)
+        }
+    }
+
+    fun importRecoveryKeyFromUri(context: Context, uri: Uri, passphrase: String): Boolean =
+        runCatching {
+            val payload = readUtf8Limited(context, uri, MAX_RECOVERY_CHARS)
+            importRecoveryKeyPayload(payload, passphrase)
+        }.getOrElse {
+            message = "Recovery Key datoteku nije moguće pročitati."
+            false
+        }
+
     fun importBackupPayload(payload: String): Boolean {
         val password = sessionPassword
         if (password.isNullOrBlank()) {
@@ -692,10 +764,16 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
     }
 }
 
-private class CryptoStore {
+private class CryptoStore(private val prefs: android.content.SharedPreferences) {
+    companion object {
+        private const val WRAPPED_KEY_PREF = "vault_portable_key_wrapped_v1"
+        private const val WRAP_VERSION = "KEYRAW1"
+        private const val RAW_KEY_BYTES = 32
+    }
+
     private val alias = "keyra-vault-key"
 
-    private fun key(): SecretKey {
+    private fun wrappingKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
@@ -714,32 +792,125 @@ private class CryptoStore {
         return generator.generateKey()
     }
 
-    fun encrypt(text: String): String {
+    fun hasPortableKey(): Boolean = !prefs.getString(WRAPPED_KEY_PREF, null).isNullOrBlank()
+
+    private fun wrapRawKey(rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravna duljina vault ključa." }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, key())
+        cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
+        val encrypted = cipher.doFinal(rawKey)
+        return listOf(
+            WRAP_VERSION,
+            Base64.encodeToString(cipher.iv, Base64.NO_WRAP),
+            Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        ).joinToString(".")
+    }
+
+    private fun unwrapRawKey(payload: String): ByteArray {
+        val parts = payload.split(".")
+        require(parts.size == 3 && parts[0] == WRAP_VERSION) { "Neispravan omot vault ključa." }
+        val iv = Base64.decode(parts[1], Base64.NO_WRAP)
+        val encrypted = Base64.decode(parts[2], Base64.NO_WRAP)
+        require(iv.size == 12 && encrypted.size >= 16) { "Neispravan omot vault ključa." }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, wrappingKey(), GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).also {
+            require(it.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        }
+    }
+
+    fun portableKeyBytes(): ByteArray {
+        val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
+        if (!wrapped.isNullOrBlank()) {
+            return unwrapRawKey(wrapped)
+        }
+
+        val raw = ByteArray(RAW_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        val encoded = wrapRawKey(raw)
+        check(prefs.edit().putString(WRAPPED_KEY_PREF, encoded).commit()) {
+            "Prijenosni vault ključ nije moguće trajno spremiti."
+        }
+        return raw
+    }
+
+    fun installPortableKey(rawKey: ByteArray) {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravna duljina recovery ključa." }
+        val encoded = wrapRawKey(rawKey)
+        check(prefs.edit().putString(WRAPPED_KEY_PREF, encoded).commit()) {
+            "Recovery ključ nije moguće zaštititi uređajnim ključem."
+        }
+    }
+
+    fun migrateLegacyVault(clearText: String, blobPreference: String): Boolean {
+        val raw = ByteArray(RAW_KEY_BYTES).also { SecureRandom().nextBytes(it) }
+        return try {
+            val wrapped = wrapRawKey(raw)
+            val encrypted = encryptWithRawKey(clearText, raw)
+            prefs.edit()
+                .putString(WRAPPED_KEY_PREF, wrapped)
+                .putString(blobPreference, encrypted)
+                .commit()
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun encrypt(text: String): String {
+        val raw = portableKeyBytes()
+        return try {
+            encryptWithRawKey(text, raw)
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun decrypt(payload: String): String {
+        val raw = portableKeyBytes()
+        return try {
+            decryptWithRawKey(payload, raw)
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    fun decryptWithRawKey(payload: String, rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        return decryptWithKey(payload, javax.crypto.spec.SecretKeySpec(rawKey, "AES"))
+    }
+
+    fun encryptWithRawKey(text: String, rawKey: ByteArray): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan vault ključ." }
+        return encryptWithKey(text, javax.crypto.spec.SecretKeySpec(rawKey, "AES"))
+    }
+
+    fun decryptLegacy(payload: String): String = decryptWithKey(payload, wrappingKey())
+
+    private fun encryptWithKey(text: String, key: SecretKey): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         val encrypted = cipher.doFinal(text.toByteArray(Charsets.UTF_8))
         return Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + "." +
             Base64.encodeToString(encrypted, Base64.NO_WRAP)
     }
 
-    fun decrypt(payload: String): String {
+    private fun decryptWithKey(payload: String, key: SecretKey): String {
         val parts = payload.split(".")
         require(parts.size == 2)
+        val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+        val encrypted = Base64.decode(parts[1], Base64.NO_WRAP)
+        require(iv.size == 12 && encrypted.size >= 16) { "Neispravan šifrirani trezor." }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(
-            Cipher.DECRYPT_MODE,
-            key(),
-            GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP))
-        )
-        return cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)).toString(Charsets.UTF_8)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
     }
 
     fun clearKey(): Boolean = runCatching {
+        val prefCleared = prefs.edit().remove(WRAPPED_KEY_PREF).commit()
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (keyStore.containsAlias(alias)) {
             keyStore.deleteEntry(alias)
         }
-        true
+        prefCleared
     }.getOrDefault(false)
 }
 
@@ -759,7 +930,7 @@ internal fun normalizePortableUpdatedAt(
 }
 
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
-    private val crypto = CryptoStore()
+    private val crypto = CryptoStore(prefs)
 
     fun save(items: List<VaultItem>) {
         val encrypted = crypto.encrypt(toJson(items))
@@ -776,9 +947,33 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         return blobCleared && keyCleared
     }
 
+    fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
+
+    fun installRecoveryKey(rawKey: ByteArray): List<VaultItem> {
+        val blob = prefs.getString("vault_blob", null)
+        val verified = if (blob.isNullOrBlank()) {
+            emptyList()
+        } else {
+            fromJson(crypto.decryptWithRawKey(blob, rawKey))
+        }
+        crypto.installPortableKey(rawKey)
+        return verified
+    }
+
     fun load(): List<VaultItem>? {
         val blob = prefs.getString("vault_blob", null) ?: return emptyList()
-        return runCatching { fromJson(crypto.decrypt(blob)) }.getOrNull()
+        return runCatching {
+            if (crypto.hasPortableKey()) {
+                fromJson(crypto.decrypt(blob))
+            } else {
+                val clear = crypto.decryptLegacy(blob)
+                val decoded = fromJson(clear)
+                if (!crypto.migrateLegacyVault(clear, "vault_blob")) {
+                    error("Migraciju prijenosnog vault ključa nije moguće trajno spremiti.")
+                }
+                decoded
+            }
+        }.getOrNull()
     }
 
     fun toJson(items: List<VaultItem>): String {
@@ -994,6 +1189,84 @@ internal object PortableBackup {
         val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
         return try {
             val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+            javax.crypto.spec.SecretKeySpec(bytes, "AES")
+        } finally {
+            spec.clearPassword()
+        }
+    }
+}
+
+
+internal fun isStrongRecoveryPassphrase(passphrase: String): Boolean {
+    if (passphrase.length < 16) return false
+    val classes = listOf(
+        passphrase.any(Char::isUpperCase),
+        passphrase.any(Char::isLowerCase),
+        passphrase.any(Char::isDigit),
+        passphrase.any { !it.isLetterOrDigit() && !it.isWhitespace() }
+    ).count { it }
+    val words = passphrase.trim().split(Regex("\\s+")).filter { it.length >= 3 }
+    return classes >= 3 || words.size >= 4
+}
+
+internal object RecoveryKeyEnvelope {
+    private const val VERSION = "KEYRAREC1"
+    private const val ITERATIONS = 600_000
+    private const val SALT_BYTES = 16
+    private const val NONCE_BYTES = 12
+    private const val TAG_BYTES = 16
+    private const val RAW_KEY_BYTES = 32
+
+    fun encrypt(rawKey: ByteArray, passphrase: String): String {
+        require(rawKey.size == RAW_KEY_BYTES) { "Neispravan recovery ključ." }
+        require(isStrongRecoveryPassphrase(passphrase)) { "Recovery lozinka nije dovoljno jaka." }
+        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val nonce = ByteArray(NONCE_BYTES).also { SecureRandom().nextBytes(it) }
+        val key = derive(passphrase, salt, ITERATIONS)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, nonce))
+        val encrypted = cipher.doFinal(rawKey)
+        val combined = nonce + encrypted
+        return listOf(
+            VERSION,
+            ITERATIONS.toString(),
+            Base64.encodeToString(salt, Base64.NO_WRAP),
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        ).joinToString(".")
+    }
+
+    fun decrypt(payload: String, passphrase: String): ByteArray {
+        require(payload.length <= MAX_RECOVERY_CHARS) { "Recovery datoteka je prevelika." }
+        val parts = payload.trim().split(".")
+        require(parts.size == 4 && parts[0] == VERSION) { "Nepodržan recovery format." }
+        val iterations = parts[1].toInt()
+        require(iterations in 100_000..2_000_000) { "Neispravni KDF parametri." }
+        val salt = Base64.decode(parts[2], Base64.NO_WRAP)
+        val combined = Base64.decode(parts[3], Base64.NO_WRAP)
+        require(salt.size == SALT_BYTES) { "Neispravna recovery sol." }
+        require(combined.size >= NONCE_BYTES + TAG_BYTES + RAW_KEY_BYTES) {
+            "Neispravan recovery sadržaj."
+        }
+
+        val nonce = combined.copyOfRange(0, NONCE_BYTES)
+        val encrypted = combined.copyOfRange(NONCE_BYTES, combined.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            derive(passphrase, salt, iterations),
+            GCMParameterSpec(128, nonce)
+        )
+        return cipher.doFinal(encrypted).also {
+            require(it.size == RAW_KEY_BYTES) { "Neispravan recovery ključ." }
+        }
+    }
+
+    private fun derive(passphrase: String, salt: ByteArray, iterations: Int): SecretKey {
+        val spec = PBEKeySpec(passphrase.toCharArray(), salt, iterations, 256)
+        return try {
+            val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(spec)
+                .encoded
             javax.crypto.spec.SecretKeySpec(bytes, "AES")
         } finally {
             spec.clearPassword()
