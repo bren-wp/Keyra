@@ -13,6 +13,8 @@ Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. 
 - [ ] TOTP kodovi potvrđeni su RFC 6238 testovima i barem jednim stvarnim servisom.
 - [ ] Potpuno lokalno brisanje potvrđeno je na stvarnom uređaju i nakon njega se stari trezor više ne može otvoriti.
 - [ ] KEYRA2 backup Android → iOS i iOS → Android uspješno je vraćen.
+- [ ] KEYRAREC1 Recovery Key Android → iOS i iOS → Android uspješno je verificiran.
+- [ ] Recovery Key export/import i first-run recovery tok provjereni su na stvarnim uređajima.
 - [ ] .keyra izvoz/uvoz kroz sistemski Files/Document picker radi.
 - [ ] Screenshot/screen-record zaštita ponovno provjerena.
 - [ ] Nema demo vjerodajnica, API ključeva, tokena, lozinki ili privatnih testnih podataka u repozitoriju i buildu.
@@ -52,6 +54,7 @@ Google od 31. kolovoza 2026. za nove aplikacije i ažuriranja mobilnih aplikacij
 
 ### Tehnički
 
+- [ ] Završni CI koristi Xcode 26 ili noviji i iOS 26 SDK ili noviji, kako zahtijevaju aktualna App Store Connect pravila za upload od 28. travnja 2026.
 - [x] Release build i simulator launch smoke test postoje u CI-ju.
 - [x] `PrivacyInfo.xcprivacy` je dio iOS targeta.
 - [x] Privacy manifest prijavljuje `UserDefaults` required-reason API s razlogom `CA92.1`.
