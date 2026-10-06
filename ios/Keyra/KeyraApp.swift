@@ -1548,6 +1548,26 @@ final class KeyraStore: ObservableObject {
         }
     }
 
+    func authorizeCritical(reason: String, completion: @escaping () -> Void) {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            // Uređaji bez owner-auth zaštite i dalje koriste aktivnu glavnu lozinku sesije.
+            completion()
+            return
+        }
+
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    completion()
+                } else if let error {
+                    self.message = error.localizedDescription
+                }
+            }
+        }
+    }
+
     func cycleAutoLock() {
         switch autoLockSeconds {
         case 0: autoLockSeconds = 30
@@ -4811,19 +4831,19 @@ struct SettingsView: View {
     @State private var recoveryImportPassphrase = ""
 
     private func runProtectedImport() {
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             store.importBackup()
         }
     }
 
     private func runProtectedFileImport(_ payload: String) {
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
             _ = store.importBackupPayload(payload)
         }
     }
 
     private func prepareBackupExport() {
-        store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
             guard let payload = store.makeBackupPayload() else { return }
             backupDocument = KeyraBackupDocument(payload: payload)
             exportBackupFile = true
@@ -4837,7 +4857,7 @@ struct SettingsView: View {
             return
         }
 
-        store.authorizeSensitive(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za izvoz Recovery Key datoteke.") {
             defer {
                 recoveryExportPassphrase = ""
                 recoveryExportConfirm = ""
@@ -4851,7 +4871,7 @@ struct SettingsView: View {
     private func runProtectedRecoveryImport(_ payload: String) {
         let passphrase = recoveryImportPassphrase
         recoveryImportPassphrase = ""
-        store.authorizeSensitive(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
+        store.authorizeCritical(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
             _ = store.importRecoveryKeyPayload(payload, passphrase: passphrase)
         }
     }
@@ -5075,7 +5095,7 @@ struct SettingsView: View {
                     if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
                         SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
                             Button {
-                                store.authorizeSensitive(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
+                                store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
                                     store.copyBackup()
                                 }
                             } label: {
@@ -5193,7 +5213,7 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Trajno izbriši", role: .destructive) {
-                store.authorizeSensitive(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                store.authorizeCritical(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }
