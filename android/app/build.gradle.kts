@@ -38,9 +38,9 @@ kotlin {
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
-    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("androidx.fragment:fragment:1.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.8.7")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
