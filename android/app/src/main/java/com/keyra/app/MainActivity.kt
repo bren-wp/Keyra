@@ -1168,8 +1168,8 @@ internal object PortableBackup {
         return listOf(
             "KEYRA2",
             ITERATIONS.toString(),
-            Base64.encodeToString(salt, Base64.NO_WRAP),
-            Base64.encodeToString(combined, Base64.NO_WRAP)
+            java.util.Base64.getEncoder().encodeToString(salt),
+            java.util.Base64.getEncoder().encodeToString(combined)
         ).joinToString(".")
     }
 
@@ -1180,7 +1180,7 @@ internal object PortableBackup {
                 val iterations = parts[1].toInt()
                 require(iterations in 100_000..2_000_000)
                 val salt = decodeSalt(parts[2])
-                val combined = Base64.decode(parts[3], Base64.NO_WRAP)
+                val combined = java.util.Base64.getDecoder().decode(parts[3])
                 decryptCombined(combined, password, salt, listOf(iterations))
             }
             // Legacy Android KEYRA2 stored nonce and ciphertext/tag separately.
@@ -1188,14 +1188,14 @@ internal object PortableBackup {
                 val iterations = parts[1].toInt()
                 require(iterations in 100_000..2_000_000)
                 val salt = decodeSalt(parts[2])
-                val iv = Base64.decode(parts[3], Base64.NO_WRAP)
-                val encrypted = Base64.decode(parts[4], Base64.NO_WRAP)
+                val iv = java.util.Base64.getDecoder().decode(parts[3])
+                val encrypted = java.util.Base64.getDecoder().decode(parts[4])
                 decryptParts(iv, encrypted, password, salt, listOf(iterations))
             }
             // Legacy iOS KEYRA1 used CryptoKit combined data and 120k PBKDF2 iterations.
             parts.size == 3 && parts[0] == "KEYRA1" -> {
                 val salt = decodeSalt(parts[1])
-                val combined = Base64.decode(parts[2], Base64.NO_WRAP)
+                val combined = java.util.Base64.getDecoder().decode(parts[2])
                 decryptCombined(
                     combined,
                     password,
@@ -1206,8 +1206,8 @@ internal object PortableBackup {
             // Legacy Android KEYRA1 stored nonce and ciphertext/tag separately.
             parts.size == 4 && parts[0] == "KEYRA1" -> {
                 val salt = decodeSalt(parts[1])
-                val iv = Base64.decode(parts[2], Base64.NO_WRAP)
-                val encrypted = Base64.decode(parts[3], Base64.NO_WRAP)
+                val iv = java.util.Base64.getDecoder().decode(parts[2])
+                val encrypted = java.util.Base64.getDecoder().decode(parts[3])
                 decryptParts(
                     iv,
                     encrypted,
@@ -1221,7 +1221,7 @@ internal object PortableBackup {
     }
 
     private fun decodeSalt(value: String): ByteArray {
-        val salt = Base64.decode(value, Base64.NO_WRAP)
+        val salt = java.util.Base64.getDecoder().decode(value)
         require(salt.size == SALT_BYTES) { "Neispravna sol sigurnosne kopije." }
         return salt
     }
