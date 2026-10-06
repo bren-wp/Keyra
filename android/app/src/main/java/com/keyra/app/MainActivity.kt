@@ -35,6 +35,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1652,7 +1655,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Text("Izradi trezor", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Outlined.ArrowForward, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                 }
                 OutlinedButton(
                     onClick = model::startImport,
@@ -1845,7 +1848,7 @@ private fun UnlockScreen(
                 }
                 if (creating) {
                     TextButton(onClick = model::cancelSetup) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = null, tint = Ice)
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = Ice)
                         Spacer(Modifier.width(6.dp))
                         Text("Natrag", color = Ice)
                     }
@@ -3189,7 +3192,7 @@ private fun AddScreen(model: KeyraViewModel) {
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
         Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(if (original == null) Screen.VAULT else Screen.DETAIL) }) {
-                Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
             }
             KeyraMark(38.dp)
             Spacer(Modifier.width(10.dp))
@@ -3573,7 +3576,7 @@ private fun DetailScreen(
         Column(Modifier.fillMaxHeight().widthIn(max = 760.dp)) {
         Row(Modifier.fillMaxWidth().padding(if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { model.open(Screen.VAULT) }) {
-                Icon(Icons.Outlined.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, null, tint = Color.White)
             }
             Box(
                 Modifier.size(54.dp).clip(RoundedCornerShape(16.dp)).background(Cyan.copy(alpha=.12f)),
@@ -4538,7 +4541,7 @@ private fun SettingsScreen(
             }
             if (matches("Zaključaj trezor", "zaključavanje")) item {
                 OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Logout, null)
+                    Icon(Icons.AutoMirrored.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Zaključaj trezor")
                 }
