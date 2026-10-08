@@ -30,6 +30,8 @@ Google Play traži da Data safety odgovori budu potpuni, točni i usklađeni s p
 - Android Keystore za lokalni uređajni ključ
 - `FLAG_SECURE` protiv screenshots/screen recording gdje ga Android poštuje
 - `setHideOverlayWindows(true)` na Androidu 12+ za dodatnu zaštitu od overlay/tapjacking scenarija
+- `setRecentsScreenshotEnabled(false)` na Androidu 13+ kako sustav ne bi stvarao screenshot za Recents/Overview prikaz
+- root view odbacuje obscured touch događaje
 - automatsko zaključavanje
 - rate limiting pogrešnih pokušaja otključavanja
 - dodatna biometrijska/device-credential potvrda za osjetljive radnje
@@ -54,3 +56,11 @@ Ako se doda internet pristup, crash reporting, analytics, telemetry, push, cloud
 - overlay prozori skrivaju se na podržanim Android verzijama
 - master-password verifier vezan je uz Android Keystore
 - nema novih kategorija prikupljenih ili dijeljenih podataka
+
+### 0.6.3 sigurnosne napomene
+- nema novih permissions kategorija ni INTERNET permissiona
+- nema novih SDK-ova, analyticsa, oglasa ni telemetrije
+- Recents/Overview screenshot je dodatno isključen na Androidu 13+
+- obscured touch događaji odbacuju se u osjetljivom UI-ju
+- password/recovery inputi koriste password keyboard tip
+- promjene ne uvode novu obradu, prikupljanje ni dijeljenje korisničkih podataka
