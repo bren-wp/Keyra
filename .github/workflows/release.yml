@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.2"
+        default: "0.6.3"
 
 permissions:
   contents: write
@@ -286,7 +286,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje donosi privacy/security hardening: device-bound master verifier na Androidu i iOS-u, strožu owner-auth zaštitu kritičnih backup/recovery/erase akcija i dodatnu Android overlay zaštitu.
+          Ovo izdanje dodatno usklađuje Android/iOS security UI i privacy ponašanje: Android blokira Recents screenshots, odbacuje obscured touch događaje i koristi password IME tip za osjetljiva polja, dok iOS privacy shield reagira već na willResignActive. Security Center na obje platforme prikazuje isti blok aktivnih zaštita.
 
           ## Provjere
           - Android lint i unit testovi
