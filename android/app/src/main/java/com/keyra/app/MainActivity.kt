@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -53,6 +54,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -118,8 +120,12 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        window.decorView.setFilterTouchesWhenObscured(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             window.setHideOverlayWindows(true)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(false)
         }
         setContent {
             KeyraTheme {
@@ -2018,6 +2024,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Recovery lozinka") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
                     )
 
@@ -2037,6 +2044,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Lozinka sigurnosne kopije") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
                     )
 
@@ -2049,6 +2057,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         label = { Text("Nova glavna lozinka") },
                         supportingText = { Text("Najmanje 12 znakova.") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
                     )
                     OutlinedTextField(
@@ -2057,6 +2066,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Ponovite novu glavnu lozinku") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
                     )
                     TextButton(onClick = { reveal = !reveal }) {
@@ -2311,6 +2321,7 @@ private fun KeyraPasswordField(
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = toggle) {
@@ -4866,6 +4877,7 @@ private fun SettingsScreen(
                             onValueChange = { recoveryExportPassphrase = it },
                             label = { Text("Recovery lozinka") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = PasswordVisualTransformation(),
                             colors = keyraFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -4875,6 +4887,7 @@ private fun SettingsScreen(
                             onValueChange = { recoveryExportConfirm = it },
                             label = { Text("Ponovite recovery lozinku") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = PasswordVisualTransformation(),
                             colors = keyraFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -4938,6 +4951,7 @@ private fun SettingsScreen(
                             onValueChange = { recoveryImportPassphrase = it },
                             label = { Text("Recovery lozinka") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = PasswordVisualTransformation(),
                             colors = keyraFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -5279,7 +5293,7 @@ private fun SettingsScreen(
 
             if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
             if (matches("O aplikaciji Keyra", "verzija")) item {
-                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
+                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.3 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
             }
             if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
                 SettingRow(
@@ -5497,6 +5511,34 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     }
                 }
             }
+            item { SectionTitle("AKTIVNE ZAŠTITE") }
+            item {
+                GlassCard {
+                    SecurityProtectionRow(
+                        icon = Icons.Outlined.Lock,
+                        title = "Lokalni šifrirani trezor",
+                        subtitle = "AES-256-GCM • bez Keyra backenda"
+                    )
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+                    SecurityProtectionRow(
+                        icon = Icons.Outlined.VisibilityOff,
+                        title = "Zaštita zaslona",
+                        subtitle = "Sadržaj je zaštićen od snimki, Recents pregleda i obscured touch napada."
+                    )
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+                    SecurityProtectionRow(
+                        icon = Icons.Outlined.ContentCopy,
+                        title = "Privremeni međuspremnik",
+                        subtitle = "Osjetljivi sadržaj automatski se uklanja nakon 30 sekundi."
+                    )
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+                    SecurityProtectionRow(
+                        icon = Icons.Outlined.VerifiedUser,
+                        title = "Kritične radnje",
+                        subtitle = "Backup, Recovery Key i brisanje traže potvrdu vlasnika uređaja kada je dostupna."
+                    )
+                }
+            }
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
             items((weak + model.items.filter { it.id in duplicatedIds }).distinctBy { it.id }) { issue ->
                 val duplicate = issue.id in duplicatedIds
@@ -5546,6 +5588,36 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SecurityProtectionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Brush.linearGradient(listOf(Cyan.copy(alpha = .16f), Indigo.copy(alpha = .12f)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Good, modifier = Modifier.size(19.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 12.sp)
+        }
+        Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Good, modifier = Modifier.size(18.dp))
     }
 }
 
