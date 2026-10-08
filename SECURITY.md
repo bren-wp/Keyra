@@ -54,3 +54,12 @@ Preostali release gateovi za potpuno označavanje Recovery Key funkcionalnosti k
 - Android blokira screen capture preko `FLAG_SECURE` i od Androida 12 skriva app prozor od overlay prozora preko `setHideOverlayWindows(true)`.
 - iOS skriva Keyra sadržaj u app switcheru, pri neaktivnoj sceni i tijekom aktivnog screen capturea.
 - Backup export/import, Recovery Key export/import i trajno brisanje lokalnog trezora traže device-owner autentikaciju kada je uređaj može pružiti, neovisno o opcionalnom toggleu za svakodnevne sensitive akcije.
+
+## 0.6.3 privacy/security parity hardening
+
+- Android 13+ eksplicitno isključuje screenshot koji bi sustav koristio kao prikaz aplikacije u Recents/Overview preko `setRecentsScreenshotEnabled(false)`, uz postojeći `FLAG_SECURE`.
+- Android root view odbacuje touch događaje kada je prozor obscured, kao dodatnu zaštitu od tapjacking/overlay scenarija.
+- Android password/recovery polja označena su kao password input prema IME-u, uz postojeće maskiranje vrijednosti.
+- iOS privacy shield aktivira se već na `UIApplication.willResignActiveNotification`, prije nego aplikacija potpuno prijeđe u neaktivno/background stanje, a ponovno se uklanja tek nakon `didBecomeActive`.
+- Android i iOS Security Center prikazuju isti blok aktivnih zaštita: lokalni šifrirani trezor, zaštitu zaslona, privremeni međuspremnik i potvrdu kritičnih radnji.
+- Android osjetljivi clipboard i dalje je označen kao sensitive na podržanim verzijama i čisti se nakon 30 sekundi; iOS clipboard ostaje `localOnly` s istim rokom od 30 sekundi.
