@@ -37,6 +37,39 @@ jobs:
             exit 1
           fi
 
+      - name: Provjeri iOS privacy gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          path = Path("ios/Keyra/PrivacyInfo.xcprivacy")
+          with path.open("rb") as handle:
+              manifest = plistlib.load(handle)
+
+          if manifest.get("NSPrivacyTracking") is not False:
+              raise SystemExit("Privacy regression: NSPrivacyTracking mora ostati false.")
+          if manifest.get("NSPrivacyTrackingDomains") != []:
+              raise SystemExit("Privacy regression: tracking domains moraju ostati prazni.")
+          if manifest.get("NSPrivacyCollectedDataTypes") != []:
+              raise SystemExit("Privacy regression: collected data types moraju ostati prazni.")
+
+          api_types = manifest.get("NSPrivacyAccessedAPITypes", [])
+          user_defaults_ok = any(
+              entry.get("NSPrivacyAccessedAPIType") == "NSPrivacyAccessedAPICategoryUserDefaults"
+              and "CA92.1" in entry.get("NSPrivacyAccessedAPITypeReasons", [])
+              for entry in api_types
+          )
+          if not user_defaults_ok:
+              raise SystemExit("Privacy regression: UserDefaults required-reason CA92.1 nedostaje.")
+          PY
+
+          if grep -R -E -n 'URLSession|NWConnection|WKWebView|Alamofire|Network\.framework' ios/Keyra ios/Keyra.xcodeproj/project.pbxproj; then
+            echo "Privacy regression: pronađen je mrežni API/SDK. Potrebna je eksplicitna privacy/store revizija."
+            exit 1
+          fi
+
       - name: Provjeri iOS aplikaciju
         run: |
           set -euo pipefail

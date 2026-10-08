@@ -69,3 +69,10 @@ Biometrija ovisi o tome je li Face ID/Touch ID/device credential konfiguriran na
 - app switcher / inactive-scene / active-screen-capture shield skriva sadržaj trezora
 - kritične backup/recovery/erase akcije koriste device-owner autentikaciju kada je dostupna
 - nema promjene u izjavi: Keyra ne prikuplja korisničke podatke niti koristi tracking
+
+### 0.6.3 sigurnosne napomene
+- privacy shield aktivira se već pri `willResignActive`, prije potpunog prelaska aplikacije u inactive/background stanje
+- osjetljivi Recovery Key promptovi koriste secure input bez autocorrecta i automatske kapitalizacije
+- iOS CI i release workflow parsiraju `PrivacyInfo.xcprivacy` i padaju ako se uključi tracking, dodaju tracking domene ili collected data types
+- CI dodatno blokira uvođenje mrežnog API-ja/SDK-a u iOS target bez eksplicitne privacy/store revizije
+- nema promjene u App Privacy modelu: Keyra i dalje ne prikuplja podatke za developera i ne prati korisnika

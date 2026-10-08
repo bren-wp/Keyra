@@ -1715,6 +1715,7 @@ struct RootView: View {
     @State private var splash = true
     @State private var backgroundedAt: Date?
     @State private var screenCaptured = UIScreen.main.isCaptured
+    @State private var appPrivacyShield = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -1751,7 +1752,7 @@ struct RootView: View {
                 }
             }
 
-            if (scenePhase != .active || screenCaptured) && !splash {
+            if (scenePhase != .active || appPrivacyShield || screenCaptured) && !splash {
                 ZStack {
                     midnight.ignoresSafeArea()
                     VStack(spacing: 14) {
@@ -1793,6 +1794,13 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
             screenCaptured = UIScreen.main.isCaptured
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            appPrivacyShield = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            screenCaptured = UIScreen.main.isCaptured
+            appPrivacyShield = false
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background && store.isSetup && store.screen != .unlock {
@@ -5141,7 +5149,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji Keyra",
-                            subtitle: "Verzija 0.6.2 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                            subtitle: "Verzija 0.6.3 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                         )
                     }
 
@@ -5241,7 +5249,11 @@ struct SettingsView: View {
         }
         .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
             SecureField("Recovery lozinka", text: $recoveryExportPassphrase)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
             SecureField("Ponovite recovery lozinku", text: $recoveryExportConfirm)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
             Button("Izvezi") {
                 prepareRecoveryExport()
             }
@@ -5272,6 +5284,8 @@ struct SettingsView: View {
             )
         ) {
             SecureField("Recovery lozinka", text: $recoveryImportPassphrase)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
             Button("Verificiraj i uvezi") {
                 if let payload = pendingRecoveryImportPayload {
                     pendingRecoveryImportPayload = nil
@@ -5465,6 +5479,33 @@ struct SecurityCenterView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel("AKTIVNE ZAŠTITE")
+                        GlassCard {
+                            SecurityProtectionRow(
+                                icon: "lock.shield.fill",
+                                title: "Lokalni šifrirani trezor",
+                                subtitle: "AES-256-GCM • bez Keyra backenda"
+                            )
+                            Divider().overlay(ice.opacity(0.14))
+                            SecurityProtectionRow(
+                                icon: "eye.slash.fill",
+                                title: "Zaštita zaslona",
+                                subtitle: "Sadržaj se skriva pri neaktivnoj aplikaciji i tijekom aktivnog snimanja zaslona."
+                            )
+                            Divider().overlay(ice.opacity(0.14))
+                            SecurityProtectionRow(
+                                icon: "doc.on.doc.fill",
+                                title: "Privremeni međuspremnik",
+                                subtitle: "Osjetljivi sadržaj je local-only i istječe nakon 30 sekundi."
+                            )
+                            Divider().overlay(ice.opacity(0.14))
+                            SecurityProtectionRow(
+                                icon: "checkmark.shield.fill",
+                                title: "Kritične radnje",
+                                subtitle: "Backup, Recovery Key i brisanje traže potvrdu vlasnika uređaja kada je dostupna."
+                            )
+                        }
+
                         SectionLabel("STAVKE KOJE ZAHTIJEVAJU PAŽNJU")
                         ForEach(issues) { item in
                             Button {
@@ -5521,6 +5562,44 @@ struct SecurityCenterView: View {
                 .padding(.bottom, 100)
             }
         }
+    }
+}
+
+struct SecurityProtectionRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(good)
+                .frame(width: 38, height: 38)
+                .background(
+                    LinearGradient(
+                        colors: [cyan.opacity(0.16), indigo.opacity(0.12)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(muted)
+            }
+
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(good)
+        }
+        .padding(.vertical, 2)
     }
 }
 

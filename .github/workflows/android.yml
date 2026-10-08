@@ -27,6 +27,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.13"
+
+      - name: Provjeri Android privacy gate
+        run: |
+          set -euo pipefail
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:fullBackupContent="false"' "$MANIFEST"
+          grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          grep -q 'android.permission.USE_BIOMETRIC' "$MANIFEST"
+          grep -q 'android.permission.HIDE_OVERLAY_WINDOWS' "$MANIFEST"
+
+          if grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            echo "Privacy regression: INTERNET permission nije dopušten bez eksplicitne revizije store/privacy deklaracija."
+            exit 1
+          fi
+
       - name: Provjeri Android aplikaciju
         run: |
           set -euo pipefail

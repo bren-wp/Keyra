@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.2"
+        default: "0.6.3"
 
 permissions:
   contents: write
@@ -68,6 +68,21 @@ jobs:
         with:
           gradle-version: "8.13"
 
+      - name: Provjeri Android privacy gate
+        run: |
+          set -euo pipefail
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:fullBackupContent="false"' "$MANIFEST"
+          grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          grep -q 'android.permission.USE_BIOMETRIC' "$MANIFEST"
+          grep -q 'android.permission.HIDE_OVERLAY_WINDOWS' "$MANIFEST"
+
+          if grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            echo "Privacy regression: INTERNET permission nije dopušten bez eksplicitne revizije store/privacy deklaracija."
+            exit 1
+          fi
+
       - name: Izradi i provjeri Android pakete
         run: |
           set -euo pipefail
@@ -116,6 +131,39 @@ jobs:
           fi
           if [ -z "$SDK_MAJOR" ] || [ "$SDK_MAJOR" -lt 26 ]; then
             echo "Release zahtijeva iOS 26 SDK ili noviji."
+            exit 1
+          fi
+
+      - name: Provjeri iOS privacy gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+
+          path = Path("ios/Keyra/PrivacyInfo.xcprivacy")
+          with path.open("rb") as handle:
+              manifest = plistlib.load(handle)
+
+          if manifest.get("NSPrivacyTracking") is not False:
+              raise SystemExit("Privacy regression: NSPrivacyTracking mora ostati false.")
+          if manifest.get("NSPrivacyTrackingDomains") != []:
+              raise SystemExit("Privacy regression: tracking domains moraju ostati prazni.")
+          if manifest.get("NSPrivacyCollectedDataTypes") != []:
+              raise SystemExit("Privacy regression: collected data types moraju ostati prazni.")
+
+          api_types = manifest.get("NSPrivacyAccessedAPITypes", [])
+          user_defaults_ok = any(
+              entry.get("NSPrivacyAccessedAPIType") == "NSPrivacyAccessedAPICategoryUserDefaults"
+              and "CA92.1" in entry.get("NSPrivacyAccessedAPITypeReasons", [])
+              for entry in api_types
+          )
+          if not user_defaults_ok:
+              raise SystemExit("Privacy regression: UserDefaults required-reason CA92.1 nedostaje.")
+          PY
+
+          if grep -R -E -n 'URLSession|NWConnection|WKWebView|Alamofire|Network\.framework' ios/Keyra ios/Keyra.xcodeproj/project.pbxproj; then
+            echo "Privacy regression: pronađen je mrežni API/SDK. Potrebna je eksplicitna privacy/store revizija."
             exit 1
           fi
 
@@ -286,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje donosi privacy/security hardening: device-bound master verifier na Androidu i iOS-u, strožu owner-auth zaštitu kritičnih backup/recovery/erase akcija i dodatnu Android overlay zaštitu.
+          Ovo izdanje dodatno usklađuje Android/iOS security UI i privacy ponašanje: Android blokira Recents screenshots, odbacuje obscured touch događaje i koristi password IME tip za osjetljiva polja, dok iOS privacy shield reagira već na willResignActive. Security Center na obje platforme prikazuje isti blok aktivnih zaštita.
 
           ## Provjere
           - Android lint i unit testovi

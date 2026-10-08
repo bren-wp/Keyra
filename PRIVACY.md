@@ -2,7 +2,7 @@
 
 **Razvojni programer / publisher:** Brendigo  
 **Kontakt za privatnost:** info@brendigo.com  
-**Posljednje ažuriranje:** 6. listopada 2026.
+**Posljednje ažuriranje:** 9. listopada 2026.
 
 Keyra je osmišljena tako da se osjetljivi podaci čuvaju šifrirani na uređaju.
 
@@ -44,3 +44,9 @@ U postavkama postoji radnja **Izbriši sve lokalne podatke**. Ona uklanja lokaln
 Keyra i dalje ne koristi oglašavanje, analitiku, tracking SDK-ove, crash-reporting servise ni vlastiti backend. Master-password verifier dodatno je vezan uz uređaj: Android ga štiti Android Keystore ključem, a iOS ga sprema u `ThisDeviceOnly` Data Protection Keychain. To smanjuje vrijednost kopiranog app-data direktorija za offline napad na glavnu lozinku.
 
 Kritični izvoz/uvoz sigurnosnih kopija i Recovery Key datoteka te trajno brisanje podataka koriste device-owner potvrdu kada je dostupna. Clipboard ostaje local-only/privremeni kanal i automatski se čisti.
+
+## Dodatno očvršćivanje u verziji 0.6.3
+
+Keyra 0.6.3 dodatno smanjuje izlaganje osjetljivog sadržaja u sistemskim prikazima aplikacije. Android na podržanim verzijama zasebno onemogućuje Recents screenshot uz postojeći `FLAG_SECURE`, a touch događaji kroz obscured prozor odbacuju se kao dodatna zaštita od tapjacking scenarija. iOS privacy shield sada se aktivira čim aplikacija počne napuštati aktivno stanje.
+
+Osjetljivi password/recovery inputi na Androidu označeni su kao password input prema tipkovnici. Clipboard ponašanje ostaje ograničeno: Android automatski čisti nepromijenjeni Keyra sadržaj nakon 30 sekundi i označava ga kao sensitive gdje je podržano, a iOS koristi `localOnly` pasteboard s istekom nakon 30 sekundi.

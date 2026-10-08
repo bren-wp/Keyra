@@ -2,7 +2,7 @@
 
 Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. Konzole trgovina i njihova pravila mogu se mijenjati, pa prije svakog izdanja treba ponovno provjeriti aktualne obrasce i zahtjeve.
 
-**Posljednja provjera javnih store pravila: 6. listopada 2026.**
+**Posljednja provjera javnih store pravila: 9. listopada 2026.**
 
 ## Zajednički release gate
 
@@ -100,6 +100,16 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Android FLAG_SECURE + overlay protection aktivni.
 - [x] iOS privacy shield aktivan za inactive scene i screen capture.
 - [x] Backup/Recovery/Erase critical operations koriste owner-auth kada je dostupan.
-- [ ] Android 0.6.2 CI zelen na završnom commitu.
-- [ ] iOS 0.6.2 CI zelen na završnom commitu.
-- [ ] GitHub release v0.6.2 objavljen tek nakon oba release builda.
+- [x] Android 0.6.2 CI zelen na završnom commitu.
+- [x] iOS 0.6.2 CI zelen na završnom commitu.
+- [x] GitHub release v0.6.2 objavljen tek nakon oba release builda.
+
+## 0.6.3 security/privacy parity gate
+- [x] Android Recents screenshot blokada implementirana na API 33+ uz postojeći FLAG_SECURE.
+- [x] Android obscured-touch zaštita implementirana.
+- [x] Android osjetljiva password/recovery polja koriste password keyboard tip.
+- [x] iOS privacy shield reagira na willResignActive prije background snapshot faze.
+- [x] Security Center ima isti raspored aktivnih zaštita na Androidu i iOS-u.
+- [ ] Android 0.6.3 CI zelen na završnom commitu.
+- [ ] iOS 0.6.3 CI zelen na završnom commitu.
+- [ ] GitHub release v0.6.3 objavljen tek nakon oba release builda.
