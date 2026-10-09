@@ -1346,8 +1346,8 @@ final class KeyraStore: ObservableObject {
 
     func importNewVault(payload: String, password: String) {
         guard !isSetup, !isCreatingVault, !isImportingVault else { return }
-        guard (12...256).contains(password.count) else {
-            message = "Lozinka mora imati između 12 i 256 znakova."
+        guard password.count >= 12 else {
+            message = "Lozinka mora imati najmanje 12 znakova."
             return
         }
         guard !payload.isEmpty else {
