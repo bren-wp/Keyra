@@ -5828,8 +5828,8 @@ private fun openWebsite(context: Context, raw: String): Boolean {
     }.getOrDefault(false)
 }
 
-internal fun shouldClearOwnedClipboard(expected: String?, actual: String?): Boolean =
-    expected != null && actual == expected
+internal fun shouldClearOwnedClipboard(expected: String?, actual: String?, clipLabel: String?): Boolean =
+    expected != null && actual == expected && clipLabel == "Keyra"
 
 private object SensitiveClipboard {
     private val handler = Handler(Looper.getMainLooper())
@@ -5861,7 +5861,7 @@ private object SensitiveClipboard {
             val actual = if (currentClip != null && currentClip.itemCount > 0) {
                 currentClip.getItemAt(0).text?.toString()
             } else null
-            if (shouldClearOwnedClipboard(expected, actual)) {
+            if (shouldClearOwnedClipboard(expected, actual, currentClip?.description?.label?.toString())) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
                 else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
             }
