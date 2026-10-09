@@ -110,6 +110,19 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Android osjetljiva password/recovery polja koriste password keyboard tip.
 - [x] iOS privacy shield reagira na willResignActive prije background snapshot faze.
 - [x] Security Center ima isti raspored aktivnih zaštita na Androidu i iOS-u.
-- [ ] Android 0.6.3 CI zelen na završnom commitu.
-- [ ] iOS 0.6.3 CI zelen na završnom commitu.
-- [ ] GitHub release v0.6.3 objavljen tek nakon oba release builda.
+- [x] Android 0.6.3 CI zelen na završnom commitu.
+- [x] iOS 0.6.3 CI zelen na završnom commitu.
+- [x] GitHub release v0.6.3 objavljen tek nakon oba release builda.
+
+## 0.6.4 UI/UX simplification gate
+- [x] Android/iOS Settings imaju isti informacijski raspored i iste primarne akcije.
+- [x] Duplicirani clipboard backup/import uklonjen je iz korisničkog UI-ja; ostaje sistemski file-picker tok.
+- [x] Neaktivna "Tamni način — uvijek uključen" stavka uklonjena je.
+- [x] Settings pretraga uklonjena je jer više nije potrebna za reducirani broj opcija.
+- [x] Vault i Collections više nemaju duplicirani filter izbornik uz već postojeće chipove.
+- [x] Collections se zadano otvara na "Sve" i prikazuje puni presjek trezora.
+- [x] Duplicirani blok "Nedavne bilješke" uklonjen je iz Collections ekrana.
+- [x] Generator preset/duljina/vrste znakova objedinjeni su u jednu postavnu karticu.
+- [ ] Android 0.6.4 CI zelen na završnom commitu.
+- [ ] iOS 0.6.4 CI zelen na završnom commitu.
+- [ ] GitHub release v0.6.4 objavljen tek nakon oba release builda.
