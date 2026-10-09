@@ -1108,11 +1108,9 @@ struct KeyraBackupDocument: FileDocument {
 }
 
 func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
-    let passwordItems = items.filter {
-        ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty
-    }
+    let passwordItems = items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
     let duplicateIDs = Set(
-        Dictionary(grouping: passwordItems, by: { $0.password })
+        Dictionary(grouping: passwordItems.filter { !$0.password.isEmpty }, by: { $0.password })
             .values
             .filter { $0.count > 1 }
             .flatMap { $0.map(\.id) }
@@ -1123,6 +1121,13 @@ func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
 
 func securityIssueCount(_ items: [VaultItem]) -> Int {
     securityIssueIDs(items).count
+}
+
+func securityScore(_ items: [VaultItem]) -> Int? {
+    let passwordItems = items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
+    guard !passwordItems.isEmpty else { return nil }
+    let issueIDs = securityIssueIDs(items)
+    return passwordItems.filter { !issueIDs.contains($0.id) }.count * 100 / passwordItems.count
 }
 
 func deviceAuthenticationAvailable() -> Bool {
@@ -2899,14 +2904,14 @@ struct VaultView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
-                    Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger)
+                    Summary(value: "\(passwordItems.filter { !isStrongPassword($0.password) }.count)", label: "Rizične", accent: danger)
                     Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan).frame(width: 112)
-                        Summary(value: "\(passwordItems.filter { !$0.password.isEmpty && !isStrongPassword($0.password) }.count)", label: "Slabe", accent: danger).frame(width: 112)
+                        Summary(value: "\(passwordItems.filter { !isStrongPassword($0.password) }.count)", label: "Rizične", accent: danger).frame(width: 112)
                         Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo).frame(width: 124)
                     }
                 }
@@ -3022,7 +3027,7 @@ struct Summary: View {
 
     private var icon: String {
         switch label {
-        case "Slabe": return "exclamationmark.triangle.fill"
+        case "Rizične": return "exclamationmark.triangle.fill"
         case "Ponovljene": return "doc.on.doc.fill"
         default: return "shield.fill"
         }
@@ -3232,6 +3237,13 @@ struct CollectionsView: View {
         }
     }
 
+    private var visibleCategories: [(String, Color, String)] {
+        let present = Set(collectionItems.map(\.category))
+        let known = Set(categories.map { $0.0 })
+        let imported = present.subtracting(known).sorted().map { ($0, muted, "folder.fill") }
+        return categories.filter { present.contains($0.0) } + imported
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             BrandHeader(subtitle: "KOLEKCIJE")
@@ -3296,18 +3308,24 @@ struct CollectionsView: View {
             }
 
             ScrollView {
-                if collectionItems.isEmpty && (!search.isEmpty || selectedType != "Sve") {
+                if collectionItems.isEmpty {
                     GlassCard {
-                        Text("Nema rezultata")
+                        Text(store.items.isEmpty ? "Vaše kolekcije su prazne" : "Nema rezultata")
                             .font(.headline)
                             .foregroundStyle(.white)
-                        Text("Promijenite pretragu ili odaberite drugi tip.")
+                        Text(store.items.isEmpty
+                             ? "Dodajte prvu stavku kako biste vidjeli svoje kolekcije."
+                             : "Promijenite pretragu ili odaberite drugi tip.")
                             .foregroundStyle(muted)
                         Button {
-                            search = ""
-                            selectedType = "Sve"
+                            if store.items.isEmpty {
+                                store.addNew()
+                            } else {
+                                search = ""
+                                selectedType = "Sve"
+                            }
                         } label: {
-                            Text("Očisti filtre")
+                            Text(store.items.isEmpty ? "Dodaj prvu stavku" : "Očisti filtre")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 11)
@@ -3323,10 +3341,10 @@ struct CollectionsView: View {
                     columns: [GridItem(.adaptive(minimum: 150, maximum: 280), spacing: 10)],
                     spacing: 10
                 ) {
-                    ForEach(categories.indices, id: \.self) { index in
-                        let name = categories[index].0
-                        let accent = categories[index].1
-                        let icon = categories[index].2
+                    ForEach(visibleCategories.indices, id: \.self) { index in
+                        let name = visibleCategories[index].0
+                        let accent = visibleCategories[index].1
+                        let icon = visibleCategories[index].2
                         HStack(spacing: 10) {
                             Image(systemName: icon)
                                 .foregroundStyle(accent)
@@ -5065,7 +5083,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.5 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.6 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
@@ -5279,7 +5297,7 @@ struct SecurityCenterView: View {
     }
 
     private var weakItems: [VaultItem] {
-        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty && !isStrongPassword($0.password) }
+        store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !isStrongPassword($0.password) }
     }
 
     private var strongItems: [VaultItem] {
@@ -5287,9 +5305,7 @@ struct SecurityCenterView: View {
     }
 
     private var score: Int? {
-        let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
-        guard !passwordItems.isEmpty else { return nil }
-        return Int((Double(strongItems.count) / Double(passwordItems.count)) * 100)
+        securityScore(store.items)
     }
 
     private var issues: [VaultItem] {
@@ -5310,19 +5326,19 @@ struct SecurityCenterView: View {
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
                             Text(score.map(String.init) ?? "—")
                                 .font(.system(size: 54, weight: .black))
-                                .foregroundStyle(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
+                                .foregroundStyle(score == nil ? muted : (issues.isEmpty ? good : warn))
                             Text("/100")
                                 .font(.headline)
                                 .foregroundStyle(muted)
                         }
                         ProgressView(value: Double(score ?? 0), total: 100)
-                            .tint(score == nil ? muted : ((score ?? 0) >= 80 ? good : warn))
+                            .tint(score == nil ? muted : (issues.isEmpty ? good : warn))
                         Text({
                             guard let score else {
                                 return "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
                             }
-                            return score >= 80
-                                ? "Vaš trezor izgleda dobro zaštićen."
+                            return issues.isEmpty
+                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke."
                                 : "Pregledajte stavke koje zahtijevaju pažnju."
                         }())
                         .foregroundStyle(muted)
@@ -5331,7 +5347,7 @@ struct SecurityCenterView: View {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 10) {
                             Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
-                            Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                            Summary(value: "\(weakItems.count)", label: "Rizične", accent: warn)
                             Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
                         }
 
@@ -5339,7 +5355,7 @@ struct SecurityCenterView: View {
                             HStack(spacing: 8) {
                                 Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
                                     .frame(width: 110)
-                                Summary(value: "\(weakItems.count)", label: "Slabe", accent: warn)
+                                Summary(value: "\(weakItems.count)", label: "Rizične", accent: warn)
                                     .frame(width: 110)
                                 Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
                                     .frame(width: 124)
@@ -5388,6 +5404,9 @@ struct SecurityCenterView: View {
                                         Text({
                                             let duplicate = duplicateIDs.contains(item.id)
                                             let weak = !isStrongPassword(item.password)
+                                            if item.password.isEmpty {
+                                                return "Ovoj stavci nedostaje spremljena lozinka."
+                                            }
                                             if duplicate && weak {
                                                 return "Lozinka je slaba i koristi se na više mjesta."
                                             }
@@ -5417,7 +5436,7 @@ struct SecurityCenterView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: score == nil ? "info.circle.fill" : "checkmark.shield.fill")
                                     .foregroundStyle(score == nil ? ice : good)
-                                Text(score == nil ? "Nema spremljenih lozinki za provjeru." : "Nisu pronađene slabe ili ponovljene lozinke.")
+                                Text(score == nil ? "Nema prijava ni Wi-Fi stavki za provjeru." : "Nisu pronađene rizične ni ponovljene lozinke.")
                                     .foregroundStyle(.white)
                                 Spacer()
                             }
