@@ -555,11 +555,18 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun eraseAllLocalData(): Boolean {
         authenticationEpoch++
-        val vaultDestroyed = runCatching { store.destroy() }.getOrDefault(false)
-        val authCleared = runCatching { auth.clear() }.getOrDefault(false)
-        val preferencesCleared = prefs.edit().clear().commit()
-        if (!vaultDestroyed || !authCleared || !preferencesCleared) {
-            message = "Brisanje nije potpuno uspjelo. Ponovite postupak."
+        // Destructive cleanup is staged: retain the verifier and preferences if
+        // the encrypted vault cannot be removed so the user can safely retry.
+        if (!runCatching { store.destroy() }.getOrDefault(false)) {
+            message = "Trezor nije moguće potpuno izbrisati. Zaštita lozinkom je zadržana; pokušajte ponovno."
+            return false
+        }
+        if (!runCatching { auth.clear() }.getOrDefault(false)) {
+            message = "Trezor je uklonjen, ali zaštitu lozinkom nije moguće izbrisati. Pokušajte ponovno."
+            return false
+        }
+        if (!prefs.edit().clear().commit()) {
+            message = "Brisanje postavki nije uspjelo. Pokušajte ponovno."
             return false
         }
 
@@ -575,6 +582,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
         screen = Screen.ONBOARDING
+        // A destructive vault wipe must not leave a credential on the clipboard.
+        // Only erase a matching Keyra-owned clip, not newer third-party content.
+        SensitiveClipboard.clearIfOwned(getApplication())
         message = "Podaci trezora i zaštitni ključevi su izbrisani."
         return true
     }
