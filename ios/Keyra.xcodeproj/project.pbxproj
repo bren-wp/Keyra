@@ -8,13 +8,26 @@
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* KeyraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* KeyraApp.swift */; };
 		A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* PrivacyInfo.xcprivacy */; };
+		A10000000000000000000020 /* MasterPasswordEntryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* MasterPasswordEntryUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* KeyraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyraApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Keyra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keyra.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A10000000000000000000021 /* MasterPasswordEntryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterPasswordEntryUITests.swift; sourceTree = "<group>"; };
+		A10000000000000000000022 /* KeyraUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeyraUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000029 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000000C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000008;
+			remoteInfo = Keyra;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000004 /* Frameworks */ = {
@@ -31,6 +44,7 @@
 			children = (
 				A10000000000000000000006 /* Keyra */,
 				A10000000000000000000007 /* Products */,
+				A10000000000000000000023 /* KeyraUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -47,8 +61,17 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000003 /* Keyra.app */,
+				A10000000000000000000022 /* KeyraUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000023 /* KeyraUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000021 /* MasterPasswordEntryUITests.swift */,
+			);
+			path = KeyraUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -69,6 +92,21 @@
 			productReference = A10000000000000000000003 /* Keyra.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000000000000000000025 /* KeyraUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000026 /* Build configuration list for PBXNativeTarget "KeyraUITests" */;
+			buildPhases = (
+				A10000000000000000000024 /* Sources */,
+			);
+			buildRules = ();
+			dependencies = (
+				A1000000000000000000002A /* PBXTargetDependency */,
+			);
+			name = KeyraUITests;
+			productName = KeyraUITests;
+			productReference = A10000000000000000000022 /* KeyraUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +120,10 @@
 					A10000000000000000000008 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					A10000000000000000000025 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A10000000000000000000008;
+					};
 				};
 			};
 			buildConfigurationList = A1000000000000000000000D /* Build configuration list for PBXProject "Keyra" */;
@@ -93,7 +135,7 @@
 			productRefGroup = A10000000000000000000007 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (A10000000000000000000008 /* Keyra */);
+			targets = (A10000000000000000000008 /* Keyra */, A10000000000000000000025 /* KeyraUITests */);
 		};
 /* End PBXProject section */
 
@@ -115,7 +157,21 @@
 			files = (A10000000000000000000001 /* KeyraApp.swift in Sources */);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000024 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A10000000000000000000020 /* MasterPasswordEntryUITests.swift in Sources */);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1000000000000000000002A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000008 /* Keyra */;
+			targetProxy = A10000000000000000000029 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1000000000000000000000E /* Debug */ = {
@@ -197,6 +253,38 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000027 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Keyra;
+			};
+			name = Debug;
+		};
+		A10000000000000000000028 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Keyra;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -211,6 +299,12 @@
 			buildConfigurations = (A10000000000000000000010 /* Debug */, A10000000000000000000011 /* Release */);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
+		};
+		A10000000000000000000026 /* Build configuration list for PBXNativeTarget "KeyraUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A10000000000000000000027 /* Debug */, A10000000000000000000028 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
