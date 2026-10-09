@@ -53,7 +53,7 @@ class MasterPasswordEntryInstrumentedTest {
         compose.onNodeWithContentDescription("Prikaži Glavna lozinka").performClick()
         master.performClick()
 
-        val synthetic = "Čć😀Lozinka#2026"
+        val synthetic = "ČćDemo##2026" // Exactly 12 UTF-16 code units
         master.performTextInput(synthetic)
         confirm.performClick()
         confirm.performTextInput(synthetic)
@@ -64,6 +64,9 @@ class MasterPasswordEntryInstrumentedTest {
         compose.onNodeWithTag("keyra-nav-Postavke").performClick()
         waitFor("keyra-lock-vault")
         compose.onNodeWithTag("keyra-lock-vault").performClick()
+        waitFor("keyra-master-password")
+        // Activity recreation covers lifecycle restoration without resetting encrypted data.
+        compose.activityRule.scenario.recreate()
         waitFor("keyra-master-password")
 
         // Verify persisted vault can reject an incorrect password and reopen
