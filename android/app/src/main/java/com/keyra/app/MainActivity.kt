@@ -61,6 +61,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
@@ -208,6 +212,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     )
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     var importingNewVault by mutableStateOf(false)
+    var isCreatingVault by mutableStateOf(false)
+        private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
 
@@ -253,24 +259,26 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun editSelected() { if (selected != null) screen = Screen.ADD }
     fun select(item: VaultItem) { selected = item; screen = Screen.DETAIL }
 
-    fun createVault(password: String): Boolean {
-        if (password.length < 12) {
-            message = "Glavna lozinka mora imati najmanje 12 znakova."
-            return false
+    fun createVault(password: String) {
+        if (isSetup || isCreatingVault) return
+        if (password.length !in 12..256) {
+            message = "Glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
-
-        if (runCatching { store.save(emptyList()) }.isFailure) {
-            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
-            return false
+        isCreatingVault = true
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    store.save(emptyList())
+                    if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
+                }.isSuccess.also { success ->
+                    if (!success) runCatching { store.destroy() }
+                }
+            }
+            isCreatingVault = false
+            if (saved) finishInitialSetup(password, emptyList())
+            else message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
         }
-        if (!auth.create(password)) {
-            store.destroy()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Pokušajte ponovno."
-            return false
-        }
-
-        finishInitialSetup(password, emptyList())
-        return true
     }
 
     fun importNewVault(payload: String, password: String): Boolean {
@@ -1620,7 +1628,8 @@ internal fun securityScore(items: List<VaultItem>): Int? {
 private fun BrandHeader(
     subtitle: String,
     notificationCount: Int = 0,
-    onNotifications: () -> Unit = {}
+    onNotifications: () -> Unit = {},
+    onProfile: () -> Unit = {}
 ) {
     BoxWithConstraints(
         Modifier
@@ -1666,23 +1675,7 @@ private fun BrandHeader(
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1
                             )
-                            if (!compact) {
-                                Spacer(Modifier.width(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Cyan.copy(alpha = .10f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .24f))
-                                ) {
-                                    Row(
-                                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Outlined.Lock, null, tint = Good, modifier = Modifier.size(11.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("LOCAL", color = Good, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
-                                    }
-                                }
-                            }
+
                         }
                         Text(
                             subtitle.uppercase(),
@@ -1738,10 +1731,11 @@ private fun BrandHeader(
                                     listOf(Cyan.copy(alpha = .18f), Indigo.copy(alpha = .20f))
                                 )
                             )
-                            .border(1.dp, Cyan.copy(alpha = .62f), CircleShape),
+                            .border(1.dp, Cyan.copy(alpha = .62f), CircleShape)
+                            .clickable(onClick = onProfile),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("K", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 13.sp else 14.sp)
+                        Icon(Icons.Outlined.PersonOutline, contentDescription = "Otvori postavke profila", tint = Color.White)
                     }
                 }
             }
@@ -2296,7 +2290,7 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
-                        enabled = !importing || importPayload != null,
+                        enabled = !model.isCreatingVault && (!importing || importPayload != null),
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
@@ -2306,7 +2300,7 @@ private fun UnlockScreen(
                         Text(
                             when {
                                 importing -> "Uvezi trezor"
-                                creating -> "Izradi trezor"
+                                creating -> if (model.isCreatingVault) "Izrada trezora…" else "Izradi trezor"
                                 else -> "Otključaj"
                             },
                             fontSize = 17.sp,
@@ -2572,7 +2566,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("MOJ TREZOR", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         OutlinedTextField(
             search, { search = it },
@@ -2993,7 +2987,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("KOLEKCIJE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+            BrandHeader("KOLEKCIJE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
             Text(
                 "Organizirajte trezor po vrsti i kategoriji.",
                 Modifier.padding(horizontal = side, vertical = 4.dp),
@@ -3190,7 +3184,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("Generator lozinki", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -5130,7 +5124,7 @@ private fun SettingsScreen(
             )
         }
 
-        BrandHeader("POSTAVKE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("POSTAVKE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
@@ -5466,7 +5460,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
     val score = securityScore(model.items)
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("SIGURNOST", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
