@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.6"
+        default: "0.6.7"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje usklađuje sigurnosne procjene i Kolekcije na Androidu i iOS-u. Nedostajuće lozinke prijava i Wi-Fi stavki sada su vidljiva sigurnosna upozorenja i ulaze u ukupan rezultat. Rizične stavke imaju točan opis, a sigurnosni status nije prikazan kao zelen ako postoje upozorenja. Kolekcije prikazuju samo kategorije koje sadrže stavke, čuvaju i kategorije iz uvezenih trezora te nude akciju za dodavanje prve stavke kada je trezor prazan. Dodani su Android regresijski testovi. Format backupa, šifriranje, lokalna privatnost i Recovery Key nisu mijenjani.
+          Keyra 0.6.7 donosi ujednačen prikaz svih rizičnih prijava i Wi-Fi lozinki u Trezoru: broj uključuje i ponovljene snažne lozinke, a svaka se stavka broji samo jednom. Android i iOS sada provjeravaju RFC 4648 Base32 duljinu, padding i završne bitove prije spremanja TOTP tajni, čime neispravni 2FA zapisi više ne prolaze validaciju. iOS generator trenutačno osvježava lozinku pri pomicanju klizača duljine. Kolekcije i uređivanje čuvaju i prikazuju uvezene kategorije, uključujući zapise bez naziva kategorije. Dodani su Android regresijski testovi. KEYRA1/KEYRA2 backup, Recovery Key i enkripcija ostaju nepromijenjeni.
 
           ## Provjere
           - Android lint i unit testovi
