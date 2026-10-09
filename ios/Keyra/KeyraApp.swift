@@ -102,7 +102,7 @@ func decodeBase32(_ raw: String) -> Data? {
 }
 
 private func normalizedTotpAlgorithm(_ raw: String) -> String? {
-    switch raw.uppercased().replacingOccurrences(of: "-", with: "") {
+    switch raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().replacingOccurrences(of: "-", with: "") {
     case "SHA1": return "SHA1"
     case "SHA256": return "SHA256"
     case "SHA512": return "SHA512"
@@ -123,9 +123,11 @@ func parseTotpInput(
 
     if !input.lowercased().hasPrefix("otpauth://") {
         guard let secret = normalizedBase32Secret(input) else { return nil }
-        let algorithm = normalizedTotpAlgorithm(fallbackAlgorithm) ?? "SHA1"
-        let digits = (6...8).contains(fallbackDigits) ? fallbackDigits : 6
-        let period = (15...120).contains(fallbackPeriod) ? fallbackPeriod : 30
+        guard let algorithm = normalizedTotpAlgorithm(fallbackAlgorithm),
+              (6...8).contains(fallbackDigits),
+              (15...120).contains(fallbackPeriod) else { return nil }
+        let digits = fallbackDigits
+        let period = fallbackPeriod
         return TotpConfig(
             secret: secret,
             issuer: fallbackIssuer.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -170,6 +172,8 @@ func parseTotpInput(
     guard let algorithm = normalizedTotpAlgorithm(params["algorithm"] ?? fallbackAlgorithm) else {
         return nil
     }
+    if let rawDigits = params["digits"], Int(rawDigits) == nil { return nil }
+    if let rawPeriod = params["period"], Int(rawPeriod) == nil { return nil }
     let digits = Int(params["digits"] ?? "") ?? fallbackDigits
     let period = Int(params["period"] ?? "") ?? fallbackPeriod
     guard (6...8).contains(digits), (15...120).contains(period) else { return nil }
@@ -230,11 +234,14 @@ func totpRemainingSeconds(
 
 func totpConfigFromFields(_ fields: [String: String]) -> TotpConfig? {
     guard let secret = fields["TOTP tajna"] else { return nil }
+    if let rawDigits = fields["Znamenke"], Int(rawDigits) == nil { return nil }
+    if let rawPeriod = fields["Period"], Int(rawPeriod) == nil { return nil }
+    let rawAlgorithm = fields["Algoritam"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return parseTotpInput(
         secret,
         fallbackIssuer: fields["Izdavatelj"] ?? "",
         fallbackAccount: fields["Račun"] ?? "",
-        fallbackAlgorithm: fields["Algoritam"] ?? "SHA1",
+        fallbackAlgorithm: rawAlgorithm.isEmpty ? "SHA1" : rawAlgorithm,
         fallbackDigits: Int(fields["Znamenke"] ?? "") ?? 6,
         fallbackPeriod: Int(fields["Period"] ?? "") ?? 30
     )
@@ -428,7 +435,22 @@ func isStrongPassword(_ password: String) -> Bool {
     let hasLower = password.contains { $0.isLowercase }
     let hasDigit = password.contains { $0.isNumber }
     let hasSymbol = password.contains { !$0.isLetter && !$0.isNumber }
-    return [hasUpper, hasLower, hasDigit, hasSymbol].filter { $0 }.count >= 3
+    guard [hasUpper, hasLower, hasDigit, hasSymbol].filter({ $0 }).count >= 3 else { return false }
+
+    // Offline heuristic, not a breached-password database lookup.
+    let normalized = password.lowercased()
+    let predictableFragments = [
+        "password", "passw0rd", "qwerty", "asdfgh",
+        "123456", "654321", "letmein", "welcome", "lozinka", "zaporka"
+    ]
+    guard !predictableFragments.contains(where: { normalized.contains($0) }) else { return false }
+    let chars = Array(normalized)
+    if chars.count >= 5 {
+        for index in 0...(chars.count - 5) {
+            if (1..<5).allSatisfy({ chars[index + $0] == chars[index] }) { return false }
+        }
+    }
+    return true
 }
 
 enum KeychainVault {
@@ -1130,7 +1152,10 @@ func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
             .flatMap { $0.map(\.id) }
     )
     let weakIDs = Set(passwordItems.filter { !isStrongPassword($0.password) }.map(\.id))
-    return duplicateIDs.union(weakIDs)
+    let invalidTotpIDs = Set(items.filter {
+        $0.kind == "Autentifikator" && totpConfigFromFields($0.extraFields) == nil
+    }.map(\.id))
+    return duplicateIDs.union(weakIDs).union(invalidTotpIDs)
 }
 
 func securityIssueCount(_ items: [VaultItem]) -> Int {
@@ -3098,6 +3123,9 @@ struct VaultRow: View {
     private var isPasswordItem: Bool { item.kind == "Prijava" || item.kind == "Wi-Fi" }
 
     private var state: (String, Color) {
+        if item.kind == "Autentifikator" && totpConfigFromFields(item.extraFields) == nil {
+            return ("TOTP greška", danger)
+        }
         if duplicated { return ("Ponovno korištena", danger) }
         if isPasswordItem && item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return ("Bez lozinke", warn) }
         if isPasswordItem && !item.password.isEmpty && !isStrongPassword(item.password) { return ("Potrebno ažuriranje", warn) }
@@ -4584,10 +4612,10 @@ struct DetailView: View {
                                         return "Ova stavka nema spremljenu lozinku."
                                     }
                                     if isPasswordItem && !isStrongPassword(item.password) {
-                                        return "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                        return "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                     }
                                     if isPasswordItem {
-                                        return "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                        return "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
                                     }
                                     if item.kind == "Autentifikator", totpConfig != nil {
                                         return "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
@@ -5133,7 +5161,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.8 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.9 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
@@ -5354,13 +5382,17 @@ struct SecurityCenterView: View {
         store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && isStrongPassword($0.password) && !duplicateIDs.contains($0.id) }
     }
 
+    private var invalidTotpItems: [VaultItem] {
+        store.items.filter { $0.kind == "Autentifikator" && totpConfigFromFields($0.extraFields) == nil }
+    }
+
     private var score: Int? {
         securityScore(store.items)
     }
 
     private var issues: [VaultItem] {
         Array(Dictionary(uniqueKeysWithValues:
-            (weakItems + store.items.filter { duplicateIDs.contains($0.id) }).map { ($0.id, $0) }
+            (weakItems + store.items.filter { duplicateIDs.contains($0.id) } + invalidTotpItems).map { ($0.id, $0) }
         ).values)
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
@@ -5371,7 +5403,7 @@ struct SecurityCenterView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     GlassCard {
-                        Text("Ocjena sigurnosti")
+                        Text("Ocjena lozinki")
                             .foregroundStyle(muted)
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
                             Text(score.map(String.init) ?? "—")
@@ -5385,10 +5417,12 @@ struct SecurityCenterView: View {
                             .tint(score == nil ? muted : (issues.isEmpty ? good : warn))
                         Text({
                             guard let score else {
-                                return "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
+                                return issues.isEmpty
+                                    ? "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
+                                    : "Nema lozinki za ocjenu. Provjerite neispravne 2FA stavke."
                             }
                             return issues.isEmpty
-                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke."
+                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke ni 2FA pogreške."
                                 : "Pregledajte stavke koje zahtijevaju pažnju."
                         }())
                         .foregroundStyle(muted)
@@ -5397,7 +5431,7 @@ struct SecurityCenterView: View {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 10) {
                             Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
-                            Summary(value: "\(weakItems.count)", label: "Rizične", accent: warn)
+                            Summary(value: "\(issues.count)", label: "Rizične", accent: warn)
                             Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
                         }
 
@@ -5405,7 +5439,7 @@ struct SecurityCenterView: View {
                             HStack(spacing: 8) {
                                 Summary(value: "\(strongItems.count)", label: "Snažne", accent: good)
                                     .frame(width: 110)
-                                Summary(value: "\(weakItems.count)", label: "Rizične", accent: warn)
+                                Summary(value: "\(issues.count)", label: "Rizične", accent: warn)
                                     .frame(width: 110)
                                 Summary(value: "\(duplicateIDs.count)", label: "Ponovljene", accent: danger)
                                     .frame(width: 124)
@@ -5454,6 +5488,9 @@ struct SecurityCenterView: View {
                                         Text({
                                             let duplicate = duplicateIDs.contains(item.id)
                                             let weak = !isStrongPassword(item.password)
+                                            if item.kind == "Autentifikator" {
+                                                return "Neispravna 2FA tajna ili postavke. Uredite autentifikator."
+                                            }
                                             if item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                                 return "Ovoj stavci nedostaje spremljena lozinka."
                                             }

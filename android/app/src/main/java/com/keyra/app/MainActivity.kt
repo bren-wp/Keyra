@@ -1561,7 +1561,11 @@ internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
         .filter { !isStrongPassword(it.password) }
         .map { it.id }
         .toSet()
-    return duplicatedIds + weakIds
+    val invalidTotpIds = items
+        .filter { it.type == "Autentifikator" && totpConfigFromFields(it.fields) == null }
+        .map { it.id }
+        .toSet()
+    return duplicatedIds + weakIds + invalidTotpIds
 }
 
 internal fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
@@ -2499,7 +2503,17 @@ internal fun isStrongPassword(password: String): Boolean {
         password.any(Char::isDigit),
         password.any { !it.isLetterOrDigit() }
     ).count { it }
-    return classes >= 3
+    if (classes < 3) return false
+
+    // Offline heuristic, not a breached-password database lookup.
+    val normalized = password.lowercase()
+    val predictableFragments = listOf(
+        "password", "passw0rd", "qwerty", "asdfgh",
+        "123456", "654321", "letmein", "welcome", "lozinka", "zaporka"
+    )
+    if (predictableFragments.any { it in normalized }) return false
+    if (normalized.windowed(5).any { run -> run.all { it == run[0] } }) return false
+    return true
 }
 
 @Composable
@@ -2770,13 +2784,16 @@ private fun SummaryCard(value: String, label: String, accent: Color, modifier: M
 @Composable
 private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) {
     val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
+    val invalidTotp = item.type == "Autentifikator" && totpConfigFromFields(item.fields) == null
     val stateColor = when {
+        invalidTotp -> Danger
         duplicated -> Danger
         isPasswordItem && item.password.isBlank() -> Warn
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> Warn
         else -> Good
     }
     val state = when {
+        invalidTotp -> "TOTP greška"
         duplicated -> "Ponovno korištena"
         isPasswordItem && item.password.isBlank() -> "Bez lozinke"
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> "Potrebno ažuriranje"
@@ -3379,9 +3396,9 @@ internal fun parseTotpInput(
 
     if (!input.startsWith("otpauth://", ignoreCase = true)) {
         val secret = normalizeBase32Secret(input) ?: return null
-        val algorithm = normalizeTotpAlgorithm(fallbackAlgorithm) ?: "SHA1"
-        val digits = fallbackDigits.takeIf { it in 6..8 } ?: 6
-        val period = fallbackPeriod.takeIf { it in 15..120 } ?: 30
+        val algorithm = normalizeTotpAlgorithm(fallbackAlgorithm) ?: return null
+        val digits = fallbackDigits.takeIf { it in 6..8 } ?: return null
+        val period = fallbackPeriod.takeIf { it in 15..120 } ?: return null
         return TotpConfig(
             secret = secret,
             issuer = fallbackIssuer.trim(),
@@ -3417,8 +3434,10 @@ internal fun parseTotpInput(
     }
     val account = fallbackAccount.trim().ifBlank { labelAccount }
     val algorithm = normalizeTotpAlgorithm(params["algorithm"] ?: fallbackAlgorithm) ?: return null
-    val digits = (params["digits"]?.toIntOrNull() ?: fallbackDigits).takeIf { it in 6..8 } ?: return null
-    val period = (params["period"]?.toIntOrNull() ?: fallbackPeriod).takeIf { it in 15..120 } ?: return null
+    val digits = (params["digits"]?.let { it.toIntOrNull() ?: return null } ?: fallbackDigits)
+        .takeIf { it in 6..8 } ?: return null
+    val period = (params["period"]?.let { it.toIntOrNull() ?: return null } ?: fallbackPeriod)
+        .takeIf { it in 15..120 } ?: return null
 
     return TotpConfig(
         secret = secret,
@@ -3478,13 +3497,15 @@ internal fun totpRemainingSeconds(
 
 internal fun totpConfigFromFields(fields: Map<String, String>): TotpConfig? {
     val secret = fields["TOTP tajna"] ?: return null
+    val digits = fields["Znamenke"]?.let { it.toIntOrNull() ?: return null } ?: 6
+    val period = fields["Period"]?.let { it.toIntOrNull() ?: return null } ?: 30
     return parseTotpInput(
         raw = secret,
         fallbackIssuer = fields["Izdavatelj"].orEmpty(),
         fallbackAccount = fields["Račun"].orEmpty(),
         fallbackAlgorithm = fields["Algoritam"].orEmpty().ifBlank { "SHA1" },
-        fallbackDigits = fields["Znamenke"]?.toIntOrNull() ?: 6,
-        fallbackPeriod = fields["Period"]?.toIntOrNull() ?: 30
+        fallbackDigits = digits,
+        fallbackPeriod = period
     )
 }
 
@@ -4409,9 +4430,9 @@ private fun DetailScreen(
                                 isPasswordItem && current.password.isBlank() ->
                                     "Ova stavka nema spremljenu lozinku."
                                 isPasswordItem && !isStrongPassword(current.password) ->
-                                    "Lozinka ne zadovoljava preporučenu kombinaciju duljine i vrsta znakova."
+                                    "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                 isPasswordItem ->
-                                    "Lozinka je dovoljno duga i koristi dobru kombinaciju vrsta znakova."
+                                    "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
                                 current.type == "Autentifikator" && totpConfig != null ->
                                     "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
                                 current.type == "Autentifikator" ->
@@ -5166,7 +5187,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.8 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.9 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
@@ -5354,6 +5375,9 @@ private fun SecurityScreen(model: KeyraViewModel) {
         .toSet()
     val weak = passwordItems.filter { !isStrongPassword(it.password) }
     val strong = passwordItems.filter { isStrongPassword(it.password) && it.id !in duplicatedIds }
+    val invalidTotp = model.items.filter {
+        it.type == "Autentifikator" && totpConfigFromFields(it.fields) == null
+    }
     val issueIds = securityIssueIds(model.items)
     val score = securityScore(model.items)
 
@@ -5366,7 +5390,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
         ) {
             item {
                 GlassCard {
-                    Text("Ocjena sigurnosti", color = Muted, fontSize = 14.sp)
+                    Text("Ocjena lozinki", color = Muted, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             score?.toString() ?: "—",
@@ -5384,8 +5408,9 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     )
                     Text(
                         when {
-                            score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu sigurnosti."
-                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke."
+                            score == null && issueIds.isNotEmpty() -> "Nema lozinki za ocjenu. Provjerite neispravne 2FA stavke."
+                            score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
+                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke ni 2FA pogreške."
                             else -> "Pregledajte stavke koje zahtijevaju pažnju."
                         },
                         color = Muted
@@ -5400,13 +5425,13 @@ private fun SecurityScreen(model: KeyraViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.width(110.dp))
-                            SummaryCard(weak.size.toString(), "Rizične", Warn, Modifier.width(110.dp))
+                            SummaryCard(issueIds.size.toString(), "Rizične", Warn, Modifier.width(110.dp))
                             SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.width(122.dp))
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             SummaryCard(strong.size.toString(), "Snažne", Good, Modifier.weight(1f))
-                            SummaryCard(weak.size.toString(), "Rizične", Warn, Modifier.weight(1f))
+                            SummaryCard(issueIds.size.toString(), "Rizične", Warn, Modifier.weight(1f))
                             SummaryCard(duplicatedIds.size.toString(), "Ponovljene", Danger, Modifier.weight(1f))
                         }
                     }
@@ -5441,7 +5466,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 }
             }
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
-            items((weak + model.items.filter { it.id in duplicatedIds }).distinctBy { it.id }) { issue ->
+            items((weak + model.items.filter { it.id in duplicatedIds } + invalidTotp).distinctBy { it.id }) { issue ->
                 val duplicate = issue.id in duplicatedIds
                 val weakPassword = !isStrongPassword(issue.password)
                 Surface(
@@ -5461,6 +5486,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                             Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
                                 when {
+                                    issue.type == "Autentifikator" -> "Neispravna 2FA tajna ili postavke. Uredite autentifikator."
                                     issue.password.isBlank() -> "Ovoj stavci nedostaje spremljena lozinka."
                                     duplicate && weakPassword -> "Lozinka je slaba i koristi se na više mjesta."
                                     duplicate -> "Lozinka se koristi na više mjesta."
