@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.14"
+        default: "0.6.15"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.14 dodatno učvršćuje zaštitu i stabilnost Android i iOS aplikacije. Potpuno brisanje trezora sada na Androidu uklanja i Keystore ključ kojim se štiti provjera glavne lozinke, a na iOS-u provjerava je li zasebni Keychain zapis provjere lozinke doista uklonjen. Ako neki korak čišćenja ne uspije, aplikacija više ne tvrdi da je sve izbrisano. Pri izradi novog trezora duljina glavne lozinke i potvrde ograničena je na 256 znakova, uz jednostavnu uputu o minimalnih 12 znakova; postojeće lozinke za otključavanje i uvoz kopije time se ne skraćuju. Dodani su Android regresijski testovi za granicu unosa. Početni zaslon, poveznice na app.brendigo.com/keya, rad zvonca i profila iz prethodnog izdanja ostaju zadržani. Enkripcija i KEYRA1/KEYRA2/KEYRAREC1 formati ostaju nepromijenjeni. Fizički Android/iOS uređaji i produkcijsko potpisivanje zahtijevaju dodatni QA.
+          Keyra 0.6.15 sprječava dovršetak zastarjelih zahtjeva za otključavanje nakon što aplikacija ode u pozadinu ili korisnik zaključa trezor. Android i iOS provjeravaju valjanost asinkronih rezultata provjere glavne lozinke, izrade i uvoza trezora prije otvaranja sesije. iOS dodatno provjerava rezultate biometrijske autentifikacije, a Android veže biometrijski povratni poziv uz istu sesiju. Uspješno stvoren ili uvezen trezor čuva se šifriran, ali ne otvara automatski ako je aplikacija u međuvremenu napustila aktivnu sesiju. Android JUnit regresijski test pokriva pozadinski i zastarjeli povratni rezultat. KEYRA1/KEYRA2/KEYRAREC1, algoritmi šifriranja i postojeće kopije ostaju nepromijenjeni. CI build i simulator launch smoke nisu zamjena za ručni test unosa lozinke i biometrije na fizičkom uređaju.
 
           ## Provjere
           - Android lint i unit testovi

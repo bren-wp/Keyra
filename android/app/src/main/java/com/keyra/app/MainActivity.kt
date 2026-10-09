@@ -102,6 +102,9 @@ private const val MAX_BACKUP_CHARS = 2_500_000
 private const val MAX_RECOVERY_CHARS = 16_384
 private const val MAX_VAULT_ITEMS = 10_000
 
+internal fun shouldAcceptAuthCompletion(requestEpoch: Long, currentEpoch: Long, foreground: Boolean): Boolean =
+    foreground && requestEpoch == currentEpoch
+
 enum class Screen { ONBOARDING, RECOVERY, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
@@ -218,6 +221,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
+    private var authenticationEpoch = 0L
+    private var appInForeground = false
 
     fun startCreate() {
         importingNewVault = false
@@ -268,6 +273,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Glavna lozinka mora imati između 12 i 256 znakova."
             return
         }
+        val requestEpoch = authenticationEpoch
         isCreatingVault = true
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) {
@@ -279,7 +285,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             isCreatingVault = false
-            if (saved) finishInitialSetup(password, emptyList())
+            if (saved) finishInitialSetup(
+                password, emptyList(),
+                shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
+            )
             else message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
         }
     }
@@ -299,6 +308,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
+        val requestEpoch = authenticationEpoch
         isImportingVault = true
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -328,7 +338,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             if (imported == null) {
                 message = result.second
             } else {
-                finishInitialSetup(password, imported)
+                finishInitialSetup(
+                    password, imported,
+                    shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
+                )
                 message = "Keyra trezor uspješno je uvezen."
             }
         }
@@ -406,13 +419,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun finishInitialSetup(password: String, initialItems: List<VaultItem>) {
+    private fun finishInitialSetup(password: String, initialItems: List<VaultItem>, allowUnlock: Boolean = true) {
         prefs.edit()
             .remove("unlock_failed_attempts")
             .remove("unlock_lockout_until")
             .apply()
         isSetup = true
         importingNewVault = false
+        if (!allowUnlock || !appInForeground) {
+            lock()
+            return
+        }
         sessionPassword = password
         unlocked = true
         items.clear()
@@ -433,12 +450,15 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
             return
         }
+        val requestEpoch = authenticationEpoch
         isUnlockingVault = true
         viewModelScope.launch {
             val verified = withContext(Dispatchers.IO) {
                 runCatching { auth.verify(password) }.getOrDefault(false)
             }
             isUnlockingVault = false
+            if (!shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground) ||
+                screen != Screen.UNLOCK || !isSetup) return@launch
             if (!verified) {
                 val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
                 val penaltyMs = when {
@@ -474,8 +494,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun unlockFromBiometric() {
-        if (!isSetup) return
+    fun biometricRequestToken(): Long = authenticationEpoch
+
+    fun unlockFromBiometric(requestEpoch: Long) {
+        if (!isSetup || screen != Screen.UNLOCK ||
+            !shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)) return
         if (!loadVault()) {
             unlocked = false
             return
@@ -485,6 +508,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun lock() {
+        authenticationEpoch++
         unlocked = false
         sessionPassword = null
         items.clear()
@@ -495,6 +519,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun eraseAllLocalData(): Boolean {
+        authenticationEpoch++
         val vaultDestroyed = runCatching { store.destroy() }.getOrDefault(false)
         val authCleared = runCatching { auth.clear() }.getOrDefault(false)
         val preferencesCleared = prefs.edit().clear().commit()
@@ -771,6 +796,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onAppBackground() {
+        appInForeground = false
+        authenticationEpoch++
         if (!unlocked) return
         if (autoLockSeconds == 0) {
             lock()
@@ -780,6 +807,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onAppForeground() {
+        appInForeground = true
         val started = backgroundAt ?: return
         backgroundAt = null
         if (unlocked && System.currentTimeMillis() - started >= autoLockSeconds * 1000L) {
@@ -2285,8 +2313,9 @@ private fun UnlockScreen(
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(
                             onClick = {
+                                val requestEpoch = model.biometricRequestToken()
                                 requestBiometric("Potvrdite identitet za pristup trezoru.") {
-                                    model.unlockFromBiometric()
+                                    model.unlockFromBiometric(requestEpoch)
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
