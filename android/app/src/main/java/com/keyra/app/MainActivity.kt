@@ -3332,11 +3332,13 @@ internal data class TotpConfig(
 private const val BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
 internal fun normalizeBase32Secret(raw: String): String? {
+    if (raw.length > 2_048) return null
     val clean = raw.trim().replace(" ", "").replace("-", "").uppercase()
     return if (decodeBase32(clean)?.isNotEmpty() == true) clean.trimEnd('=') else null
 }
 
 internal fun decodeBase32(raw: String): ByteArray? {
+    if (raw.length > 1_024) return null
     val encoded = raw.trim().uppercase()
     val clean = encoded.trimEnd('=')
     if (clean.isEmpty() || clean.any { it !in BASE32_ALPHABET }) return null
@@ -3396,7 +3398,7 @@ internal fun parseTotpInput(
     fallbackPeriod: Int = 30
 ): TotpConfig? {
     val input = raw.trim()
-    if (input.isBlank()) return null
+    if (input.isBlank() || input.length > 4_096) return null
 
     if (!input.startsWith("otpauth://", ignoreCase = true)) {
         val secret = normalizeBase32Secret(input) ?: return null
@@ -3416,16 +3418,21 @@ internal fun parseTotpInput(
     val uri = runCatching { URI(input) }.getOrNull() ?: return null
     if (!uri.scheme.equals("otpauth", ignoreCase = true)) return null
     if (!uri.host.equals("totp", ignoreCase = true)) return null
+    if (uri.rawUserInfo != null || uri.port != -1 || uri.rawFragment != null) return null
 
-    val params = uri.rawQuery
-        ?.split("&")
-        ?.mapNotNull { entry ->
-            val pair = entry.split("=", limit = 2)
-            if (pair.isEmpty()) null
-            else decodeUrlPart(pair[0]).lowercase() to decodeUrlPart(pair.getOrElse(1) { "" })
-        }
-        ?.toMap()
-        .orEmpty()
+    val params = mutableMapOf<String, String>()
+    for (entry in uri.rawQuery?.split("&").orEmpty()) {
+        val pair = entry.split("=", limit = 2)
+        if (pair.size != 2) return null
+        val key = runCatching {
+            URLDecoder.decode(pair[0], StandardCharsets.UTF_8.name()).lowercase()
+        }.getOrNull() ?: return null
+        val value = runCatching {
+            URLDecoder.decode(pair[1], StandardCharsets.UTF_8.name())
+        }.getOrNull() ?: return null
+        if (key.isBlank() || params.containsKey(key)) return null
+        params[key] = value
+    }
 
     val secret = normalizeBase32Secret(params["secret"].orEmpty()) ?: return null
     val label = decodeUrlPart(uri.rawPath.orEmpty().trimStart('/'))
@@ -3457,6 +3464,8 @@ internal fun generateTotp(
     config: TotpConfig,
     timeMillis: Long = System.currentTimeMillis()
 ): String? {
+    if (timeMillis < 0 || config.period !in 15..120 || config.digits !in 6..8) return null
+    if (normalizeTotpAlgorithm(config.algorithm) == null) return null
     val secretBytes = decodeBase32(config.secret) ?: return null
     if (secretBytes.isEmpty()) return null
 
@@ -3466,10 +3475,11 @@ internal fun generateTotp(
         counterBytes[7 - index] = ((counter ushr (index * 8)) and 0xFF).toByte()
     }
 
-    val macName = when (config.algorithm) {
+    val macName = when (normalizeTotpAlgorithm(config.algorithm)) {
         "SHA256" -> "HmacSHA256"
         "SHA512" -> "HmacSHA512"
-        else -> "HmacSHA1"
+        "SHA1" -> "HmacSHA1"
+        else -> return null
     }
     val hash = runCatching {
         val mac = Mac.getInstance(macName)
@@ -3495,6 +3505,7 @@ internal fun totpRemainingSeconds(
     config: TotpConfig,
     timeMillis: Long = System.currentTimeMillis()
 ): Int {
+    if (timeMillis < 0 || config.period !in 15..120 || config.digits !in 6..8) return 0
     val elapsed = ((timeMillis / 1000L) % config.period).toInt()
     return config.period - elapsed
 }
@@ -5223,7 +5234,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.10 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.11 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
