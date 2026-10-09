@@ -21,6 +21,15 @@ class PasswordToolsTest {
         assertEquals("A".repeat(254) + "😀", boundedNewMasterPasswordInput("A".repeat(254) + "😀" + "suffix"))
     }
     @Test
+    fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
+        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null))
+        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst"))
+        assertFalse(shouldClearOwnedClipboard(null, null))
+    }
+
+    @Test
     fun pendingAuthenticationCannotUnlockAfterBackgroundOrExplicitLock() {
         assertTrue(shouldAcceptAuthCompletion(10L, 10L, foreground = true))
         assertFalse(shouldAcceptAuthCompletion(10L, 10L, foreground = false))
