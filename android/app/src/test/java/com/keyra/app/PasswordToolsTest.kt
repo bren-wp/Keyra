@@ -30,6 +30,34 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun protectedActionsRequireAnUnchangedActiveUnlockedVaultAndItem() {
+        assertTrue(shouldAcceptProtectedCompletion(
+            7L, 7L, foreground = true, vaultUnlocked = true,
+            sameScreen = true, sameItem = true
+        ))
+        assertFalse(shouldAcceptProtectedCompletion(
+            7L, 7L, foreground = false, vaultUnlocked = true,
+            sameScreen = true, sameItem = true
+        ))
+        assertFalse(shouldAcceptProtectedCompletion(
+            7L, 8L, foreground = true, vaultUnlocked = true,
+            sameScreen = true, sameItem = true
+        ))
+        assertFalse(shouldAcceptProtectedCompletion(
+            7L, 7L, foreground = true, vaultUnlocked = false,
+            sameScreen = true, sameItem = true
+        ))
+        assertFalse(shouldAcceptProtectedCompletion(
+            7L, 7L, foreground = true, vaultUnlocked = true,
+            sameScreen = false, sameItem = true
+        ))
+        assertFalse(shouldAcceptProtectedCompletion(
+            7L, 7L, foreground = true, vaultUnlocked = true,
+            sameScreen = true, sameItem = false
+        ))
+    }
+
+    @Test
     fun newMasterPasswordInputIsBoundedWithoutChangingOrdinaryPasswords() {
         assertEquals("", boundedNewMasterPasswordInput(""))
         assertEquals("MojaLozinka#2026", boundedNewMasterPasswordInput("MojaLozinka#2026"))
