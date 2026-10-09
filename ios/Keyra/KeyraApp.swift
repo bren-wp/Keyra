@@ -3268,7 +3268,6 @@ struct CollectionsView: View {
                     .frame(height: 18)
             }
             .padding(.bottom, 100)
-            }
         }
     }
 }
