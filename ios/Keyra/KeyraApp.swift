@@ -257,8 +257,28 @@ func formatTotpCode(_ code: String) -> String {
     return code
 }
 
+func normalizedCardDigits(_ raw: String) -> String? {
+    let asciiDigits = Set("0123456789")
+    guard raw.allSatisfy({ asciiDigits.contains($0) || $0 == " " || $0 == "-" }) else { return nil }
+    return String(raw.filter { asciiDigits.contains($0) })
+}
+
+func formatCardNumberInput(_ raw: String) -> String {
+    let asciiDigits = Set("0123456789")
+    let digits = Array(raw.filter { asciiDigits.contains($0) }.prefix(19))
+    return stride(from: 0, to: digits.count, by: 4)
+        .map { String(digits[$0..<min($0 + 4, digits.count)]) }
+        .joined(separator: " ")
+}
+
+func isValidCardSecurityCode(_ raw: String) -> Bool {
+    let asciiDigits = Set("0123456789")
+    return (3...4).contains(raw.count) && raw.allSatisfy { asciiDigits.contains($0) }
+}
+
 func isValidCardNumber(_ raw: String) -> Bool {
-    let digits = raw.compactMap { $0.wholeNumberValue }
+    guard let normalized = normalizedCardDigits(raw) else { return false }
+    let digits = normalized.compactMap(\.wholeNumberValue)
     guard (12...19).contains(digits.count) else { return false }
     guard Set(digits).count >= 2 else { return false }
 
@@ -3163,7 +3183,9 @@ struct VaultRow: View {
         switch item.kind {
         case "Kartica":
             if let number = item.extraFields["Broj kartice"], !number.isEmpty {
-                return "•••• " + String(number.suffix(4))
+                let asciiDigits = Set("0123456789")
+                let suffix = number.filter { asciiDigits.contains($0) }.suffix(4)
+                if !suffix.isEmpty { return "•••• " + String(suffix) }
             }
             return item.category
         case "Identitet":
@@ -3781,7 +3803,9 @@ struct AddEditView: View {
         switch item?.kind {
         case "Kartica":
             _field1 = State(initialValue: extra["Vlasnik kartice"] ?? "")
-            _field2 = State(initialValue: extra["Broj kartice"] ?? "")
+            let storedCardNumber = extra["Broj kartice"] ?? ""
+            _field2 = State(initialValue: isValidCardNumber(storedCardNumber)
+                ? formatCardNumberInput(storedCardNumber) : storedCardNumber)
             _field3 = State(initialValue: extra["Vrijedi do"] ?? "")
             _field4 = State(initialValue: extra["Sigurnosni kod"] ?? "")
         case "Identitet":
@@ -3936,10 +3960,11 @@ struct AddEditView: View {
 
                     if type == "Kartica" {
                         KeyraField(title: "Vlasnik kartice", text: $field1)
-                        KeyraField(title: "Broj kartice", text: $field2)
+                        KeyraField(title: "Broj kartice (razmaci se dodaju automatski)", text: $field2)
                             .keyboardType(.numberPad)
                             .onChange(of: field2) { _, value in
-                                field2 = String(value.filter(\.isNumber).prefix(19))
+                                let formatted = formatCardNumberInput(value)
+                                if formatted != value { field2 = formatted }
                             }
                         KeyraField(title: "Vrijedi do (MM/GG)", text: $field3)
                             .keyboardType(.numberPad)
@@ -3949,10 +3974,12 @@ struct AddEditView: View {
                                     field3 = formatted
                                 }
                             }
-                        KeyraField(title: "Sigurnosni kod", text: $field4)
+                        SecretField(title: "Sigurnosni kod (3–4 znamenke)", text: $field4, reveal: $reveal)
                             .keyboardType(.numberPad)
                             .onChange(of: field4) { _, value in
-                                field4 = String(value.filter(\.isNumber).prefix(4))
+                                let asciiDigits = Set("0123456789")
+                                let clean = String(value.filter { asciiDigits.contains($0) }.prefix(4))
+                                if clean != value { field4 = clean }
                             }
                     }
 
@@ -4051,6 +4078,7 @@ struct AddEditView: View {
 
                     Button {
                         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let cardDigits = normalizedCardDigits(field2)
                         let validationMessage: String? = {
                             if cleanTitle.isEmpty {
                                 return "Unesite naslov stavke."
@@ -4061,13 +4089,16 @@ struct AddEditView: View {
                             if type == "Wi-Fi", field1.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 return "Unesite naziv Wi-Fi mreže."
                             }
-                            if type == "Kartica", !field2.isEmpty, !(12...19).contains(field2.count) {
+                            if type == "Kartica", !field2.isEmpty, cardDigits == nil {
+                                return "Broj kartice smije sadržavati samo znamenke, razmake i crtice."
+                            }
+                            if type == "Kartica", !field2.isEmpty, !(12...19).contains(cardDigits?.count ?? 0) {
                                 return "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             }
                             if type == "Kartica", !field2.isEmpty, !isValidCardNumber(field2) {
                                 return "Broj kartice nije prošao provjeru kontrolne znamenke."
                             }
-                            if type == "Kartica", !field4.isEmpty, !(3...4).contains(field4.count) {
+                            if type == "Kartica", !field4.isEmpty, !isValidCardSecurityCode(field4) {
                                 return "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             }
                             if type == "Kartica", !field3.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -4104,7 +4135,7 @@ struct AddEditView: View {
                         case "Kartica":
                             extra = [
                                 "Vlasnik kartice": field1,
-                                "Broj kartice": field2,
+                                "Broj kartice": cardDigits ?? "",
                                 "Vrijedi do": field3,
                                 "Sigurnosni kod": field4
                             ].filter { !$0.value.isEmpty }
@@ -5161,7 +5192,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.9 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.10 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {

@@ -316,6 +316,40 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun cardNumbersRejectNonDigitsRatherThanSilentlyIgnoringThem() {
+        val valid = "4111111111111111"
+        assertEquals(valid, normalizedCardDigits("4111 1111-1111 1111"))
+        assertTrue(isValidCardNumber("4111-1111-1111-1111"))
+        assertFalse(isValidCardNumber("4111a11111111111"))
+        assertFalse(isValidCardNumber("x" + valid))
+        assertFalse(isValidCardNumber(valid + "!"))
+        assertFalse(isValidCardNumber("٤١١١١١١١١١١١١١١١"))
+        assertFalse(isValidCardNumber("4111\t1111 1111 1111"))
+        assertEquals(null, normalizedCardDigits(valid + "/"))
+        assertFalse(isValidCardNumber("4111111111111112"))
+    }
+
+    @Test
+    fun cardNumberInputFormatsCommonGroupingButStorageStaysCanonical() {
+        assertEquals("4111 1111 1111 1111", formatCardNumberInput("4111111111111111"))
+        assertEquals("4111 1111 1111 1111", formatCardNumberInput("4111-1111-1111-1111"))
+        assertEquals("4111 1111 1111 1111 123", formatCardNumberInput("4111111111111111123456789"))
+        assertEquals("", formatCardNumberInput(""))
+        assertEquals("4111111111111111", normalizedCardDigits(formatCardNumberInput("4111111111111111")))
+    }
+
+    @Test
+    fun securityCodeRequiresThreeOrFourAsciiDigits() {
+        assertTrue(isValidCardSecurityCode("123"))
+        assertTrue(isValidCardSecurityCode("1234"))
+        assertFalse(isValidCardSecurityCode("12"))
+        assertFalse(isValidCardSecurityCode("12345"))
+        assertFalse(isValidCardSecurityCode("12a"))
+        assertFalse(isValidCardSecurityCode("１２３"))
+        assertFalse(isValidCardSecurityCode("12 3"))
+    }
+
+    @Test
     fun cardExpiryRejectsPastDates() {
         assertTrue(isCardExpiryNotPast("12/30", currentYear = 2026, currentMonth = 10))
         assertTrue(isCardExpiryNotPast("10/26", currentYear = 2026, currentMonth = 10))

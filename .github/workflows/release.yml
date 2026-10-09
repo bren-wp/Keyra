@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.9"
+        default: "0.6.10"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.9 poboljšava lokalne sigurnosne procjene za Android i iOS. Sigurnosni centar sada upozorava na neispravne TOTP zapise iz uvezenih trezora, uključujući neispravne algoritme, broj znamenki i intervale, umjesto da pogrešno prikazuje status 2FA aktivan. Neispravni parametri u otpauth URI-jevima više se ne zamjenjuju prešutno zadanim postavkama. Provjera lozinki prepoznaje dodatne predvidljive uzorke i ponavljanje znakova; ne koristi mrežne zahtjeve ni bazu kompromitiranih lozinki. Postotak je jasno označen kao ocjena lozinki, dok ukupna upozorenja obuhvaćaju i neispravne autentifikatore. Dodani su Android regresijski testovi. AES-256-GCM, KEYRA1/KEYRA2 i KEYRAREC1 ostaju nepromijenjeni.
+          Keyra 0.6.10 poboljšava spremanje kartica na Androidu i iOS-u. Polje za broj kartice automatski grupira znamenke radi čitljivosti, dok se broj u šifriranom trezoru sprema bez razmaka. Stroga validacija prihvaća isključivo ASCII znamenke, razmake i crtice; više ne zanemaruje slova ili druge znakove prije provjere Luhnove kontrolne znamenke. Sigurnosni kod kartice (3 ili 4 znamenke) sada se tijekom unosa skriva i koristi brojčanu tipkovnicu. U popisu kartica prikazuju se samo zadnje četiri znamenke, čak i ako je vrijednost iz uvoza grupirana. Postojeće neispravne uvezene vrijednosti ne prepravljaju se automatski pri otvaranju uređivača. Dodani su Android regresijski testovi za PAN, prikaz i CVV validaciju. KEYRA1/KEYRA2/KEYRAREC1 i enkripcija trezora ostaju nepromijenjeni.
 
           ## Provjere
           - Android lint i unit testovi

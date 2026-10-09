@@ -2333,7 +2333,8 @@ private fun KeyraPasswordField(
     onValue: (String) -> Unit,
     show: Boolean,
     toggle: () -> Unit,
-    label: String
+    label: String,
+    numeric: Boolean = false
 ) {
     OutlinedTextField(
         value = value,
@@ -2341,7 +2342,7 @@ private fun KeyraPasswordField(
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.NumberPassword else KeyboardType.Password),
         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = toggle) {
@@ -2820,7 +2821,10 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         else -> Cyan
     }
     val subtitle = when (item.type) {
-        "Kartica" -> item.fields["Broj kartice"]?.let { "•••• " + it.takeLast(4) } ?: item.category
+        "Kartica" -> item.fields["Broj kartice"]?.let { number ->
+            val lastDigits = number.filter { it in '0'..'9' }.takeLast(4)
+            if (lastDigits.isNotEmpty()) "•••• $lastDigits" else item.category
+        } ?: item.category
         "Identitet" -> item.fields["Puno ime"].orEmpty().ifBlank { item.category }
         "Wi-Fi" -> item.fields["Naziv mreže"].orEmpty().ifBlank { item.username.ifBlank { item.category } }
         "Autentifikator" -> item.fields["Račun"].orEmpty().ifBlank {
@@ -3515,8 +3519,19 @@ internal fun formatTotpCode(code: String): String = when {
     else -> code
 }
 
+internal fun normalizedCardDigits(raw: String): String? {
+    if (raw.any { it !in '0'..'9' && it != ' ' && it != '-' }) return null
+    return raw.filter { it in '0'..'9' }
+}
+
+internal fun formatCardNumberInput(raw: String): String =
+    raw.filter { it in '0'..'9' }.take(19).chunked(4).joinToString(" ")
+
+internal fun isValidCardSecurityCode(raw: String): Boolean =
+    raw.length in 3..4 && raw.all { it in '0'..'9' }
+
 internal fun isValidCardNumber(raw: String): Boolean {
-    val digits = raw.filter(Char::isDigit)
+    val digits = normalizedCardDigits(raw) ?: return false
     if (digits.length !in 12..19) return false
     if (digits.toSet().size < 2) return false
 
@@ -3616,7 +3631,9 @@ private fun AddScreen(model: KeyraViewModel) {
     var field2 by remember(original?.id) {
         mutableStateOf(
             when (original?.type) {
-                "Kartica" -> original.fields["Broj kartice"].orEmpty()
+                "Kartica" -> original.fields["Broj kartice"].orEmpty().let { raw ->
+                    if (isValidCardNumber(raw)) formatCardNumberInput(raw) else raw
+                }
                 "Identitet" -> original.fields["Broj dokumenta"].orEmpty()
                 "Wi-Fi" -> original.fields["Vrsta zaštite"].orEmpty()
                 "Autentifikator" -> original.fields["Račun"].orEmpty()
@@ -3821,9 +3838,25 @@ private fun AddScreen(model: KeyraViewModel) {
 
             if (type == "Kartica") {
                 item { KeyraTextField(field1, { field1 = it }, "Vlasnik kartice", Icons.Outlined.Person) }
-                item { KeyraTextField(field2, { field2 = it.filter(Char::isDigit).take(19) }, "Broj kartice", Icons.Outlined.CreditCard) }
+                item {
+                    KeyraTextField(
+                        field2,
+                        { field2 = formatCardNumberInput(it) },
+                        "Broj kartice (razmaci se dodaju automatski)",
+                        Icons.Outlined.CreditCard
+                    )
+                }
                 item { KeyraTextField(field3, { field3 = formatCardExpiry(it) }, "Vrijedi do (MM/GG)", Icons.Outlined.DateRange) }
-                item { KeyraTextField(field4, { field4 = it.filter(Char::isDigit).take(4) }, "Sigurnosni kod", Icons.Outlined.Lock) }
+                item {
+                    KeyraPasswordField(
+                        field4,
+                        { field4 = it.filter { c -> c in '0'..'9' }.take(4) },
+                        show,
+                        { show = !show },
+                        "Sigurnosni kod (3–4 znamenke)",
+                        numeric = true
+                    )
+                }
             }
 
             if (type == "Identitet") {
@@ -3928,6 +3961,7 @@ private fun AddScreen(model: KeyraViewModel) {
                     onClick = {
                         val cleanTitle = title.trim()
                         val savedCategory = resolvedCategoryName(category, original?.category, model.items.map { it.category })
+                        val cardDigits = normalizedCardDigits(field2)
                         val now = Calendar.getInstance()
                         val currentYear = now.get(Calendar.YEAR)
                         val currentMonth = now.get(Calendar.MONTH) + 1
@@ -3938,11 +3972,13 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Web-adresa nije valjana. Unesite ispravnu HTTP ili HTTPS adresu."
                             type == "Wi-Fi" && field1.isBlank() ->
                                 "Unesite naziv Wi-Fi mreže."
-                            type == "Kartica" && field2.isNotBlank() && field2.length !in 12..19 ->
+                            type == "Kartica" && field2.isNotBlank() && cardDigits == null ->
+                                "Broj kartice smije sadržavati samo znamenke, razmake i crtice."
+                            type == "Kartica" && field2.isNotBlank() && (cardDigits?.length ?: 0) !in 12..19 ->
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             type == "Kartica" && field2.isNotBlank() && !isValidCardNumber(field2) ->
                                 "Broj kartice nije prošao provjeru kontrolne znamenke."
-                            type == "Kartica" && field4.isNotBlank() && field4.length !in 3..4 ->
+                            type == "Kartica" && field4.isNotBlank() && !isValidCardSecurityCode(field4) ->
                                 "Sigurnosni kod mora sadržavati 3 ili 4 znamenke."
                             type == "Kartica" && field3.isNotBlank() && !Regex("^(0[1-9]|1[0-2])/(\\d{2}|\\d{4})$").matches(field3.trim()) ->
                                 "Datum isteka kartice unesite u obliku MM/GG ili MM/GGGG."
@@ -3960,7 +3996,7 @@ private fun AddScreen(model: KeyraViewModel) {
                             val extra = when (type) {
                                 "Kartica" -> mapOf(
                                     "Vlasnik kartice" to field1,
-                                    "Broj kartice" to field2,
+                                    "Broj kartice" to cardDigits.orEmpty(),
                                     "Vrijedi do" to field3,
                                     "Sigurnosni kod" to field4
                                 ).filterValues { it.isNotBlank() }
@@ -5187,7 +5223,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.9 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.10 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
