@@ -1577,8 +1577,12 @@ internal fun categoryChoices(
     return standard + other
 }
 
-internal fun resolvedCategoryName(selected: String, original: String?): String? {
-    if (original != null && selected == original) return original
+internal fun resolvedCategoryName(
+    selected: String,
+    original: String?,
+    existing: List<String> = emptyList()
+): String? {
+    if ((original != null && selected == original) || selected in existing) return selected
     return selected.trim().take(40).takeIf { it.isNotEmpty() }
 }
 
@@ -3902,7 +3906,7 @@ private fun AddScreen(model: KeyraViewModel) {
                 Button(
                     onClick = {
                         val cleanTitle = title.trim()
-                        val savedCategory = resolvedCategoryName(category, original?.category)
+                        val savedCategory = resolvedCategoryName(category, original?.category, model.items.map { it.category })
                         val now = Calendar.getInstance()
                         val currentYear = now.get(Calendar.YEAR)
                         val currentMonth = now.get(Calendar.MONTH) + 1
