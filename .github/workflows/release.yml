@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.10"
+        default: "0.6.11"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.10 poboljšava spremanje kartica na Androidu i iOS-u. Polje za broj kartice automatski grupira znamenke radi čitljivosti, dok se broj u šifriranom trezoru sprema bez razmaka. Stroga validacija prihvaća isključivo ASCII znamenke, razmake i crtice; više ne zanemaruje slova ili druge znakove prije provjere Luhnove kontrolne znamenke. Sigurnosni kod kartice (3 ili 4 znamenke) sada se tijekom unosa skriva i koristi brojčanu tipkovnicu. U popisu kartica prikazuju se samo zadnje četiri znamenke, čak i ako je vrijednost iz uvoza grupirana. Postojeće neispravne uvezene vrijednosti ne prepravljaju se automatski pri otvaranju uređivača. Dodani su Android regresijski testovi za PAN, prikaz i CVV validaciju. KEYRA1/KEYRA2/KEYRAREC1 i enkripcija trezora ostaju nepromijenjeni.
+          Keyra 0.6.11 pojačava obradu TOTP autentifikatora na Androidu i iOS-u. otpauth://totp URI-ji s ponovljenim parametrima (uključujući različita velika/mala slova), neispravnim kodiranjem ili neočekivanim dijelovima adrese više se ne prihvaćaju kao dvosmislene konfiguracije. Base32 tajne i ulazne URI adrese imaju jasne gornje granice duljine kako ne bi nepotrebno opteretile uređaj. Generiranje koda sigurno odbija neispravan interval, broj znamenki, algoritam ili vrijeme, bez dijeljenja nulom i prešutne zamjene algoritma. Oba sustava ostaju lokalna, bez mrežnih zahtjeva ili vanjskih servisa. Android regresijski testovi pokrivaju zlonamjerne URI-je, velike unose, pogrešne postavke i ispravan RFC 6238 kod. Enkripcija trezora, KEYRA1/KEYRA2 backup i KEYRAREC1 Recovery Key nisu promijenjeni.
 
           ## Provjere
           - Android lint i unit testovi
