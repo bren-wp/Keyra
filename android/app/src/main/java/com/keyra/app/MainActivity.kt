@@ -5857,12 +5857,22 @@ private fun openWebsite(context: Context, raw: String): Boolean {
     }.getOrDefault(false)
 }
 
-internal fun shouldClearOwnedClipboard(expected: String?, actual: String?, clipLabel: String?): Boolean =
-    expected != null && actual == expected && clipLabel == "Keyra"
+// Never retain a second plaintext password in a long-lived clipboard timer.
+// An ephemeral HMAC key prevents cheap offline guesses from the stored tag.
+internal fun clipboardOwnershipTag(key: ByteArray, value: String): ByteArray {
+    val mac = Mac.getInstance("HmacSHA256")
+    mac.init(SecretKeySpec(key, "HmacSHA256"))
+    return mac.doFinal(value.toByteArray(Charsets.UTF_8))
+}
+
+internal fun shouldClearOwnedClipboard(expectedTag: ByteArray?, currentTag: ByteArray?, clipLabel: String?): Boolean =
+    expectedTag != null && currentTag != null && clipLabel == "Keyra" &&
+        MessageDigest.isEqual(expectedTag, currentTag)
 
 private object SensitiveClipboard {
     private val handler = Handler(Looper.getMainLooper())
-    private var ownedValue: String? = null
+    private var ownedKey: ByteArray? = null
+    private var ownedTag: ByteArray? = null
     private var clearTask: Runnable? = null
 
     fun copy(context: Context, text: String) {
@@ -5873,31 +5883,45 @@ private object SensitiveClipboard {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
             }
         }
+        val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val tag = clipboardOwnershipTag(key, text)
         clipboard.setPrimaryClip(clip)
         clearTask?.let(handler::removeCallbacks)
-        ownedValue = text
+        ownedKey?.fill(0)
+        ownedTag?.fill(0)
+        ownedKey = key
+        ownedTag = tag
         val task = Runnable { clearIfOwned(context.applicationContext) }
         clearTask = task
         handler.postDelayed(task, 30_000L)
     }
 
     fun clearIfOwned(context: Context) {
-        val expected = ownedValue ?: return
-        // Do not clear text copied by the user in another application.
-        runCatching {
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val currentClip = clipboard.primaryClip
-            val actual = if (currentClip != null && currentClip.itemCount > 0) {
-                currentClip.getItemAt(0).text?.toString()
-            } else null
-            if (shouldClearOwnedClipboard(expected, actual, currentClip?.description?.label?.toString())) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-                else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        val key = ownedKey ?: return
+        val expected = ownedTag ?: return
+        try {
+            // Preserve text copied since Keyra's last write, even if the text
+            // is identical but came from a different clipboard source.
+            runCatching {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val currentClip = clipboard.primaryClip
+                val actual = if (currentClip != null && currentClip.itemCount > 0) {
+                    currentClip.getItemAt(0).text?.toString()
+                } else null
+                val currentTag = actual?.let { clipboardOwnershipTag(key, it) }
+                if (shouldClearOwnedClipboard(expected, currentTag, currentClip?.description?.label?.toString())) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+                    else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                }
             }
+        } finally {
+            key.fill(0)
+            expected.fill(0)
+            ownedKey = null
+            ownedTag = null
+            clearTask?.let(handler::removeCallbacks)
+            clearTask = null
         }
-        ownedValue = null
-        clearTask?.let(handler::removeCallbacks)
-        clearTask = null
     }
 }
 
