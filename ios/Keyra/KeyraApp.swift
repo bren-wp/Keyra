@@ -1706,7 +1706,27 @@ final class KeyraStore: ObservableObject {
         defaults.set(sensitiveReauthEnabled, forKey: "sensitive_reauth_enabled")
     }
 
+    // A device-owner prompt can finish after navigation, vault locking, or app
+    // backgrounding. Never run a delayed secret-reveal, export or erase action
+    // unless the same unlocked vault view and item are still active.
+    private func canCompleteProtectedAction(
+        _ epoch: UInt64,
+        screen expectedScreen: KeyraScreen,
+        selectedID expectedSelectedID: UUID?
+    ) -> Bool {
+        guard canFinishAuthentication(epoch), isSetup, screen == expectedScreen,
+              selected?.id == expectedSelectedID else { return false }
+        return screen != .unlock && screen != .onboarding && screen != .recovery
+    }
+
     func authorizeSensitive(reason: String, completion: @escaping () -> Void) {
+        let requestEpoch = authenticationEpoch
+        let expectedScreen = screen
+        let expectedSelectedID = selected?.id
+        guard canCompleteProtectedAction(
+            requestEpoch, screen: expectedScreen, selectedID: expectedSelectedID
+        ) else { return }
+
         guard sensitiveReauthEnabled && biometricEnabled else {
             completion()
             return
@@ -1719,8 +1739,11 @@ final class KeyraStore: ObservableObject {
             return
         }
 
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
-            DispatchQueue.main.async {
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { [weak self] success, error in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.canCompleteProtectedAction(
+                    requestEpoch, screen: expectedScreen, selectedID: expectedSelectedID
+                ) else { return }
                 if success {
                     completion()
                 } else if let error {
@@ -1731,16 +1754,26 @@ final class KeyraStore: ObservableObject {
     }
 
     func authorizeCritical(reason: String, completion: @escaping () -> Void) {
+        let requestEpoch = authenticationEpoch
+        let expectedScreen = screen
+        let expectedSelectedID = selected?.id
+        guard canCompleteProtectedAction(
+            requestEpoch, screen: expectedScreen, selectedID: expectedSelectedID
+        ) else { return }
+
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
-            // Uređaji bez owner-auth zaštite i dalje koriste aktivnu glavnu lozinku sesije.
+            // Devices without an owner-auth prompt still require an active unlocked session.
             completion()
             return
         }
 
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
-            DispatchQueue.main.async {
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { [weak self] success, error in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.canCompleteProtectedAction(
+                    requestEpoch, screen: expectedScreen, selectedID: expectedSelectedID
+                ) else { return }
                 if success {
                     completion()
                 } else if let error {
@@ -2724,7 +2757,11 @@ struct UnlockView: View {
                         }
                     } label: {
                         HStack {
-                            Image(systemName: "lock.fill")
+                            if store.isCreatingVault || store.isImportingVault || store.isUnlockingVault {
+                                ProgressView().tint(midnight)
+                            } else {
+                                Image(systemName: "lock.fill")
+                            }
                             Text(importing ? (store.isImportingVault ? "Uvoz trezora…" : "Uvezi trezor") : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : (store.isUnlockingVault ? "Otključavanje…" : "Otključaj"))).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
@@ -2822,6 +2859,7 @@ struct SecretField: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(reveal ? "Sakrij \(title)" : "Prikaži \(title)")
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 56)
@@ -5301,7 +5339,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji",
-                            subtitle: "Keyra 0.6.14"
+                            subtitle: "Keyra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")"
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
