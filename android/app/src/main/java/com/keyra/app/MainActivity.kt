@@ -5116,8 +5116,8 @@ private fun SettingsScreen(
         ) {
             item {
                 SettingsIntroCard(
-                    title = "Jednostavno. Lokalno. Zaštićeno.",
-                    subtitle = "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                    title = "Vaša Keyra, vaše postavke.",
+                    subtitle = "Sve važne opcije na jednom mjestu."
                 )
             }
 
@@ -5226,15 +5226,27 @@ private fun SettingsScreen(
                 }
             }
 
-            item { SectionTitle("PRIVATNOST I APLIKACIJA") }
+            item { SectionTitle("INFORMACIJE") }
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
                     "Pravila privatnosti",
-                    "Saznajte kako Keyra štiti podatke i što ne prikuplja.",
+                    "Pročitajte pravila privatnosti.",
                     onClick = {
-                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
-                            model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/politika-privatnosti")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
+                )
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Description,
+                    "Uvjeti korištenja",
+                    "Pročitajte uvjete korištenja aplikacije.",
+                    onClick = {
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/uvjeti-koristenja")) {
+                            model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
                 )
@@ -5242,15 +5254,20 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Info,
-                    "O aplikaciji Keyra",
-                    "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "O aplikaciji",
+                    "Keyra 0.6.13",
+                    onClick = {
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
                 )
             }
             item {
                 SettingRow(
                     Icons.Outlined.DeleteForever,
-                    "Izbriši sve lokalne podatke",
-                    "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja.",
+                    "Izbriši sve podatke",
+                    "Trajno izbrišite trezor i postavke s ovog uređaja.",
                     onClick = { confirmErase = true }
                 )
             }
@@ -5471,7 +5488,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                         when {
                             score == null && issueIds.isNotEmpty() -> "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
-                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
+                            issueIds.isEmpty() -> "Nisu pronađeni sigurnosni problemi."
                             else -> "Pregledajte stavke koje zahtijevaju pažnju."
                         },
                         color = Muted
@@ -5503,8 +5520,8 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 GlassCard {
                     SecurityProtectionRow(
                         icon = Icons.Outlined.Lock,
-                        title = "Lokalni šifrirani trezor",
-                        subtitle = "AES-256-GCM • bez Keyra backenda"
+                        title = "Šifrirani trezor",
+                        subtitle = "Zaštićeni podaci"
                     )
                     HorizontalDivider(color = Ice.copy(alpha = .14f))
                     SecurityProtectionRow(
