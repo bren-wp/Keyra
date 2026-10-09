@@ -264,3 +264,16 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Both main CI checks and release workflow success, seven v0.6.16 assets verified.
 - [ ] Physical Android/iOS interactive QA: initial password typing and keyboard, full recovery, imported older KEYRA1/KEYRA2 backups, auto-lock in background, TOTP and biometric access.
 - [ ] Legal URLs validated on a real device; store signing and distribution readiness independently verified.
+
+## 0.6.17 protected actions and settings polish
+
+- [x] Android: snapshot biometric request epoch, screen and selected item; ignore stale callback after background, lock, navigation or item change.
+- [x] iOS: guard sensitive and critical owner-auth callbacks with an active matching session, screen and selected item; also protect no-prompt fallbacks.
+- [x] Android JUnit regression tests cover invalidated sensitive authorizations.
+- [x] Both platforms: About section reads the installed application version, not a hard-coded obsolete version.
+- [x] Unlock UI: progress feedback and accessible show/hide password control names.
+- [ ] Android PR lint/unit/build/privacy CI passes for final branch commit.
+- [ ] iOS PR build/analyze/simulator launch/privacy CI passes for the same commit.
+- [ ] Both main CI runs and release workflow pass and all seven v0.6.17 assets are verified.
+- [ ] Physical-device testing: #25 master-password typing crash, biometrics, backup import/export, erase, recovery and accessibility.
+- [ ] Store signing, distribution readiness and full end-to-end testing on physical Android and iOS devices.

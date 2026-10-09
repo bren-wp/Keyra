@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.16"
+        default: "0.6.17"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.16 donosi sigurniji i brži postupak prve obnove trezora na Androidu i iOS-u. Kriptografski zahtjevna provjera Recovery Key i KEYRA2 sigurnosne kopije više ne blokira glavnu korisničku nit, prikaz obnove ima jasan status, a višestruki zahtjevi su onemogućeni. iOS sada čita vanjske datoteke ograničenim nizom bajtova prije dekodiranja, pa preveliki dokument ne mora biti učitan u cijelosti. Android strogo odbija neispravan UTF-8 pri uvozu te ne prekida Unicode surrogate par pri ograničavanju nove glavne lozinke. Dodani su Android regresijski testovi, a README je potpuno redizajniran na engleskom uz postojeće stvarne Keyra ilustracije, marketinški pregled, instalacijske upute i transparentne informacije o privatnosti. Format šifriranja i KEYRA1/KEYRA2/KEYRAREC1 ostaju nepromijenjeni; fizički uređaji, prijavljeno rušenje pri tipkanju i produkcijski potpisani paketi zahtijevaju zasebnu potvrdu.
+          Keyra 0.6.17 dodatno štiti biometrijske potvrde: zakašnjeli pozivi ne mogu izvršiti osjetljivu radnju nakon zaključavanja trezora, pozadinskog rada, promjene zaslona ili promjene odabrane stavke. Android ima nove regresijske testove sigurnosti zahtjeva. Obje platforme prikazuju stvarnu instaliranu verziju u opciji O aplikaciji, poboljšani su indikatori napretka pri otključavanju i pristupačnost tipki za otkrivanje lozinke. Formati sigurnosnih kopija KEYRA1/KEYRA2 i Recovery Key KEYRAREC1 nisu mijenjani. Rušenje pri tipkanju glavne lozinke navedeno u issue #25 i dalje zahtijeva reprodukciju i provjeru na fizičkom uređaju.
 
           ## Provjere
           - Android lint i unit testovi
