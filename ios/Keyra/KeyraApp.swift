@@ -674,9 +674,11 @@ final class AuthStore {
         }
     }
 
-    func clear() {
-        _ = AuthVerifierKeychain.clear()
+    @discardableResult
+    func clear() -> Bool {
+        let verifierCleared = AuthVerifierKeychain.clear()
         clearLegacyDefaults()
+        return verifierCleared
     }
 
     func verify(password: String) -> Bool {
@@ -1547,7 +1549,7 @@ final class KeyraStore: ObservableObject {
     @discardableResult
     func eraseAllLocalData() -> Bool {
         vault.clear()
-        auth.clear()
+        let verifierCleared = auth.clear()
         let keyCleared = KeychainVault.clear()
 
         let keys = [
@@ -1559,8 +1561,8 @@ final class KeyraStore: ObservableObject {
         ]
         keys.forEach { defaults.removeObject(forKey: $0) }
 
-        guard keyCleared else {
-            message = "Uređajni ključ nije moguće sigurno izbrisati. Pokušajte ponovno."
+        guard keyCleared && verifierCleared else {
+            message = "Brisanje nije potpuno uspjelo. Ponovite postupak."
             return false
         }
 
@@ -1575,7 +1577,7 @@ final class KeyraStore: ObservableObject {
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
         screen = .onboarding
-        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        message = "Podaci trezora i zaštitni ključevi su izbrisani."
         return true
     }
 
@@ -2608,8 +2610,19 @@ struct UnlockView: View {
                     .foregroundStyle(muted)
 
                     SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal)
+                        .onChange(of: password) { _, value in
+                            if creating && !importing && value.count > 256 {
+                                password = String(value.prefix(256))
+                            }
+                        }
                     if creating && !importing {
                         SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal)
+                            .onChange(of: confirm) { _, value in
+                                if value.count > 256 { confirm = String(value.prefix(256)) }
+                            }
+                        Text("Glavna lozinka: najmanje 12 znakova.")
+                            .font(.caption)
+                            .foregroundStyle(muted)
                     }
                     if importing {
                         Button {
@@ -5222,7 +5235,7 @@ struct SettingsView: View {
                         SettingRow(
                             icon: "info.circle",
                             title: "O aplikaciji",
-                            subtitle: "Keyra 0.6.13"
+                            subtitle: "Keyra 0.6.14"
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
