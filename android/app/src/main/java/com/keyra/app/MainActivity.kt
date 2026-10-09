@@ -2863,11 +2863,12 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         "Ostalo" to Muted
     )
     var search by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("Prijava") }
+    var type by remember { mutableStateOf("Sve") }
 
     val collectionItems = model.items
         .filter { item ->
             when (type) {
+                "Sve" -> true
                 "Favoriti" -> item.favorite
                 else -> item.type == type
             }
@@ -2922,7 +2923,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     .padding(horizontal = side, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
+                listOf("Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
                     FilterChip(
                         selected = type == value,
                         onClick = { type = value },
