@@ -318,3 +318,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Physical iOS QA: simulate vault.bin deletion failure and Keychain deletion failures; verify user receives error, data is not incorrectly reported erased and retries are safe.
 - [ ] Physical Android/iOS QA: full vault erasure, pasteboard owned/third-party content, Android background clipboard read restrictions, and device lock lifecycle.
 - [ ] Issue #25 first-run master-password keyboard crash remains open pending redacted physical crash logs and UI test.
+
+## 0.6.21 first-run master-password keyboard regression — issue #25
+
+- [x] Android: stabilize the password visual transformation across recomposition and tag first-run inputs and actions for automated UI testing.
+- [x] iOS: preserve focused password input when toggling secure/visible entry; add accessibility identifiers for tested actions.
+- [x] Android: add an instrumented Compose UI test covering sequential input, diacritics/emoji, deletion, 256 boundary, 12-character creation, focus, masking, explicit lock, Activity recreation, wrong-password rejection and re-unlock.
+- [x] iOS: add an XCTest UI target and test covering sequential input, diacritics, deletion, 256 boundary, 12-character creation, focus, masking, force-close/relaunch, wrong-password rejection and re-unlock.
+- [x] CI: add Android emulator and iOS simulator UI runs as PR/main branch quality gates; an app-launch-only smoke test no longer suffices.
+- [x] Document manual redacted crash report procedure in [MASTER_PASSWORD_INPUT_QA.md](MASTER_PASSWORD_INPUT_QA.md).
+- [ ] Android instrumented test and all existing Android CI tasks pass on final PR commit.
+- [ ] iOS XCTest UI test and existing build/analyze/simulator checks pass on the same final PR commit.
+- [ ] Both platform main CI and new release assets verified after any merge.
+- [ ] **Physical Android device**: confirm all issue #25 test cases including third-party keyboards, portrait/landscape, pasting, accessibility and backgrounding.
+- [ ] **Physical iPhone**: confirm all issue #25 test cases including soft keyboard, Unicode variants, focus transitions, paste and accessibility.
+- [ ] Confirm original reported failure is reproduced and repaired, or obtain a sanitized exception/stack trace proving no remaining crash; **do not close #25** without this evidence.
