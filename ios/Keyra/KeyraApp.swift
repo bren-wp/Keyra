@@ -2161,42 +2161,6 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-struct FeatureCard: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var compact = false
-
-    var body: some View {
-        HStack(spacing: compact ? 10 : 14) {
-            Image(systemName: icon)
-                .font(compact ? .headline : .title2)
-                .foregroundStyle(cyan)
-                .frame(width: compact ? 40 : 48, height: compact ? 40 : 48)
-                .background(Color(hex: 0x0A2D3C))
-                .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 15))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(compact ? .subheadline.bold() : .headline)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(subtitle)
-                    .font(compact ? .caption : .subheadline)
-                    .foregroundStyle(muted)
-                    .lineLimit(compact ? 1 : 2)
-                    .minimumScaleFactor(0.8)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(compact ? 10 : 14)
-        .background(slate.opacity(0.92))
-        .overlay(RoundedRectangle(cornerRadius: compact ? 17 : 20).stroke(cyan.opacity(0.34), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 17 : 20))
-    }
-}
-
-
 struct OnboardingHeroBadge: View {
     let icon: String
 
