@@ -2512,7 +2512,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         }
 
     val passwordItems = model.items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
-    val weak = passwordItems.count { !isStrongPassword(it.password) }
+    val riskCount = securityIssueCount(model.items)
     val duplicated = passwordItems.groupBy { it.password }
         .filter { it.key.isNotBlank() && it.value.size > 1 }
         .values.flatten().map { it.id }.toSet()
@@ -2587,7 +2587,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                         Modifier.padding(start = 11.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Kategorija: $category", color = Cyan, fontSize = 12.sp)
+                        Text("Kategorija: ${category.ifBlank { "Bez kategorije" }}", color = Cyan, fontSize = 12.sp)
                         IconButton(
                             onClick = model::clearVaultCategoryFilter,
                             modifier = Modifier.size(30.dp)
@@ -2614,7 +2614,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     SummaryCard(model.items.size.toString(), "Ukupno", Cyan, Modifier.width(112.dp))
-                    SummaryCard(weak.toString(), "Rizične", Danger, Modifier.width(112.dp))
+                    SummaryCard(riskCount.toString(), "Rizične", Danger, Modifier.width(112.dp))
                     SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.width(122.dp))
                 }
             } else {
@@ -2623,7 +2623,7 @@ private fun VaultScreen(model: KeyraViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     SummaryCard(model.items.size.toString(), "Ukupno", Cyan, Modifier.weight(1f))
-                    SummaryCard(weak.toString(), "Rizične", Danger, Modifier.weight(1f))
+                    SummaryCard(riskCount.toString(), "Rizične", Danger, Modifier.weight(1f))
                     SummaryCard(duplicated.size.toString(), "Ponovljene", Indigo, Modifier.weight(1f))
                 }
             }
@@ -2919,6 +2919,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
     val visibleCategories = categories.filter { pair -> collectionItems.any { it.category == pair.first } } +
         collectionItems.map { it.category }.distinct()
             .filter { it !in knownCategories }
+            .sorted()
             .map { it to Muted }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -3044,7 +3045,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (narrow) 15.sp else 16.sp, maxLines = 1)
+                                        Text(name.ifBlank { "Bez kategorije" }, color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (narrow) 15.sp else 16.sp, maxLines = 1)
                                         Text("$count stavki", color = Muted, fontSize = 12.sp)
                                     }
                                 }
@@ -3290,20 +3291,25 @@ internal data class TotpConfig(
 private const val BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
 internal fun normalizeBase32Secret(raw: String): String? {
-    val clean = raw
-        .trim()
-        .replace(" ", "")
-        .replace("-", "")
-        .trimEnd('=')
-        .uppercase()
-
-    if (clean.isBlank() || clean.any { it !in BASE32_ALPHABET }) return null
-    return if (decodeBase32(clean)?.isNotEmpty() == true) clean else null
+    val clean = raw.trim().replace(" ", "").replace("-", "").uppercase()
+    return if (decodeBase32(clean)?.isNotEmpty() == true) clean.trimEnd('=') else null
 }
 
 internal fun decodeBase32(raw: String): ByteArray? {
-    val clean = raw.trim().trimEnd('=').uppercase()
-    if (clean.isBlank()) return null
+    val encoded = raw.trim().uppercase()
+    val clean = encoded.trimEnd('=')
+    if (clean.isEmpty() || clean.any { it !in BASE32_ALPHABET }) return null
+    val remainder = clean.length % 8
+    if (remainder !in setOf(0, 2, 4, 5, 7)) return null
+    val padding = encoded.length - clean.length
+    val expectedPadding = when (remainder) {
+        2 -> 6
+        4 -> 4
+        5 -> 3
+        7 -> 1
+        else -> 0
+    }
+    if (padding > 0 && (encoded.length % 8 != 0 || padding != expectedPadding)) return null
 
     val output = ArrayList<Byte>()
     var buffer = 0
@@ -3323,7 +3329,8 @@ internal fun decodeBase32(raw: String): ByteArray? {
         }
     }
 
-    return output.toByteArray()
+    // RFC 4648 requires unused trailing bits to be zero.
+    return if (buffer == 0) output.toByteArray() else null
 }
 
 private fun normalizeTotpAlgorithm(raw: String): String? = when (
@@ -3849,8 +3856,9 @@ private fun AddScreen(model: KeyraViewModel) {
             item {
                 Text("Mapa / kategorija", color = Ice, fontSize = 12.sp, letterSpacing = 2.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo").forEach {
-                        FilterChip(selected = category == it, onClick = { category = it }, label = { Text(it) })
+                    (listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo") +
+                        listOf(category).filter { it !in listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo") }).forEach {
+                        FilterChip(selected = category == it, onClick = { category = it }, label = { Text(it.ifBlank { "Bez kategorije" }) })
                     }
                 }
             }
@@ -5113,7 +5121,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.6 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.7 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
