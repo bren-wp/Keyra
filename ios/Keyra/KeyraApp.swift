@@ -1251,6 +1251,7 @@ final class KeyraStore: ObservableObject {
     @Published var isSetup: Bool
     @Published var importingNewVault = false
     @Published private(set) var isCreatingVault = false
+    @Published private(set) var isUnlockingVault = false
 
     private var sessionPassword: String?
 
@@ -1459,41 +1460,53 @@ final class KeyraStore: ObservableObject {
         screen = .vault
     }
 
-    func unlock(password: String) -> Bool {
+    func unlock(password: String) {
+        guard !isUnlockingVault, !isCreatingVault else { return }
         let now = Date().timeIntervalSince1970
         let lockoutUntil = defaults.double(forKey: "unlock_lockout_until")
         if lockoutUntil > now {
             let seconds = max(1, Int(ceil(lockoutUntil - now)))
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
-            return false
+            return
+        }
+        guard password.count <= 256 else {
+            message = "Glavna lozinka ne smije biti dulja od 256 znakova."
+            return
         }
 
-        guard auth.verify(password: password) else {
-            let attempts = defaults.integer(forKey: "unlock_failed_attempts") + 1
-            let penalty: TimeInterval
-            switch attempts {
-            case 10...: penalty = 300
-            case 7...: penalty = 60
-            case 5...: penalty = 30
-            default: penalty = 0
+        isUnlockingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let verified = self.auth.verify(password: password)
+            DispatchQueue.main.async {
+                self.isUnlockingVault = false
+                if !verified {
+                    let attempts = self.defaults.integer(forKey: "unlock_failed_attempts") + 1
+                    let penalty: TimeInterval
+                    switch attempts {
+                    case 10...: penalty = 300
+                    case 7...: penalty = 60
+                    case 5...: penalty = 30
+                    default: penalty = 0
+                    }
+                    self.defaults.set(attempts, forKey: "unlock_failed_attempts")
+                    self.defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
+                    self.message = penalty > 0
+                        ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+                        : "Glavna lozinka nije ispravna."
+                    return
+                }
+
+                self.defaults.removeObject(forKey: "unlock_failed_attempts")
+                self.defaults.removeObject(forKey: "unlock_lockout_until")
+                self.sessionPassword = password
+                guard self.load() else {
+                    self.sessionPassword = nil
+                    return
+                }
+                self.screen = .vault
             }
-            defaults.set(attempts, forKey: "unlock_failed_attempts")
-            defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
-            message = penalty > 0
-                ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
-                : "Glavna lozinka nije ispravna."
-            return false
         }
-
-        defaults.removeObject(forKey: "unlock_failed_attempts")
-        defaults.removeObject(forKey: "unlock_lockout_until")
-        sessionPassword = password
-        guard load() else {
-            sessionPassword = nil
-            return false
-        }
-        screen = .vault
-        return true
     }
 
     func unlockBiometric() {
@@ -2658,12 +2671,12 @@ struct UnlockView: View {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
                             else { store.createVault(password: password) }
                         } else {
-                            _ = store.unlock(password: password)
+                            store.unlock(password: password)
                         }
                     } label: {
                         HStack {
                             Image(systemName: "lock.fill")
-                            Text(importing ? "Uvezi trezor" : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : "Otključaj")).fontWeight(.bold)
+                            Text(importing ? "Uvezi trezor" : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : (store.isUnlockingVault ? "Otključavanje…" : "Otključaj"))).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -2672,7 +2685,7 @@ struct UnlockView: View {
                     .foregroundStyle(midnight)
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
-                    .disabled(store.isCreatingVault || (importing && importPayload == nil))
+                    .disabled(store.isCreatingVault || store.isUnlockingVault || (importing && importPayload == nil))
 
                     if creating {
                         Button {
