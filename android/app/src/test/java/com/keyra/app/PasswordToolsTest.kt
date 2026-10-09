@@ -209,6 +209,37 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun base32AcceptsPaddedAndUnpaddedRfc4648Secrets() {
+        assertArrayEquals("f".toByteArray(Charsets.US_ASCII), decodeBase32("MY======"))
+        assertArrayEquals("f".toByteArray(Charsets.US_ASCII), decodeBase32("MY"))
+        assertEquals("MZXW6YTBOI", normalizeBase32Secret("mzxw6ytboi======"))
+        assertEquals("MY", normalizeBase32Secret("my======"))
+    }
+
+    @Test
+    fun base32RejectsTruncationBadPaddingAndNonzeroTrailingBits() {
+        listOf("M", "MZ", "MZ======", "MY=====", "MY=======", "=MY======", "MY===A==", "MZXW6YTBO")
+            .forEach { malformed ->
+                assertTrue("Must reject malformed Base32: $malformed", decodeBase32(malformed) == null)
+                assertTrue("Must not import malformed TOTP: $malformed", parseTotpInput(malformed) == null)
+            }
+        assertTrue(normalizeBase32Secret("MZ") == null)
+    }
+
+    @Test
+    fun reusedStrongCredentialsCountAsVaultSecurityRisks() {
+        val strong = "Abcd1234!Efgh56"
+        val entries = listOf(
+            VaultItem(id = "one", title = "One", password = strong),
+            VaultItem(id = "two", title = "Two", password = strong)
+        )
+
+        assertTrue(entries.all { isStrongPassword(it.password) })
+        assertEquals(2, securityIssueCount(entries))
+        assertEquals(0, securityScore(entries) ?: -1)
+    }
+
+    @Test
     fun totpCountdownResetsExactlyOnPeriodBoundary() {
         val config = TotpConfig(
             secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
