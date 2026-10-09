@@ -445,6 +445,8 @@ struct VaultItem: Identifiable, Codable, Equatable {
 enum KeyraError: Error {
     case invalidData
     case keyUnavailable
+    // OSStatus is safe to show only in DEBUG diagnostics; never log Keychain data.
+    case keychainStatus(OSStatus)
     case invalidBackup
 }
 
@@ -587,7 +589,7 @@ enum KeychainVault {
             return
         }
         guard updateStatus == errSecItemNotFound, allowInsert else {
-            throw KeyraError.keyUnavailable
+            throw KeyraError.keychainStatus(updateStatus)
         }
 
         var add = query
@@ -595,7 +597,7 @@ enum KeychainVault {
         add[kSecValueData as String] = data
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
-            throw KeyraError.keyUnavailable
+            throw KeyraError.keychainStatus(addStatus)
         }
     }
 
@@ -1396,14 +1398,25 @@ final class KeyraStore: ObservableObject {
                 failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
             } catch {
                 saved = false
-                // DEBUG-only failure category is safe for CI: no file path,
-                // password, ciphertext or Keychain contents are ever logged.
-                #if DEBUG
-                let diagnostic = error as NSError
-                failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj. [\(diagnostic.domain):\(diagnostic.code)]"
-                #else
-                failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
-                #endif
+                // Distinguish a Keychain entitlement/protection failure from
+                // filesystem write failures without disclosing any secrets.
+                switch error {
+                case KeyraError.keychainStatus(let status):
+                    #if DEBUG
+                    failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain. [OSStatus:\(status)]"
+                    #else
+                    failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain."
+                    #endif
+                case KeyraError.keyUnavailable:
+                    failureMessage = "Zaštitni ključ trezora trenutno nije dostupan."
+                default:
+                    #if DEBUG
+                    let diagnostic = error as NSError
+                    failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj. [\(diagnostic.domain):\(diagnostic.code)]"
+                    #else
+                    failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
+                    #endif
+                }
             }
             if !saved {
                 _ = self.vault.clear()
