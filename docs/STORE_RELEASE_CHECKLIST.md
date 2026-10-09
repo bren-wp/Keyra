@@ -167,7 +167,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Novi unos se trimma i prazan se odbija. Nepromijenjene ili odabrane postojeće uvezene vrijednosti, uključujući duge i prazne nazive, ostaju netaknute.
 - [x] Android JUnit testovi pokrivaju ponovne odabire, nazive i očuvanje uvezenih kategorija.
 - [x] Detalji prijave uspoređuju ponovno korištenje lozinke samo s prijavama i Wi-Fi stavkama.
-- [ ] Android 0.6.8 lint, unit, build, privacy uspješni na završnom PR commitu.
-- [ ] iOS 0.6.8 build/analyze, simulator launch smoke, privacy uspješni na istom SHA-u.
-- [ ] Android i iOS main CI te GitHub release workflow uspješni nakon mergea; 7 artefakata potvrđeno.
+- [x] Android 0.6.8 lint, unit, build, privacy uspješni na završnom PR commitu `d2cd30be63a7d714ace0395d85d05e49c27a1895`.
+- [x] iOS 0.6.8 build/analyze, simulator launch smoke, privacy uspješni na istom SHA-u.
+- [x] Android i iOS main CI te GitHub release workflow uspješni nakon mergea na `a4c89dcc5c78ade3386688c8457de77f51cb9a7f`; 7 artefakata potvrđeno.
 - [ ] Ručni QA fizičkih Android/iOS uređaja i KEYRA1/KEYRA2 povrata.
+
+## 0.6.9 2FA i lokalna procjena predvidljivih lozinki
+- [x] Android/iOS: neispravni autentifikatori nisu lažno označeni kao „2FA aktivan”, nego su vidljivi u trezoru i sigurnosnim upozorenjima.
+- [x] Neispravni TOTP algoritam, broj znamenki ili period iz uvoza i otpauth URI-ja ne zamjenjuju se prešutno zadanim vrijednostima.
+- [x] Ocjena 0–100 jasno je ograničena na lozinke; ukupan broj upozorenja uključuje neispravan TOTP.
+- [x] Android/iOS: lokalni heuristički test dodatno upozorava na očite predvidljive fragmente i ponovljene znakove. Ne provjerava poznate kompromitirane lozinke online.
+- [x] Android regresijski testovi dodani za invalid TOTP, score i predvidljive lozinke.
+- [ ] Android lint, unit, build, privacy 0.6.9 uspješni na finalnom PR SHA-u.
+- [ ] iOS build/analyze, simulator launch smoke, privacy 0.6.9 uspješni na istom SHA-u.
+- [ ] Oba main CI-ja i release workflow uspješni; v0.6.9 objavljen sa svih 7 artefakata.
+- [ ] Ručni fizički Android/iOS QA i stare KEYRA1/KEYRA2 sigurnosne kopije.
