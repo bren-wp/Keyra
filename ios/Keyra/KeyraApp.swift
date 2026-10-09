@@ -1137,8 +1137,8 @@ func securityIssueCount(_ items: [VaultItem]) -> Int {
     securityIssueIDs(items).count
 }
 
-func resolvedCategoryName(_ selected: String, original: String?) -> String? {
-    if let original, selected == original { return original }
+func resolvedCategoryName(_ selected: String, original: String?, existing: [String] = []) -> String? {
+    if (original != nil && selected == original) || existing.contains(selected) { return selected }
     let trimmed = selected.trimmingCharacters(in: .whitespacesAndNewlines)
     let normalized = String(trimmed.prefix(40))
     return normalized.isEmpty ? nil : normalized
@@ -4012,7 +4012,8 @@ struct AddEditView: View {
                     KeyraField(title: "Ili upišite vlastitu kategoriju", text: $category)
                         .textInputAutocapitalization(.sentences)
                         .onChange(of: category) { _, value in
-                            if value.count > 40 && value != original?.category {
+                            if value.count > 40 && value != original?.category &&
+                               !store.items.contains(where: { $0.category == value }) {
                                 category = String(value.prefix(40))
                             }
                         }
@@ -4065,7 +4066,7 @@ struct AddEditView: View {
                             store.message = validationMessage
                             return
                         }
-                        guard let savedCategory = resolvedCategoryName(category, original: original?.category) else {
+                        guard let savedCategory = resolvedCategoryName(category, original: original?.category, existing: store.items.map(\.category)) else {
                             store.message = "Unesite naziv kategorije."
                             return
                         }
