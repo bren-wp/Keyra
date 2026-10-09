@@ -52,6 +52,8 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master.typeText("WrongDemo#2026")
         app.buttons["keyra-submit-master-password"].tap()
         XCTAssertTrue(master.waitForExistence(timeout: 15), "Wrong password must not unlock")
+        XCTAssertTrue(app.staticTexts["Glavna lozinka nije ispravna."].waitForExistence(timeout: 20),
+                      "Wrong-password authentication must finish before another attempt")
 
         master.tap()
         master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 14))
