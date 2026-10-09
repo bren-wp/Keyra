@@ -324,6 +324,58 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun predictableLongPasswordsAreNotMarkedStrong() {
+        listOf(
+            "Password123!VeryLong",
+            "Qwerty123!LongSecret",
+            "Welcome2026!Safe?",
+            "Lozinka2026!Velika",
+            "Abcdef!AAAAA123"
+        ).forEach { password ->
+            assertFalse("Predictable password must be flagged: $password", isStrongPassword(password))
+        }
+        assertTrue(isStrongPassword("Abcd1234!Efgh56"))
+        assertTrue(isStrongPassword("Xyz12345!Klmn67890"))
+    }
+
+    @Test
+    fun invalidImportedTotpFieldsBecomeSecurityWarningsWithoutAffectingPasswordScore() {
+        val secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        val validTotp = VaultItem(
+            id = "valid", title = "Valid 2FA", type = "Autentifikator",
+            fields = mapOf("TOTP tajna" to secret, "Znamenke" to "6", "Period" to "30")
+        )
+        val corruptedTotp = VaultItem(
+            id = "broken", title = "Broken 2FA", type = "Autentifikator",
+            fields = mapOf("TOTP tajna" to secret, "Znamenke" to "six", "Period" to "30")
+        )
+        val credential = VaultItem(id = "strong", title = "Strong login", password = "Abcd1234!Efgh56")
+        assertTrue(totpConfigFromFields(validTotp.fields) != null)
+        assertTrue(totpConfigFromFields(corruptedTotp.fields) == null)
+        assertEquals(setOf("broken"), securityIssueIds(listOf(validTotp, corruptedTotp, credential)))
+        assertEquals(1, securityIssueCount(listOf(validTotp, corruptedTotp, credential)))
+        assertEquals(100, securityScore(listOf(validTotp, corruptedTotp, credential)) ?: -1)
+        assertEquals(null, securityScore(listOf(corruptedTotp)))
+    }
+
+    @Test
+    fun totpRejectsInvalidUriParametersAndFallbackSettings() {
+        val secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        listOf(
+            "otpauth://totp/Keyra?secret=$secret&digits=six",
+            "otpauth://totp/Keyra?secret=$secret&period=slow",
+            "otpauth://totp/Keyra?secret=$secret&algorithm=SHA999"
+        ).forEach { uri ->
+            assertTrue("Invalid otpauth URI must fail: $uri", parseTotpInput(uri) == null)
+        }
+        assertTrue(parseTotpInput(secret, fallbackDigits = 9) == null)
+        assertTrue(parseTotpInput(secret, fallbackPeriod = 0) == null)
+        assertTrue(parseTotpInput(secret, fallbackAlgorithm = "SHA999") == null)
+        assertTrue(totpConfigFromFields(mapOf("TOTP tajna" to secret, "Period" to "zero")) == null)
+        assertTrue(parseTotpInput(secret) != null)
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
