@@ -133,7 +133,19 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Prazna lozinka više se ne prikazuje kao snažna; prazna sigurnosna statistika nije lažno označena kao uspješna provjera.
 - [x] iOS popis stavki koristi pristupačne gumbe; akcije za dodavanje i sortiranje imaju VoiceOver oznake.
 - [x] Zadržani KEYRA1 / KEYRA2 / KEYRAREC1 parseri i postojeće privacy zaštite.
-- [ ] Android 0.6.5 CI i privacy gate zeleni na završnom PR SHA-u.
-- [ ] iOS 0.6.5 CI i privacy gate zeleni na istom PR SHA-u.
-- [ ] GitHub release v0.6.5 objavljen tek nakon uspješnog main CI-ja i release workflowa.
+- [x] Android 0.6.5 CI i privacy gate zeleni na PR commitu `73910449c75b58fa4d39949f3ef79ebe7b3d24d7`.
+- [x] iOS 0.6.5 CI i privacy gate zeleni na istom PR commitu.
+- [x] GitHub release v0.6.5 objavljen nakon uspješnog main CI-ja i release workflowa na `e270387b0c941949dace7d3b01ce1b19f93cdb7e`.
 - [ ] Ručni test obnove stare KEYRA1/KEYRA2 kopije i mobilne pristupačnosti na stvarnim uređajima.
+
+## 0.6.6 security scoring i Collections regression gate
+- [x] Android i iOS: nedostajuće lozinke prijava i Wi-Fi stavki uključene su u sigurnosna upozorenja i rezultat.
+- [x] Ponovljene lozinke i dalje se računaju samo za popunjene vrijednosti; rizični rezultati se ne prikazuju zeleno.
+- [x] Lokalna sigurnosna procjena prikazuje ispravne poruke za stavke bez lozinke.
+- [x] Trezor i Security Center prikazuju broj rizičnih umjesto samo slabih lozinki.
+- [x] Kolekcije ne prikazuju kartice s 0 stavki i imaju akciju za prazan trezor; uvezene kategorije ostaju dostupne.
+- [x] Android unit testovi dodani za prazne/ponovljene lozinke i sigurnosni rezultat.
+- [ ] Android 0.6.6 lint, unit testovi, build i privacy gate zeleni na završnom PR SHA-u.
+- [ ] iOS 0.6.6 build, analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
+- [ ] GitHub release v0.6.6 sa svim paketima i SHA256SUMS potvrđen nakon mergea i main CI-ja.
+- [ ] Ručna provjera na fizičkom Android i iOS uređaju (uvijek ostaje otvorena dok se ne provede).

@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.5"
+        default: "0.6.6"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje poboljšava pristupačnost i preglednost Android i iOS aplikacija: početni uvoz šifrirane sigurnosne kopije sada na obje platforme koristi sistemski file picker umjesto međuspremnika, a prazni rezultati Trezora i Kolekcija imaju jasnu akciju za čišćenje filtara, otvaranje stavki bolje radi s VoiceOverom, tipke za sortiranje i dodavanje imaju pristupačne oznake, a sigurnosni status više ne označava prazne lozinke kao snažne niti prikazuje lažnu potvrdu kada nema lozinki za provjeru. Postojeći lokalni backup, Recovery Key, enkripcija i privacy gateovi ostaju nepromijenjeni.
+          Ovo izdanje usklađuje sigurnosne procjene i Kolekcije na Androidu i iOS-u. Nedostajuće lozinke prijava i Wi-Fi stavki sada su vidljiva sigurnosna upozorenja i ulaze u ukupan rezultat. Rizične stavke imaju točan opis, a sigurnosni status nije prikazan kao zelen ako postoje upozorenja. Kolekcije prikazuju samo kategorije koje sadrže stavke, čuvaju i kategorije iz uvezenih trezora te nude akciju za dodavanje prve stavke kada je trezor prazan. Dodani su Android regresijski testovi. Format backupa, šifriranje, lokalna privatnost i Recovery Key nisu mijenjani.
 
           ## Provjere
           - Android lint i unit testovi
