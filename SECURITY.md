@@ -63,3 +63,11 @@ Preostali release gateovi za potpuno označavanje Recovery Key funkcionalnosti k
 - iOS privacy shield aktivira se već na `UIApplication.willResignActiveNotification`, prije nego aplikacija potpuno prijeđe u neaktivno/background stanje, a ponovno se uklanja tek nakon `didBecomeActive`.
 - Android i iOS Security Center prikazuju isti blok aktivnih zaštita: lokalni šifrirani trezor, zaštitu zaslona, privremeni međuspremnik i potvrdu kritičnih radnji.
 - Android osjetljivi clipboard i dalje je označen kao sensitive na podržanim verzijama i čisti se nakon 30 sekundi; iOS clipboard ostaje `localOnly` s istim rokom od 30 sekundi.
+
+## 0.6.4 UI/UX security simplification
+
+- uklonjen je duplicirani KEYRA backup export/import preko clipboarda iz korisničkog UI-ja
+- podatkovni backup koristi jedan primarni tok kroz sistemski Files/Document picker
+- Recovery Key ostaje odvojen od podatkovnog backupa jer štiti vault ključ, a ne zapise trezora
+- uklanjanje dupliciranih akcija smanjuje mogućnost pogrešnog odabira slabijeg kanala i pojednostavljuje kritične recovery/backup tokove
+- osjetljivi clipboard za pojedinačne vrijednosti ostaje vremenski ograničen i zaštićen platformskim oznakama gdje su dostupne
