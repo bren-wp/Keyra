@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
@@ -46,10 +47,8 @@ class MasterPasswordEntryInstrumentedTest {
 
         // A single overlong paste must be truncated without crashing the IME.
         master.performTextInput("A".repeat(280))
-        compose.runOnIdle {
-            val value = master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
-            assertEquals(256, value.length)
-        }
+        val bounded = master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+        assertEquals(256, bounded.length)
         master.performTextClearance()
         compose.onNodeWithContentDescription("Prikaži Glavna lozinka").performClick()
         master.performClick()
@@ -72,7 +71,9 @@ class MasterPasswordEntryInstrumentedTest {
         val unlock = compose.onNodeWithTag("keyra-master-password")
         unlock.performTextInput("PogresnaLozinka2026")
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
-        waitFor("keyra-master-password")
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithText("Glavna lozinka nije ispravna.").fetchSemanticsNodes().isNotEmpty()
+        }
         unlock.performTextClearance()
         unlock.performTextInput(synthetic)
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
