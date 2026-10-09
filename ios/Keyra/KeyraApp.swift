@@ -2767,6 +2767,8 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 if !search.isEmpty {
                     Button {
                         search = ""
@@ -2888,6 +2890,7 @@ struct VaultView: View {
                     .foregroundStyle(muted)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Sortiraj stavke: \(newestFirst ? "Najnovije" : "A–Ž")")
 
                 Button { store.addNew() } label: {
                     Image(systemName: "plus")
@@ -2897,6 +2900,7 @@ struct VaultView: View {
                         .background(cyan)
                         .clipShape(Circle())
                 }
+                .accessibilityLabel("Dodaj stavku")
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
@@ -2904,8 +2908,13 @@ struct VaultView: View {
             ScrollView {
                 LazyVStack(spacing: 9) {
                     ForEach(filtered) { item in
-                        VaultRow(item: item, duplicated: duplicates.contains(item.id))
-                            .onTapGesture { store.select(item) }
+                        Button {
+                            store.select(item)
+                        } label: {
+                            VaultRow(item: item, duplicated: duplicates.contains(item.id))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Otvori stavku")
                     }
                     if filtered.isEmpty {
                         GlassCard {
@@ -2927,6 +2936,21 @@ struct VaultView: View {
                                     store.addNew()
                                 } label: {
                                     Label("Dodaj prvu stavku", systemImage: "plus")
+                                        .fontWeight(.bold)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 11)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(midnight)
+                                .background(cyan)
+                                .clipShape(Capsule())
+                            } else {
+                                Button {
+                                    search = ""
+                                    filter = "Sve"
+                                    store.clearVaultCategoryFilter()
+                                } label: {
+                                    Text("Očisti filtre")
                                         .fontWeight(.bold)
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 11)
@@ -3010,6 +3034,7 @@ struct VaultRow: View {
 
     private var state: (String, Color) {
         if duplicated { return ("Ponovno korištena", danger) }
+        if isPasswordItem && item.password.isEmpty { return ("Bez lozinke", warn) }
         if isPasswordItem && !item.password.isEmpty && !isStrongPassword(item.password) { return ("Potrebno ažuriranje", warn) }
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
@@ -3185,6 +3210,8 @@ struct CollectionsView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 if !search.isEmpty {
                     Button {
                         search = ""
@@ -3230,6 +3257,29 @@ struct CollectionsView: View {
             }
 
             ScrollView {
+                if collectionItems.isEmpty && (!search.isEmpty || selectedType != "Sve") {
+                    GlassCard {
+                        Text("Nema rezultata")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text("Promijenite pretragu ili odaberite drugi tip.")
+                            .foregroundStyle(muted)
+                        Button {
+                            search = ""
+                            selectedType = "Sve"
+                        } label: {
+                            Text("Očisti filtre")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(midnight)
+                        .background(cyan)
+                        .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 18)
+                } else {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 150, maximum: 280), spacing: 10)],
                     spacing: 10
@@ -3260,9 +3310,15 @@ struct CollectionsView: View {
                         .onTapGesture {
                             store.openCategory(name, type: selectedType)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction {
+                            store.openCategory(name, type: selectedType)
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
+                }
 
                 Spacer(minLength: 18)
                     .frame(height: 18)
@@ -4970,7 +5026,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.5 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
@@ -5320,14 +5376,15 @@ struct SecurityCenterView: View {
 
                         if issues.isEmpty {
                             HStack(spacing: 12) {
-                                Image(systemName: "checkmark.shield.fill").foregroundStyle(good)
-                                Text("Nisu pronađene slabe ili ponovljene lozinke.")
+                                Image(systemName: score == nil ? "info.circle.fill" : "checkmark.shield.fill")
+                                    .foregroundStyle(score == nil ? ice : good)
+                                Text(score == nil ? "Nema spremljenih lozinki za provjeru." : "Nisu pronađene slabe ili ponovljene lozinke.")
                                     .foregroundStyle(.white)
                                 Spacer()
                             }
                             .padding(18)
-                            .background(good.opacity(0.10))
-                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(good.opacity(0.55), lineWidth: 1))
+                            .background((score == nil ? ice : good).opacity(0.10))
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke((score == nil ? ice : good).opacity(0.55), lineWidth: 1))
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                         }
                     }
