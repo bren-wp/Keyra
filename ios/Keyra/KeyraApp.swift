@@ -1277,6 +1277,7 @@ final class KeyraStore: ObservableObject {
     @Published private(set) var isImportingVault = false
     @Published private(set) var isRecoveringVault = false
     @Published private(set) var isProcessingBackup = false
+    @Published private(set) var isProcessingRecovery = false
 
     private var sessionPassword: String?
     private var authenticationEpoch: UInt64 = 0
@@ -1810,7 +1811,7 @@ final class KeyraStore: ObservableObject {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
             return
         }
-        guard !isProcessingBackup else {
+        guard !isProcessingBackup, !isProcessingRecovery else {
             message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
             return
         }
@@ -1832,39 +1833,84 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func makeRecoveryKeyPayload(passphrase: String) -> String? {
+    func makeRecoveryKeyPayloadAsync(
+        passphrase: String, completion: @escaping (String?) -> Void
+    ) {
+        guard isSetup, screen == .settings, canFinishAuthentication(authenticationEpoch) else { return }
         guard isStrongRecoveryPassphrase(passphrase) else {
             message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
-            return nil
+            return
         }
-        do {
-            let rawKey = try vault.recoveryKeyData()
-            return try RecoveryKeyEnvelope.encrypt(rawKey, passphrase: passphrase)
-        } catch {
-            message = "Recovery Key datoteku nije moguće izraditi."
-            return nil
+        guard !isProcessingRecovery, !isProcessingBackup else {
+            message = "Pričekajte završetak prethodne sigurnosne radnje."
+            return
+        }
+        let requestEpoch = authenticationEpoch
+        isProcessingRecovery = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let payload: String?
+            do {
+                guard let self else { return }
+                let key = try self.vault.recoveryKeyData()
+                payload = try RecoveryKeyEnvelope.encrypt(key, passphrase: passphrase)
+            } catch {
+                payload = nil
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isProcessingRecovery = false
+                guard self.canFinishAuthentication(requestEpoch), self.isSetup,
+                      self.screen == .settings else { return }
+                if payload == nil {
+                    self.message = "Recovery Key datoteku nije moguće izraditi."
+                }
+                completion(payload)
+            }
         }
     }
 
-    @discardableResult
-    func importRecoveryKeyPayload(_ payload: String, passphrase: String) -> Bool {
+    func importRecoveryKeyPayloadAsync(_ payload: String, passphrase: String) {
+        guard isSetup, screen == .settings, canFinishAuthentication(authenticationEpoch) else { return }
+        guard !isProcessingRecovery, !isProcessingBackup else {
+            message = "Pričekajte završetak prethodne sigurnosne radnje."
+            return
+        }
         guard !payload.isEmpty, payload.utf8.count <= 16_384 else {
             message = "Recovery Key datoteka nije valjana."
-            return false
+            return
         }
-        do {
-            let rawKey = try RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
-            let verifiedItems = try vault.installRecoveryKey(rawKey)
-            if !verifiedItems.isEmpty {
-                items = verifiedItems
+        let requestEpoch = authenticationEpoch
+        isProcessingRecovery = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let decryptedKey = try? RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
+            DispatchQueue.main.async { [weak self] in
+                var keyToClear = decryptedKey
+                defer {
+                    if let length = keyToClear?.count {
+                        keyToClear?.resetBytes(in: 0..<length)
+                    }
+                }
+                guard let self else { return }
+                self.isProcessingRecovery = false
+                guard self.canFinishAuthentication(requestEpoch), self.isSetup,
+                      self.screen == .settings else { return }
+                guard let key = decryptedKey else {
+                    self.message = "Recovery Key je oštećen ili recovery lozinka nije ispravna."
+                    return
+                }
+                do {
+                    let recovered = try self.vault.installRecoveryKey(key)
+                    if !recovered.isEmpty {
+                        self.items = recovered
+                        self.selected = nil
+                    }
+                    self.message = recovered.isEmpty
+                        ? "Recovery Key je obnovljen. Za povrat zapisa potrebna je zasebna sigurnosna kopija."
+                        : "Recovery Key verificiran je i ponovno zaštićen ključem ovog uređaja."
+                } catch {
+                    self.message = "Recovery Key ne odgovara ovom trezoru ili ga nije moguće sigurno obnoviti."
+                }
             }
-            message = verifiedItems.isEmpty
-                ? "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
-                : "Recovery Key je verificiran i ponovno zaštićen Keychainom ovog uređaja."
-            return true
-        } catch {
-            message = "Recovery Key je oštećen, izmijenjen, ne odgovara ovom trezoru ili recovery lozinka nije ispravna."
-            return false
         }
     }
 
@@ -1873,7 +1919,7 @@ final class KeyraStore: ObservableObject {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
             return
         }
-        guard !isProcessingBackup else {
+        guard !isProcessingBackup, !isProcessingRecovery else {
             message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
             return
         }
@@ -5173,9 +5219,11 @@ struct SettingsView: View {
                 recoveryExportPassphrase = ""
                 recoveryExportConfirm = ""
             }
-            guard let payload = store.makeRecoveryKeyPayload(passphrase: passphrase) else { return }
-            recoveryDocument = KeyraBackupDocument(payload: payload)
-            exportRecoveryFile = true
+            store.makeRecoveryKeyPayloadAsync(passphrase: passphrase) { payload in
+                guard let payload else { return }
+                recoveryDocument = KeyraBackupDocument(payload: payload)
+                exportRecoveryFile = true
+            }
         }
     }
 
@@ -5183,7 +5231,7 @@ struct SettingsView: View {
         let passphrase = recoveryImportPassphrase
         recoveryImportPassphrase = ""
         store.authorizeCritical(reason: "Potvrdite identitet za uvoz Recovery Key datoteke.") {
-            _ = store.importRecoveryKeyPayload(payload, passphrase: passphrase)
+            store.importRecoveryKeyPayloadAsync(payload, passphrase: passphrase)
         }
     }
 
@@ -5197,10 +5245,12 @@ struct SettingsView: View {
                         title: "Vaša Keyra, vaše postavke.",
                         subtitle: "Sve važne opcije na jednom mjestu."
                     )
-                    if store.isProcessingBackup {
+                    if store.isProcessingBackup || store.isProcessingRecovery {
                         HStack(spacing: 10) {
                             ProgressView().tint(cyan)
-                            Text("Obrada šifrirane sigurnosne kopije…")
+                            Text(store.isProcessingRecovery
+                                ? "Zaštita i provjera Recovery Key datoteke…"
+                                : "Obrada šifrirane sigurnosne kopije…")
                                 .font(.subheadline)
                                 .foregroundStyle(.white)
                         }
@@ -5287,7 +5337,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Spremi sigurnosnu kopiju")
-                        .disabled(store.isProcessingBackup)
+                        .disabled(store.isProcessingBackup || store.isProcessingRecovery)
                     }
 
                     SettingRow(
@@ -5302,7 +5352,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Vrati sigurnosnu kopiju")
-                        .disabled(store.isProcessingBackup)
+                        .disabled(store.isProcessingBackup || store.isProcessingRecovery)
                     }
 
                     SettingsHintCard(

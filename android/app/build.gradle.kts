@@ -14,8 +14,8 @@ android {
         applicationId = "com.keyra.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.6.18"
+        versionCode = 25
+        versionName = "0.6.19"
     }
 
     buildFeatures { compose = true }

@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.18"
+        default: "0.6.19"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.18 poboljšava odzivnost i pouzdanost opcija za šifrirane sigurnosne kopije: Android i iOS obavljaju PBKDF2 šifriranje, dešifriranje i čitanje sigurnosne kopije izvan glavne UI niti. Uvoz se primjenjuje samo u istoj aktivnoj i otključanoj sesiji, pa zakašnjela obrada nakon zaključavanja, brisanja ili promjene zaslona ne prepisuje trezor. Za vrijeme obrade prikazuju se indikatori napretka i sprječavaju višestruke paralelne radnje. Android dodatno pokušava odmah očistiti vlastiti osjetljivi međuspremnik pri napuštanju aktivnosti i nakon 30 sekundi, bez brisanja tuđeg kopiranog teksta; dodan je regresijski test. Format šifriranja i KEYRA1/KEYRA2/KEYRAREC1 kompatibilnost nisu mijenjani. Brisanje međuspremnika ovisi o pravilima sustava, a reprodukcija tipkovničkog pada #25 i ručno ispitivanje na stvarnim uređajima ostaju otvoreni QA zadaci.
+          Keyra 0.6.19 ispravlja kopiranje lozinki u druge aplikacije: Android više ne briše međuspremnik odmah pri napuštanju Keyre, kako bi korisnik stigao zalijepiti kopirani podatak. Zadržani su oznaka osjetljivog sadržaja i pokušaj brisanja nakon približno 30 sekundi, bez brisanja kopija koje je u međuvremenu postavila druga aplikacija. Na Androidu i iOS-u izvoz i uvoz Recovery Key datoteka iz Postavki koristi pozadinsko šifriranje odnosno PBKDF2 dešifriranje, prikazuje status rada i odbacuje rezultate ako je sesija u međuvremenu zaključana ili promijenjena. Očuvani su postojeći KEYRA1/KEYRA2/KEYRAREC1 formati. Testiranje dostupnosti Android međuspremnika ovisno o verziji sustava, fizički QA svih opcija i prijavljeno rušenje pri tipkanju (#25) ostaju otvoreni zadaci.
 
           ## Provjere
           - Android lint i unit testovi

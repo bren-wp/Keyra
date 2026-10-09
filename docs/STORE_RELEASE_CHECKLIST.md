@@ -291,3 +291,16 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Physical Android/iOS QA of large encrypted backup round trips, lifecycle changes mid-import, automatic locking, clipboard and OS file providers.
 - [ ] Reproduce and fix #25 keyboard crash on physical devices; check passwords with accents, emoji, paste, visibility toggle, IME focus and orientation.
 - [ ] Verify distribution signing, store packaging and end-to-end accessibility on supported physical devices.
+
+## 0.6.19 external paste usability and async Recovery Key
+
+- [x] Android: preserve Keyra-owned clipboard text when changing applications so users can paste copied credentials externally; retain sensitive clipboard labeling and timed best-effort clearing (subject to Android background clipboard limitations).
+- [x] Both platforms: Settings Recovery Key PBKDF2 encryption/decryption moved off the UI thread.
+- [x] Both platforms: background recovery results are ignored after vault lock, erase, backgrounding or navigation; recovery operations have a dedicated processing indicator.
+- [x] Both platforms: encrypted backup operations cannot start during ongoing Recovery Key work.
+- [ ] Physical Android QA: copy a password, switch to another app, paste within 30 seconds; confirm expiration where OS supports it, and ensure unrelated clipboard contents stay intact.
+- [ ] Physical Android/iOS QA: open system document picker, import/export Recovery Key and KEYRA2 backup with immediate auto-lock enabled; test background/lock before KDF completes.
+- [ ] Android PR lint/unit/build/privacy and iOS PR build/analyze/simulator/privacy both succeed on final commit.
+- [ ] Android/iOS main CI, release workflow, and seven v0.6.19 assets independently verified.
+- [ ] Issue #25 master-password entry crash reproduced, diagnosed and fixed on physical devices (not yet confirmed).
+- [ ] Production signing / App Store and Play Store readiness independently verified.
