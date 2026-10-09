@@ -1137,6 +1137,13 @@ func securityIssueCount(_ items: [VaultItem]) -> Int {
     securityIssueIDs(items).count
 }
 
+func resolvedCategoryName(_ selected: String, original: String?) -> String? {
+    if let original, selected == original { return original }
+    let trimmed = selected.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalized = String(trimmed.prefix(40))
+    return normalized.isEmpty ? nil : normalized
+}
+
 func securityScore(_ items: [VaultItem]) -> Int? {
     let passwordItems = items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
     guard !passwordItems.isEmpty else { return nil }
@@ -3670,7 +3677,10 @@ struct AddEditView: View {
 
     private var categoryOptions: [String] {
         let standard = ["Osobno", "Posao", "Financije", "Društvene mreže", "Kupovina", "Putovanja", "Zdravlje", "Ostalo"]
-        return standard.contains(category) ? standard : standard + [category]
+        let other = Set(store.items.map(\.category) + [category])
+            .subtracting(standard)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        return standard + other
     }
 
     private var itemLabel: String {
@@ -3999,6 +4009,17 @@ struct AddEditView: View {
                         }
                     }
 
+                    KeyraField(title: "Ili upišite vlastitu kategoriju", text: $category)
+                        .textInputAutocapitalization(.sentences)
+                        .onChange(of: category) { _, value in
+                            if value.count > 40 && value != original?.category {
+                                category = String(value.prefix(40))
+                            }
+                        }
+                    Text("Naziv kategorije • najviše 40 znakova")
+                        .font(.caption)
+                        .foregroundStyle(muted)
+
                     Button {
                         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
                         let validationMessage: String? = {
@@ -4042,6 +4063,10 @@ struct AddEditView: View {
                         }()
                         if let validationMessage {
                             store.message = validationMessage
+                            return
+                        }
+                        guard let savedCategory = resolvedCategoryName(category, original: original?.category) else {
+                            store.message = "Unesite naziv kategorije."
                             return
                         }
 
@@ -4090,7 +4115,7 @@ struct AddEditView: View {
                                 password: (type == "Prijava" || type == "Wi-Fi") ? password : "",
                                 website: type == "Prijava" ? website.trimmingCharacters(in: .whitespacesAndNewlines) : "",
                                 notes: String(notes.prefix(500)).trimmingCharacters(in: .whitespacesAndNewlines),
-                                category: category,
+                                category: savedCategory,
                                 favorite: favorite,
                                 type: type,
                                 fields: extra
@@ -4155,7 +4180,11 @@ struct DetailView: View {
             let totpConfig = item.kind == "Autentifikator" ? totpConfigFromFields(item.extraFields) : nil
             let duplicatedPassword = isPasswordItem &&
                 !item.password.isEmpty &&
-                store.items.contains { $0.id != item.id && $0.password == item.password }
+                store.items.contains {
+                    $0.id != item.id &&
+                    ($0.kind == "Prijava" || $0.kind == "Wi-Fi") &&
+                    $0.password == item.password
+                }
             let securityLabel: String = {
                 if item.kind == "Autentifikator", totpConfig != nil { return "TOTP aktivan" }
                 if item.kind == "Autentifikator" { return "TOTP greška" }
@@ -5103,7 +5132,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.7 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.8 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
