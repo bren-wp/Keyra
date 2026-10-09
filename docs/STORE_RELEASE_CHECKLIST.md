@@ -123,6 +123,17 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Collections se zadano otvara na "Sve" i prikazuje puni presjek trezora.
 - [x] Duplicirani blok "Nedavne bilješke" uklonjen je iz Collections ekrana.
 - [x] Generator preset/duljina/vrste znakova objedinjeni su u jednu postavnu karticu.
-- [ ] Android 0.6.4 CI zelen na završnom commitu.
-- [ ] iOS 0.6.4 CI zelen na završnom commitu.
-- [ ] GitHub release v0.6.4 objavljen tek nakon oba release builda.
+- [x] Android 0.6.4 CI zelen na završnom commitu `3fa37b0846f99bef7ee490f41a3d98629cd979a2`.
+- [x] iOS 0.6.4 CI zelen na istom commitu.
+- [x] GitHub release v0.6.4 objavljen 9. listopada 2026. sa sedam artefakata.
+
+## 0.6.5 accessibility i backup UX gate
+- [x] Početni KEYRA2 import na Androidu i iOS-u koristi sistemski file picker; clipboard import uklonjen.
+- [x] Trezor i Kolekcije nude jedinstvenu akciju za brisanje filtara kada nema rezultata.
+- [x] Prazna lozinka više se ne prikazuje kao snažna; prazna sigurnosna statistika nije lažno označena kao uspješna provjera.
+- [x] iOS popis stavki koristi pristupačne gumbe; akcije za dodavanje i sortiranje imaju VoiceOver oznake.
+- [x] Zadržani KEYRA1 / KEYRA2 / KEYRAREC1 parseri i postojeće privacy zaštite.
+- [ ] Android 0.6.5 CI i privacy gate zeleni na završnom PR SHA-u.
+- [ ] iOS 0.6.5 CI i privacy gate zeleni na istom PR SHA-u.
+- [ ] GitHub release v0.6.5 objavljen tek nakon uspješnog main CI-ja i release workflowa.
+- [ ] Ručni test obnove stare KEYRA1/KEYRA2 kopije i mobilne pristupačnosti na stvarnim uređajima.
