@@ -102,7 +102,7 @@ func decodeBase32(_ raw: String) -> Data? {
 }
 
 private func normalizedTotpAlgorithm(_ raw: String) -> String? {
-    switch raw.uppercased().replacingOccurrences(of: "-", with: "") {
+    switch raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().replacingOccurrences(of: "-", with: "") {
     case "SHA1": return "SHA1"
     case "SHA256": return "SHA256"
     case "SHA512": return "SHA512"
@@ -236,11 +236,12 @@ func totpConfigFromFields(_ fields: [String: String]) -> TotpConfig? {
     guard let secret = fields["TOTP tajna"] else { return nil }
     if let rawDigits = fields["Znamenke"], Int(rawDigits) == nil { return nil }
     if let rawPeriod = fields["Period"], Int(rawPeriod) == nil { return nil }
+    let rawAlgorithm = fields["Algoritam"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return parseTotpInput(
         secret,
         fallbackIssuer: fields["Izdavatelj"] ?? "",
         fallbackAccount: fields["Račun"] ?? "",
-        fallbackAlgorithm: fields["Algoritam"] ?? "SHA1",
+        fallbackAlgorithm: rawAlgorithm.isEmpty ? "SHA1" : rawAlgorithm,
         fallbackDigits: Int(fields["Znamenke"] ?? "") ?? 6,
         fallbackPeriod: Int(fields["Period"] ?? "") ?? 30
     )
