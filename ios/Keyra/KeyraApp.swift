@@ -1257,6 +1257,21 @@ final class KeyraStore: ObservableObject {
     @Published private(set) var isImportingVault = false
 
     private var sessionPassword: String?
+    private var authenticationEpoch: UInt64 = 0
+    private var appInForeground = true
+
+    func appMovedToBackground() {
+        appInForeground = false
+        authenticationEpoch &+= 1
+    }
+
+    func appBecameActive() {
+        appInForeground = true
+    }
+
+    private func canFinishAuthentication(_ epoch: UInt64) -> Bool {
+        appInForeground && epoch == authenticationEpoch
+    }
 
     init() {
         let setup = auth.isSetup
@@ -1322,6 +1337,7 @@ final class KeyraStore: ObservableObject {
             return
         }
 
+        let requestEpoch = authenticationEpoch
         isCreatingVault = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -1338,7 +1354,10 @@ final class KeyraStore: ObservableObject {
             DispatchQueue.main.async {
                 self.isCreatingVault = false
                 if saved {
-                    self.finishInitialSetup(password: password, initialItems: [])
+                    self.finishInitialSetup(
+                        password: password, initialItems: [],
+                        allowUnlock: self.canFinishAuthentication(requestEpoch)
+                    )
                 } else {
                     self.message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
                 }
@@ -1361,6 +1380,7 @@ final class KeyraStore: ObservableObject {
             return
         }
 
+        let requestEpoch = authenticationEpoch
         isImportingVault = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -1380,7 +1400,10 @@ final class KeyraStore: ObservableObject {
             DispatchQueue.main.async {
                 self.isImportingVault = false
                 if let imported {
-                    self.finishInitialSetup(password: password, initialItems: imported)
+                    self.finishInitialSetup(
+                        password: password, initialItems: imported,
+                        allowUnlock: self.canFinishAuthentication(requestEpoch)
+                    )
                     self.message = "Keyra trezor uspješno je uvezen."
                 } else {
                     self.message = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
@@ -1462,11 +1485,15 @@ final class KeyraStore: ObservableObject {
         return true
     }
 
-    private func finishInitialSetup(password: String, initialItems: [VaultItem]) {
+    private func finishInitialSetup(password: String, initialItems: [VaultItem], allowUnlock: Bool = true) {
         defaults.removeObject(forKey: "unlock_failed_attempts")
         defaults.removeObject(forKey: "unlock_lockout_until")
         isSetup = true
         importingNewVault = false
+        guard allowUnlock && appInForeground else {
+            lock()
+            return
+        }
         sessionPassword = password
         items = initialItems
         selected = nil
@@ -1482,12 +1509,16 @@ final class KeyraStore: ObservableObject {
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
             return
         }
+        let requestEpoch = authenticationEpoch
         isUnlockingVault = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let verified = self.auth.verify(password: password)
             DispatchQueue.main.async {
                 self.isUnlockingVault = false
+                guard self.canFinishAuthentication(requestEpoch), self.screen == .unlock, self.isSetup else {
+                    return
+                }
                 if !verified {
                     let attempts = self.defaults.integer(forKey: "unlock_failed_attempts") + 1
                     let penalty: TimeInterval
@@ -1518,6 +1549,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func unlockBiometric() {
+        let requestEpoch = authenticationEpoch
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
@@ -1526,6 +1558,7 @@ final class KeyraStore: ObservableObject {
         }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Otključajte svoj Keyra trezor.") { success, error in
             DispatchQueue.main.async {
+                guard self.canFinishAuthentication(requestEpoch), self.screen == .unlock else { return }
                 if success {
                     if self.load() {
                         self.screen = .vault
@@ -1538,6 +1571,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func lock() {
+        authenticationEpoch &+= 1
         items = []
         selected = nil
         sessionPassword = nil
@@ -1548,6 +1582,7 @@ final class KeyraStore: ObservableObject {
 
     @discardableResult
     func eraseAllLocalData() -> Bool {
+        authenticationEpoch &+= 1
         vault.clear()
         let verifierCleared = auth.clear()
         let keyCleared = KeychainVault.clear()
@@ -1917,6 +1952,11 @@ struct RootView: View {
             appPrivacyShield = false
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                store.appMovedToBackground()
+            } else if phase == .active {
+                store.appBecameActive()
+            }
             if phase == .background && store.isSetup && store.screen != .unlock {
                 if store.autoLockSeconds == 0 {
                     store.lock()
