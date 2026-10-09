@@ -2617,7 +2617,8 @@ private fun RowScope.NavItem(
                 color = if (selected) Cyan.copy(alpha = .38f) else Color.Transparent,
                 shape = RoundedCornerShape(18.dp)
             )
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .testTag("keyra-nav-" + label),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -5458,7 +5459,7 @@ private fun SettingsScreen(
             item {
                 OutlinedButton(
                     onClick = model::lock,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("keyra-lock-vault"),
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Outlined.Logout, null)
