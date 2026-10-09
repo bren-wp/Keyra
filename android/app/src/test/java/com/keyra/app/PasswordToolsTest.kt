@@ -33,13 +33,22 @@ class PasswordToolsTest {
 
     @Test
     fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
-        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "Keyra"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj", "Keyra"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "OtherApp"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", null))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null, "Keyra"))
-        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst", "Keyra"))
+        val key = ByteArray(32) { it.toByte() }
+        val owned = clipboardOwnershipTag(key, "lozinka#2026")
+        val sameText = clipboardOwnershipTag(key, "lozinka#2026")
+        val changed = clipboardOwnershipTag(key, "drugaciji sadržaj")
+        val anotherKey = ByteArray(32) { (it + 7).toByte() }
+        val wrongKeyTag = clipboardOwnershipTag(anotherKey, "lozinka#2026")
+        assertTrue(shouldClearOwnedClipboard(owned, sameText, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, changed, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, wrongKeyTag, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, sameText, "OtherApp"))
+        assertFalse(shouldClearOwnedClipboard(owned, sameText, null))
+        assertFalse(shouldClearOwnedClipboard(owned, null, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, sameText, "Keyra"))
         assertFalse(shouldClearOwnedClipboard(null, null, null))
+        assertEquals(32, owned.size)
+        assertFalse(String(owned, Charsets.UTF_8).contains("lozinka#2026"))
     }
 
     @Test
