@@ -1238,6 +1238,9 @@ internal fun normalizePortableUpdatedAt(
     }
 }
 
+internal fun destroyVaultInOrder(removeEncryptedData: () -> Boolean, removeKey: () -> Boolean): Boolean =
+    removeEncryptedData() && removeKey()
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
 
@@ -1250,12 +1253,9 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
 
     fun clear(): Boolean = prefs.edit().remove("vault_blob").commit()
 
-    fun destroy(): Boolean {
-        // Stop if storage deletion fails: deleting its key would strand the
-        // encrypted blob and prevent the user from retrying a safe wipe.
-        if (!clear()) return false
-        return crypto.clearKey()
-    }
+    fun destroy(): Boolean =
+        // Short-circuit: never delete the wrapping key while encrypted data remains.
+        destroyVaultInOrder(::clear, crypto::clearKey)
 
     fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
 
