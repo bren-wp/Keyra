@@ -8,6 +8,19 @@ import org.junit.Test
 
 class PasswordToolsTest {
     @Test
+    fun backupDecoderRejectsMalformedUtf8AndPreservesValidCharacters() {
+        assertEquals("Keyra – šifrirani trezor", decodeUtf8Strict("Keyra – šifrirani trezor".toByteArray(Charsets.UTF_8)))
+        assertTrue(runCatching { decodeUtf8Strict(byteArrayOf(0xC3.toByte(), 0x28)) }.isFailure)
+        assertTrue(runCatching { decodeUtf8Strict(byteArrayOf(0xED.toByte(), 0xA0.toByte(), 0x80.toByte())) }.isFailure)
+    }
+
+    @Test
+    fun masterPasswordBoundaryNeverCreatesBrokenUtf16Surrogates() {
+        val oversized = "A".repeat(255) + "😀" + "suffix"
+        assertEquals("A".repeat(255), boundedNewMasterPasswordInput(oversized))
+        assertEquals("A".repeat(254) + "😀", boundedNewMasterPasswordInput("A".repeat(254) + "😀" + "suffix"))
+    }
+    @Test
     fun pendingAuthenticationCannotUnlockAfterBackgroundOrExplicitLock() {
         assertTrue(shouldAcceptAuthCompletion(10L, 10L, foreground = true))
         assertFalse(shouldAcceptAuthCompletion(10L, 10L, foreground = false))
