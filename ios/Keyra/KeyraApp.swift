@@ -370,6 +370,26 @@ func normalizedWebURL(_ raw: String) -> URL? {
     return components.url
 }
 
+// Imported document providers may expose very large files. Enforce the byte limit
+// before decoding instead of mapping the entire untrusted document into memory.
+private enum KeyraDocumentError: Error { case invalidOrOversized }
+
+func readLimitedKeyraText(_ url: URL, maxBytes: Int) throws -> String {
+    guard maxBytes > 0 else { throw KeyraDocumentError.invalidOrOversized }
+    let handle = try FileHandle(forReadingFrom: url)
+    defer { try? handle.close() }
+    var data = Data()
+    while data.count <= maxBytes {
+        let next = try handle.read(upToCount: min(8192, maxBytes + 1 - data.count)) ?? Data()
+        if next.isEmpty { break }
+        data.append(next)
+    }
+    guard data.count <= maxBytes, let text = String(data: data, encoding: .utf8) else {
+        throw KeyraDocumentError.invalidOrOversized
+    }
+    return text
+}
+
 enum SecureClipboard {
     static func copy(_ text: String) {
         UIPasteboard.general.setItems(
@@ -1255,6 +1275,7 @@ final class KeyraStore: ObservableObject {
     @Published private(set) var isCreatingVault = false
     @Published private(set) var isUnlockingVault = false
     @Published private(set) var isImportingVault = false
+    @Published private(set) var isRecoveringVault = false
 
     private var sessionPassword: String?
     private var authenticationEpoch: UInt64 = 0
@@ -1303,7 +1324,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func cancelSetup() {
-        guard !isCreatingVault, !isImportingVault, !isUnlockingVault else { return }
+        guard !isCreatingVault, !isImportingVault, !isUnlockingVault, !isRecoveringVault else { return }
         importingNewVault = false
         if !isSetup { screen = .onboarding }
     }
@@ -1331,7 +1352,7 @@ final class KeyraStore: ObservableObject {
     func select(_ item: VaultItem) { selected = item; screen = .detail }
 
     func createVault(password: String) {
-        guard !isSetup, !isCreatingVault else { return }
+        guard !isSetup, !isCreatingVault, !isRecoveringVault else { return }
         guard (12...256).contains(password.count) else {
             message = "Glavna lozinka mora imati između 12 i 256 znakova."
             return
@@ -1366,7 +1387,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func importNewVault(payload: String, password: String) {
-        guard !isSetup, !isCreatingVault, !isImportingVault else { return }
+        guard !isSetup, !isCreatingVault, !isImportingVault, !isRecoveringVault else { return }
         guard password.count >= 12 else {
             message = "Lozinka mora imati najmanje 12 znakova."
             return
@@ -1418,71 +1439,66 @@ final class KeyraStore: ObservableObject {
         backupPayload: String,
         backupPassword: String,
         newPassword: String
-    ) -> Bool {
-        guard !isSetup else {
-            message = "Recovery postavljanje dostupno je samo prije izrade trezora."
-            return false
+    ) {
+        guard !isSetup, !isRecoveringVault, !isCreatingVault, !isImportingVault else { return }
+        guard (12...256).contains(newPassword.count) else {
+            message = "Nova glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
-        guard newPassword.count >= 12 else {
-            message = "Nova glavna lozinka mora imati najmanje 12 znakova."
-            return false
-        }
-        guard
-            !recoveryPayload.isEmpty,
-            recoveryPayload.utf8.count <= 16_384,
-            !backupPayload.isEmpty,
-            backupPayload.utf8.count <= 2_500_000,
-            !recoveryPassphrase.isEmpty,
-            !backupPassword.isEmpty
-        else {
-            message = "Odaberite valjani Recovery Key i KEYRA2 sigurnosnu kopiju te unesite obje lozinke."
-            return false
+        guard !recoveryPayload.isEmpty, recoveryPayload.utf8.count <= 16_384,
+              !backupPayload.isEmpty, backupPayload.utf8.count <= 2_500_000,
+              !recoveryPassphrase.isEmpty, !backupPassword.isEmpty else {
+            message = "Odaberite valjani Recovery Key i sigurnosnu kopiju te unesite obje lozinke."
+            return
         }
 
-        var rawKey: Data
-        do {
-            rawKey = try RecoveryKeyEnvelope.decrypt(recoveryPayload, passphrase: recoveryPassphrase)
-        } catch {
-            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
-            return false
-        }
-        defer { rawKey.resetBytes(in: 0..<rawKey.count) }
+        let requestEpoch = authenticationEpoch
+        isRecoveringVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let outcome: ([VaultItem]?, String)
+            do {
+                var rawKey = try RecoveryKeyEnvelope.decrypt(recoveryPayload, passphrase: recoveryPassphrase)
+                defer { rawKey.resetBytes(in: 0..<rawKey.count) }
+                let imported: [VaultItem]
+                do {
+                    imported = try PortableBackup.decrypt(backupPayload, password: backupPassword)
+                } catch {
+                    throw KeyraDocumentError.invalidOrOversized
+                }
 
-        let imported: [VaultItem]
-        do {
-            imported = try PortableBackup.decrypt(backupPayload, password: backupPassword)
-        } catch {
-            message = "KEYRA2 sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
-            return false
+                do {
+                    guard self.auth.clear() else { throw KeyraDocumentError.invalidOrOversized }
+                    self.vault.clear()
+                    guard KeychainVault.clear() else { throw KeyraDocumentError.invalidOrOversized }
+                    _ = try self.vault.installRecoveryKey(rawKey)
+                    try self.vault.save(imported)
+                    guard self.auth.create(password: newPassword) else {
+                        throw KeyraDocumentError.invalidOrOversized
+                    }
+                    outcome = (imported, "")
+                } catch {
+                    self.vault.clear()
+                    _ = KeychainVault.clear()
+                    _ = self.auth.clear()
+                    outcome = (nil, "Obnova nije dovršena. Provjerite zaštitu i slobodan prostor uređaja.")
+                }
+            } catch {
+                outcome = (nil, "Recovery Key ili sigurnosna kopija nisu valjani, ili lozinka nije ispravna.")
+            }
+            DispatchQueue.main.async {
+                self.isRecoveringVault = false
+                if let imported = outcome.0 {
+                    self.finishInitialSetup(
+                        password: newPassword, initialItems: imported,
+                        allowUnlock: self.canFinishAuthentication(requestEpoch)
+                    )
+                    self.message = "Trezor je uspješno obnovljen."
+                } else {
+                    self.message = outcome.1
+                }
+            }
         }
-
-        do {
-            // Oba artefakta provjerena su prije izmjene uređaja. Ovo je first-run tok,
-            // pa uklanjamo samo eventualno nedovršeno lokalno stanje bez aktivne prijave.
-            auth.clear()
-            vault.clear()
-            _ = KeychainVault.clear()
-            _ = try vault.installRecoveryKey(rawKey)
-            try vault.save(imported)
-        } catch {
-            vault.clear()
-            _ = KeychainVault.clear()
-            auth.clear()
-            message = "Recovery nije moguće sigurno dovršiti. Na uređaju nije zadržano djelomično obnovljeno stanje."
-            return false
-        }
-
-        guard auth.create(password: newPassword) else {
-            vault.clear()
-            _ = KeychainVault.clear()
-            auth.clear()
-            message = "Novu glavnu lozinku nije moguće trajno spremiti. Recovery je poništen."
-            return false
-        }
-
-        finishInitialSetup(password: newPassword, initialItems: imported)
-        message = "Trezor je uspješno obnovljen."
-        return true
     }
 
     private func finishInitialSetup(password: String, initialItems: [VaultItem], allowUnlock: Bool = true) {
@@ -1501,7 +1517,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func unlock(password: String) {
-        guard !isUnlockingVault, !isCreatingVault else { return }
+        guard !isUnlockingVault, !isCreatingVault, !isRecoveringVault else { return }
         let now = Date().timeIntervalSince1970
         let lockoutUntil = defaults.double(forKey: "unlock_lockout_until")
         if lockoutUntil > now {
@@ -2522,7 +2538,7 @@ struct RecoverySetupView: View {
                                 store.message = "Nove glavne lozinke se ne podudaraju."
                                 return
                             }
-                            _ = store.recoverInitialVault(
+                            store.recoverInitialVault(
                                 recoveryPayload: recoveryPayload ?? "",
                                 recoveryPassphrase: recoveryPassphrase,
                                 backupPayload: backupPayload ?? "",
@@ -2532,7 +2548,7 @@ struct RecoverySetupView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "arrow.clockwise.circle.fill")
-                                Text("Obnovi trezor").fontWeight(.bold)
+                                Text(store.isRecoveringVault ? "Obnova trezora…" : "Obnovi trezor").fontWeight(.bold)
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -2541,7 +2557,7 @@ struct RecoverySetupView: View {
                         .foregroundStyle(midnight)
                         .background(canRestore ? cyan : cyan.opacity(0.35))
                         .clipShape(Capsule())
-                        .disabled(!canRestore)
+                        .disabled(!canRestore || store.isRecoveringVault)
                     }
                     .padding(compact ? 14 : 18)
                     .background(slate.opacity(0.96))
@@ -2568,8 +2584,8 @@ struct RecoverySetupView: View {
                 guard let url = try result.get().first else { return }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                guard data.count <= 16_384, let text = String(data: data, encoding: .utf8) else {
+                let text = try readLimitedKeyraText(url, maxBytes: 16_384)
+                if text.isEmpty {
                     store.message = "Recovery Key datoteka nije valjana ili je prevelika."
                     recoveryPayload = nil
                     return
@@ -2590,8 +2606,8 @@ struct RecoverySetupView: View {
                 guard let url = try result.get().first else { return }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                guard data.count <= 2_500_000, let text = String(data: data, encoding: .utf8) else {
+                let text = try readLimitedKeyraText(url, maxBytes: 2_500_000)
+                if text.isEmpty {
                     store.message = "KEYRA2 sigurnosna kopija nije valjana ili je prevelika."
                     backupPayload = nil
                     return
@@ -2751,8 +2767,8 @@ struct UnlockView: View {
                 guard let url = try result.get().first else { return }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                guard data.count <= 2_500_000, let text = String(data: data, encoding: .utf8) else {
+                let text = try readLimitedKeyraText(url, maxBytes: 2_500_000)
+                if text.isEmpty {
                     importPayload = nil
                     store.message = "Sigurnosna kopija nije valjana ili je prevelika."
                     return
@@ -5411,8 +5427,8 @@ struct SettingsView: View {
                 defer {
                     if accessed { url.stopAccessingSecurityScopedResource() }
                 }
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                guard data.count <= 16_384, let payload = String(data: data, encoding: .utf8) else {
+                let payload = try readLimitedKeyraText(url, maxBytes: 16_384)
+                if payload.isEmpty {
                     store.message = "Recovery Key datoteka nije valjana ili je prevelika."
                     return
                 }
@@ -5447,8 +5463,8 @@ struct SettingsView: View {
                 defer {
                     if accessed { url.stopAccessingSecurityScopedResource() }
                 }
-                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-                guard data.count <= 2_500_000, let payload = String(data: data, encoding: .utf8) else {
+                let payload = try readLimitedKeyraText(url, maxBytes: 2_500_000)
+                if payload.isEmpty {
                     store.message = "Odabrana sigurnosna kopija nije valjana ili je prevelika."
                     return
                 }
