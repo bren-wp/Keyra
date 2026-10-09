@@ -1396,7 +1396,14 @@ final class KeyraStore: ObservableObject {
                 failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
             } catch {
                 saved = false
+                // DEBUG-only failure category is safe for CI: no file path,
+                // password, ciphertext or Keychain contents are ever logged.
+                #if DEBUG
+                let diagnostic = error as NSError
+                failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj. [\(diagnostic.domain):\(diagnostic.code)]"
+                #else
                 failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
+                #endif
             }
             if !saved {
                 _ = self.vault.clear()
