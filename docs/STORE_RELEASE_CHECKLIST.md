@@ -239,3 +239,14 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Android/iOS main CI i release workflow uspješni; v0.6.14 objavljen sa 7 artefakata.
 - [ ] Fizički Android/iOS QA, provjera tipkovnice/IME, izrada trezora i potpunog brisanja s provjerom KeyStore/Keychain unosa.
 - [ ] Potvrda dostupnosti vanjskih pravnih stranica app.brendigo.com/keya.
+
+## 0.6.15 sigurnost asinkronog otključavanja
+- [x] Android/iOS: svaki zahtjev za otključavanje povezan je s generacijom autentifikacijske sesije; rezultat se odbacuje ako je aplikacija otišla u pozadinu ili je trezor naknadno zaključan.
+- [x] Android/iOS: dovršetak izrade ili uvoza trezora u pozadini sprema šifrirani trezor, ali ga ne otvara bez nove korisničke autentifikacije.
+- [x] Android/iOS: biometrijski rezultat ne može otvoriti trezor nakon zastarjele sesije.
+- [x] Android regresijski testovi pokrivaju završetak u valjanoj sesiji, pozadinu i zastarjeli zahtjev.
+- [ ] PR Android lint/unit/build/privacy potvrđen na završnom SHA-u.
+- [ ] PR iOS build/analyze/simulator launch/privacy potvrđen na istom SHA-u.
+- [ ] Oba main CI-ja i release workflow uspješni, release v0.6.15 sa sedam artefakata provjeren.
+- [ ] Ručni testovi na fizičkim Android i iOS uređajima: typing, prikaz tipkovnice, izrada trezora, zaključavanje u pozadini tijekom PBKDF2, biometrija, stare KEYRA1/KEYRA2 kopije.
+- [ ] Potvrđena dostupnost vanjskih pravnih stranica na app.brendigo.com/keya.
