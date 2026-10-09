@@ -178,7 +178,19 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Ocjena 0–100 jasno je ograničena na lozinke; ukupan broj upozorenja uključuje neispravan TOTP.
 - [x] Android/iOS: lokalni heuristički test dodatno upozorava na očite predvidljive fragmente i ponovljene znakove. Ne provjerava poznate kompromitirane lozinke online.
 - [x] Android regresijski testovi dodani za invalid TOTP, score i predvidljive lozinke.
-- [ ] Android lint, unit, build, privacy 0.6.9 uspješni na finalnom PR SHA-u.
-- [ ] iOS build/analyze, simulator launch smoke, privacy 0.6.9 uspješni na istom SHA-u.
-- [ ] Oba main CI-ja i release workflow uspješni; v0.6.9 objavljen sa svih 7 artefakata.
+- [x] Android lint, unit, build, privacy 0.6.9 uspješni na finalnom PR SHA-u `ccf2888dfc6c4f0b205852c4ace7d3875325be0a`.
+- [x] iOS build/analyze, simulator launch smoke, privacy 0.6.9 uspješni na istom SHA-u.
+- [x] Oba main CI-ja i release workflow uspješni na `61d5cef8b414c35f9f1fcbeb1cc7e694803c601e`; v0.6.9 objavljen sa svih 7 artefakata.
 - [ ] Ručni fizički Android/iOS QA i stare KEYRA1/KEYRA2 sigurnosne kopije.
+
+## 0.6.10 kartice, validacija i zaštita unosa
+- [x] Android/iOS: automatsko grupiranje broja kartice po četiri znamenke pri uređivanju.
+- [x] Stroga Luhnova provjera prihvaća samo ASCII znamenke, razmake i crtice; Unicode znamenke i drugi znakovi odbijaju se umjesto tihog zanemarivanja.
+- [x] U šifriranom trezoru broj kartice sprema se kao niz znamenki; zadnje četiri znamenke u popisu ispravno rade i kod grupiranih uvoza.
+- [x] Android/iOS: CVV unos skriven je prema zadanim postavkama, postoji prekidač prikaza i brojčana tipkovnica.
+- [x] Postojeći neispravni uvezeni brojevi ostaju neizmijenjeni dok se korisnik ne odluči urediti ih.
+- [x] Android testovi pokrivaju grupiranje, Unicode/slovna odbijanja, Luhn, sigurnosni kod i uvezene zapise.
+- [ ] Android CI lint, unit, build, privacy 0.6.10 uspješni na završnom PR SHA-u.
+- [ ] iOS CI build/analyze, simulator launch smoke, privacy 0.6.10 uspješni na istom SHA-u.
+- [ ] Oba main CI-ja i release workflow uspješni; v0.6.10 objavljen sa svih 7 artefakata.
+- [ ] Ručna provjera fizičkih Android/iOS uređaja i obnove starijih KEYRA1/KEYRA2 kopija.
