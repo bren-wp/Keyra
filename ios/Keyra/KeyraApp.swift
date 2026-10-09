@@ -3163,18 +3163,6 @@ struct CollectionsView: View {
         }
     }
 
-    private var recentNotes: [VaultItem] {
-        Array(
-            store.items
-                .filter {
-                    $0.kind == "Bilješka" &&
-                    (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.notes.localizedCaseInsensitiveContains(search))
-                }
-                .sorted { $0.updatedAt > $1.updatedAt }
-                .prefix(3)
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             BrandHeader(subtitle: "KOLEKCIJE")
@@ -3271,44 +3259,10 @@ struct CollectionsView: View {
                 }
                 .padding(.horizontal, 18)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Nedavne bilješke")
-                        .font(.title2.bold())
-                        .foregroundStyle(.white)
-                    Text("Vaše najnovije bilješke i sigurne informacije.")
-                        .foregroundStyle(muted)
-
-                    ForEach(recentNotes) { item in
-                        Button {
-                            store.select(item)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "doc.text.fill")
-                                    .foregroundStyle(indigo)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.title).fontWeight(.bold).foregroundStyle(.white)
-                                    Text(item.notes).lineLimit(1).foregroundStyle(muted)
-                                }
-                                Spacer()
-                                Image(systemName: "ellipsis").foregroundStyle(muted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(slate)
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if recentNotes.isEmpty {
-                        Text("Još nema sigurnih bilješki.")
-                            .foregroundStyle(muted)
-                            .padding(.vertical, 18)
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 12)
-                .padding(.bottom, 100)
+                Spacer(minLength: 18)
+                    .frame(height: 18)
+            }
+            .padding(.bottom, 100)
             }
         }
     }
