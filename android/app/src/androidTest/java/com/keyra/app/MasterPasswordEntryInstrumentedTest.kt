@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.lifecycle.ViewModelProvider
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -25,8 +26,21 @@ class MasterPasswordEntryInstrumentedTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     private fun waitFor(tag: String, timeout: Long = 45_000) {
-        compose.waitUntil(timeout) {
-            compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        try {
+            compose.waitUntil(timeout) {
+                compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (timeoutFailure: AssertionError) {
+            // Print only stage and non-secret state. Never dump Compose semantics,
+            // screenshots, typed passwords, clipboard contents or vault items.
+            val safeState = compose.runOnIdle {
+                val model = ViewModelProvider(compose.activity)[KeyraViewModel::class.java]
+                "screen=" + model.screen + "; setup=" + model.isSetup +
+                    "; creating=" + model.isCreatingVault +
+                    "; importing=" + model.isImportingVault +
+                    "; unlocking=" + model.isUnlockingVault
+            }
+            throw AssertionError("First-run UI step timed out: " + tag + "; " + safeState, timeoutFailure)
         }
     }
 
