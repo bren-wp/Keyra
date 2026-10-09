@@ -2021,21 +2021,7 @@ struct BrandHeader: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
 
-                    if !compact {
-                        HStack(spacing: 4) {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 8, weight: .bold))
-                            Text("LOCAL")
-                                .font(.system(size: 8, weight: .bold))
-                                .tracking(0.8)
-                        }
-                        .foregroundStyle(good)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(cyan.opacity(0.09))
-                        .overlay(Capsule().stroke(cyan.opacity(0.22), lineWidth: 1))
-                        .clipShape(Capsule())
-                    }
+
                 }
 
                 Text(subtitle.uppercased())
@@ -2077,19 +2063,25 @@ struct BrandHeader: View {
                     : "Nema sigurnosnih upozorenja"
             )
 
-            Text("K")
-                .font(.system(size: compact ? 12 : 14, weight: .black))
-                .foregroundStyle(.white)
-                .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
-                .background(
-                    LinearGradient(
-                        colors: [cyan.opacity(0.18), indigo.opacity(0.20)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+            Button {
+                store.open(.settings)
+            } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: compact ? 19 : 21))
+                    .foregroundStyle(.white)
+                    .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
+                    .background(
+                        LinearGradient(
+                            colors: [cyan.opacity(0.18), indigo.opacity(0.20)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .overlay(Circle().stroke(cyan.opacity(0.62), lineWidth: 1))
-                .clipShape(Circle())
+                    .overlay(Circle().stroke(cyan.opacity(0.62), lineWidth: 1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Otvori postavke profila")
         }
         .padding(.horizontal, compact ? 12 : 16)
         .padding(.vertical, compact ? 9 : 11)
@@ -5063,8 +5055,8 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     SettingsIntroCard(
-                        title: "Jednostavno. Lokalno. Zaštićeno.",
-                        subtitle: "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                        title: "Vaša Keyra, vaše postavke.",
+                        subtitle: "Sve važne opcije na jednom mjestu."
                     )
 
                     SectionLabel("ZAŠTITA")
@@ -5200,33 +5192,57 @@ struct SettingsView: View {
                     SectionLabel("PRIVATNOST I APLIKACIJA")
 
                     Button {
-                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
+                        if let url = URL(string: "https://app.brendigo.com/keya/politika-privatnosti") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "hand.raised.fill",
                             title: "Pravila privatnosti",
-                            subtitle: "Saznajte kako Keyra štiti podatke i što ne prikuplja."
+                            subtitle: "Pročitajte pravila privatnosti."
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
                     }
                     .buttonStyle(.plain)
 
-                    SettingRow(
-                        icon: "info.circle",
-                        title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
-                    )
+                    Button {
+                        if let url = URL(string: "https://app.brendigo.com/keya/uvjeti-koristenja") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "doc.text",
+                            title: "Uvjeti korištenja",
+                            subtitle: "Pročitajte uvjete korištenja aplikacije."
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        if let url = URL(string: "https://app.brendigo.com/keya/o-nama") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "info.circle",
+                            title: "O aplikaciji",
+                            subtitle: "Keyra 0.6.13"
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
 
                     Button {
                         confirmErase = true
                     } label: {
                         SettingRow(
                             icon: "trash.slash.fill",
-                            title: "Izbriši sve lokalne podatke",
-                            subtitle: "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja."
+                            title: "Izbriši sve podatke",
+                            subtitle: "Trajno izbrišite trezor i postavke s ovog uređaja."
                         ) {
                             Image(systemName: "chevron.right").foregroundStyle(danger)
                         }
@@ -5513,8 +5529,8 @@ struct SecurityCenterView: View {
                         GlassCard {
                             SecurityProtectionRow(
                                 icon: "lock.shield.fill",
-                                title: "Lokalni šifrirani trezor",
-                                subtitle: "AES-256-GCM • bez Keyra backenda"
+                                title: "Šifrirani trezor",
+                                subtitle: "Zaštićeni podaci"
                             )
                             Divider().overlay(ice.opacity(0.14))
                             SecurityProtectionRow(
