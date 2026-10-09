@@ -3185,7 +3185,7 @@ struct VaultRow: View {
             if let number = item.extraFields["Broj kartice"], !number.isEmpty {
                 let asciiDigits = Set("0123456789")
                 let suffix = number.filter { asciiDigits.contains($0) }.suffix(4)
-                if !suffix.isEmpty { return "•••• " + suffix }
+                if !suffix.isEmpty { return "•••• " + String(suffix) }
             }
             return item.category
         case "Identitet":
@@ -3803,7 +3803,9 @@ struct AddEditView: View {
         switch item?.kind {
         case "Kartica":
             _field1 = State(initialValue: extra["Vlasnik kartice"] ?? "")
-            _field2 = State(initialValue: formatCardNumberInput(extra["Broj kartice"] ?? ""))
+            let storedCardNumber = extra["Broj kartice"] ?? ""
+            _field2 = State(initialValue: isValidCardNumber(storedCardNumber)
+                ? formatCardNumberInput(storedCardNumber) : storedCardNumber)
             _field3 = State(initialValue: extra["Vrijedi do"] ?? "")
             _field4 = State(initialValue: extra["Sigurnosni kod"] ?? "")
         case "Identitet":
