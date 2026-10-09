@@ -79,13 +79,16 @@ final class MasterPasswordEntryUITests: XCTestCase {
         let failureMessages = [
             "Zaštitu glavne lozinke nije moguće spremiti u Keychain.",
             "Šifriranu datoteku trezora nije moguće spremiti na uređaj.",
+            "Zaštitni ključ trezora nije moguće spremiti u Keychain.",
+            "Zaštitni ključ trezora trenutno nije dostupan.",
             "Lozinke se ne podudaraju.",
             "Glavna lozinka mora imati između 12 i 256 znakova."
         ]
         let failure = app.staticTexts.matching(
             NSPredicate(
-                format: "label IN %@ OR label BEGINSWITH %@",
+                format: "label IN %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@",
                 failureMessages,
+                "Zaštitni ključ trezora nije moguće spremiti u Keychain.",
                 "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
             )
         ).firstMatch
