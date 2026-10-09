@@ -1110,7 +1110,7 @@ struct KeyraBackupDocument: FileDocument {
 func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
     let passwordItems = items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
     let duplicateIDs = Set(
-        Dictionary(grouping: passwordItems.filter { !$0.password.isEmpty }, by: { $0.password })
+        Dictionary(grouping: passwordItems.filter { !$0.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, by: { $0.password })
             .values
             .filter { $0.count > 1 }
             .flatMap { $0.map(\.id) }
@@ -2769,7 +2769,7 @@ struct VaultView: View {
     }
 
     private var duplicates: Set<UUID> {
-        let grouped = Dictionary(grouping: passwordItems.filter { !$0.password.isEmpty }, by: { $0.password })
+        let grouped = Dictionary(grouping: passwordItems.filter { !$0.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, by: { $0.password })
         return Set(grouped.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
     }
 
@@ -3078,7 +3078,7 @@ struct VaultRow: View {
 
     private var state: (String, Color) {
         if duplicated { return ("Ponovno korištena", danger) }
-        if isPasswordItem && item.password.isEmpty { return ("Bez lozinke", warn) }
+        if isPasswordItem && item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return ("Bez lozinke", warn) }
         if isPasswordItem && !item.password.isEmpty && !isStrongPassword(item.password) { return ("Potrebno ažuriranje", warn) }
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
@@ -4139,7 +4139,7 @@ struct DetailView: View {
             let securityLabel: String = {
                 if item.kind == "Autentifikator", totpConfig != nil { return "TOTP aktivan" }
                 if item.kind == "Autentifikator" { return "TOTP greška" }
-                if isPasswordItem && item.password.isEmpty { return "Bez lozinke" }
+                if isPasswordItem && item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Bez lozinke" }
                 if duplicatedPassword { return "Ponovno korištena" }
                 if isPasswordItem && isStrongPassword(item.password) { return "Snažna" }
                 if isPasswordItem { return "Potrebno ažuriranje" }
@@ -4530,7 +4530,7 @@ struct DetailView: View {
                                     if duplicatedPassword {
                                         return "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
                                     }
-                                    if isPasswordItem && item.password.isEmpty {
+                                    if isPasswordItem && item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                         return "Ova stavka nema spremljenu lozinku."
                                     }
                                     if isPasswordItem && !isStrongPassword(item.password) {
@@ -5291,7 +5291,7 @@ struct SecurityCenterView: View {
     @EnvironmentObject var store: KeyraStore
 
     private var duplicateIDs: Set<UUID> {
-        let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.isEmpty }
+        let passwordItems = store.items.filter { ($0.kind == "Prijava" || $0.kind == "Wi-Fi") && !$0.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let groups = Dictionary(grouping: passwordItems, by: { $0.password })
         return Set(groups.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
     }
@@ -5404,7 +5404,7 @@ struct SecurityCenterView: View {
                                         Text({
                                             let duplicate = duplicateIDs.contains(item.id)
                                             let weak = !isStrongPassword(item.password)
-                                            if item.password.isEmpty {
+                                            if item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                                 return "Ovoj stavci nedostaje spremljena lozinka."
                                             }
                                             if duplicate && weak {
