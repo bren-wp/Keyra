@@ -219,6 +219,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var isImportingVault by mutableStateOf(false)
         private set
+    var isRecoveringVault by mutableStateOf(false)
+        private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
     private var authenticationEpoch = 0L
@@ -240,7 +242,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelSetup() {
-        if (isCreatingVault || isImportingVault || isUnlockingVault) return
+        if (isCreatingVault || isImportingVault || isUnlockingVault || isRecoveringVault) return
         importingNewVault = false
         if (!isSetup) screen = Screen.ONBOARDING
     }
@@ -268,7 +270,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun select(item: VaultItem) { selected = item; screen = Screen.DETAIL }
 
     fun createVault(password: String) {
-        if (isSetup || isCreatingVault) return
+        if (isSetup || isCreatingVault || isRecoveringVault) return
         if (password.length !in 12..256) {
             message = "Glavna lozinka mora imati između 12 i 256 znakova."
             return
@@ -294,7 +296,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun importNewVault(payload: String, password: String) {
-        if (isSetup || isCreatingVault || isImportingVault) return
+        if (isSetup || isCreatingVault || isImportingVault || isRecoveringVault) return
         if (password.length < 12) {
             message = "Lozinka mora imati najmanje 12 znakova."
             return
@@ -353,69 +355,66 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         backupPayload: String,
         backupPassword: String,
         newPassword: String
-    ): Boolean {
-        if (isSetup) {
-            message = "Recovery postavljanje dostupno je samo prije izrade trezora."
-            return false
+    ) {
+        if (isSetup || isRecoveringVault || isCreatingVault || isImportingVault) return
+        if (newPassword.length !in 12..256) {
+            message = "Nova glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
-        if (newPassword.length < 12) {
-            message = "Nova glavna lozinka mora imati najmanje 12 znakova."
-            return false
-        }
-        if (recoveryPayload.isBlank() || recoveryPayload.length > MAX_RECOVERY_CHARS) {
-            message = "Recovery Key datoteka nije valjana."
-            return false
-        }
-        if (backupPayload.isBlank() || backupPayload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS) {
-            message = "KEYRA2 sigurnosna kopija nije valjana ili je prevelika."
-            return false
-        }
-        if (recoveryPassphrase.isBlank() || backupPassword.isBlank()) {
-            message = "Unesite recovery lozinku i lozinku sigurnosne kopije."
-            return false
+        if (recoveryPayload.isBlank() || recoveryPayload.toByteArray(Charsets.UTF_8).size > MAX_RECOVERY_CHARS ||
+            backupPayload.isBlank() || backupPayload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS ||
+            recoveryPassphrase.isBlank() || backupPassword.isBlank()
+        ) {
+            message = "Odaberite valjani Recovery Key i sigurnosnu kopiju te unesite obje lozinke."
+            return
         }
 
-        val rawKey = runCatching {
-            RecoveryKeyEnvelope.decrypt(recoveryPayload, recoveryPassphrase)
-        }.getOrElse {
-            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
-            return false
-        }
+        val requestEpoch = authenticationEpoch
+        isRecoveringVault = true
+        viewModelScope.launch {
+            val result: Pair<List<VaultItem>?, String> = withContext(Dispatchers.IO) {
+                val rawKey = runCatching {
+                    RecoveryKeyEnvelope.decrypt(recoveryPayload, recoveryPassphrase)
+                }.getOrElse {
+                    return@withContext Pair(null, "Recovery Key je oštećen ili recovery lozinka nije ispravna.")
+                }
+                try {
+                    val imported = runCatching {
+                        store.fromJson(PortableBackup.decrypt(backupPayload, backupPassword))
+                    }.getOrElse {
+                        return@withContext Pair(null, "Sigurnosna kopija nije valjana ili lozinka nije ispravna.")
+                    }
 
-        val imported = runCatching {
-            val json = PortableBackup.decrypt(backupPayload, backupPassword)
-            store.fromJson(json)
-        }.getOrElse {
-            rawKey.fill(0)
-            message = "KEYRA2 sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
-            return false
-        }
-
-        return try {
-            // Sve se prvo provjerava u memoriji. Tek nakon uspješne provjere oba artefakta
-            // uklanjamo eventualno nedovršeno first-run stanje i spremamo novi uređaj.
-            auth.clear()
-            store.destroy()
-            store.installRecoveryKey(rawKey)
-            store.save(imported)
-
-            if (!auth.create(newPassword)) {
-                store.destroy()
-                auth.clear()
-                message = "Novu glavnu lozinku nije moguće trajno spremiti. Recovery je poništen."
-                false
-            } else {
-                finishInitialSetup(newPassword, imported)
-                message = "Trezor je uspješno obnovljen."
-                true
+                    runCatching {
+                        check(auth.clear() && store.destroy()) {
+                            "Prethodno nedovršeno stanje nije moguće sigurno ukloniti."
+                        }
+                        store.installRecoveryKey(rawKey)
+                        store.save(imported)
+                        check(auth.create(newPassword)) { "Novu glavnu lozinku nije moguće spremiti." }
+                    }.fold(
+                        onSuccess = { Pair(imported, "") },
+                        onFailure = {
+                            runCatching { store.destroy() }
+                            runCatching { auth.clear() }
+                            Pair(null, "Obnova nije dovršena. Provjerite zaštitu i slobodan prostor uređaja.")
+                        }
+                    )
+                } finally {
+                    rawKey.fill(0)
+                }
             }
-        } catch (_: Exception) {
-            store.destroy()
-            auth.clear()
-            message = "Recovery nije moguće sigurno dovršiti. Na uređaju nije zadržano djelomično obnovljeno stanje."
-            false
-        } finally {
-            rawKey.fill(0)
+            isRecoveringVault = false
+            val imported = result.first
+            if (imported == null) {
+                message = result.second
+            } else {
+                finishInitialSetup(
+                    newPassword, imported,
+                    shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
+                )
+                message = "Trezor je uspješno obnovljen."
+            }
         }
     }
 
@@ -442,7 +441,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     fun unlock(password: String) {
-        if (isUnlockingVault || isCreatingVault) return
+        if (isUnlockingVault || isCreatingVault || isRecoveringVault) return
         val now = System.currentTimeMillis()
         val lockoutUntil = prefs.getLong("unlock_lockout_until", 0L)
         if (lockoutUntil > now) {
@@ -1275,8 +1274,15 @@ internal fun readUtf8Limited(context: Context, uri: Uri, maxBytes: Int): String 
             output.write(buffer, 0, read)
         }
     } ?: error("Odabranu datoteku nije moguće otvoriti.")
-    return output.toString(Charsets.UTF_8.name())
+    return decodeUtf8Strict(output.toByteArray())
 }
+
+internal fun decodeUtf8Strict(bytes: ByteArray): String =
+    Charsets.UTF_8.newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        .decode(java.nio.ByteBuffer.wrap(bytes))
+        .toString()
 
 internal object PortableBackup {
     private const val ITERATIONS = 600_000
@@ -2096,7 +2102,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                     Text("3. Nova glavna lozinka", color = Color.White, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = newPassword,
-                        onValueChange = { newPassword = it },
+                        onValueChange = { newPassword = boundedNewMasterPasswordInput(it) },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Nova glavna lozinka") },
                         supportingText = { Text("Najmanje 12 znakova.") },
@@ -2106,7 +2112,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                     )
                     OutlinedTextField(
                         value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
+                        onValueChange = { confirmPassword = boundedNewMasterPasswordInput(it) },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Ponovite novu glavnu lozinku") },
                         singleLine = true,
@@ -2141,14 +2147,22 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                             recoveryPassphrase.isNotBlank() &&
                             backupPassword.isNotBlank() &&
                             newPassword.length >= 12 &&
-                            confirmPassword.isNotBlank(),
+                            confirmPassword.isNotBlank() && !model.isRecoveringVault,
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(27.dp)
                     ) {
-                        Icon(Icons.Outlined.Restore, contentDescription = null)
+                        if (model.isRecoveringVault) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Midnight,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Restore, contentDescription = null)
+                        }
                         Spacer(Modifier.width(8.dp))
-                        Text("Obnovi trezor", fontWeight = FontWeight.Bold)
+                        Text(if (model.isRecoveringVault) "Obnova trezora…" else "Obnovi trezor", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2164,7 +2178,11 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
     }
 }
 
-internal fun boundedNewMasterPasswordInput(value: String): String = value.take(256)
+internal fun boundedNewMasterPasswordInput(value: String): String {
+    if (value.length <= 256) return value
+    val truncated = value.take(256)
+    return if (truncated.last().isHighSurrogate()) truncated.dropLast(1) else truncated
+}
 
 @Composable
 private fun UnlockScreen(
