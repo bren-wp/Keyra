@@ -83,7 +83,11 @@ final class MasterPasswordEntryUITests: XCTestCase {
             "Glavna lozinka mora imati između 12 i 256 znakova."
         ]
         let failure = app.staticTexts.matching(
-            NSPredicate(format: "label IN %@", failureMessages)
+            NSPredicate(
+                format: "label IN %@ OR label BEGINSWITH %@",
+                failureMessages,
+                "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
+            )
         ).firstMatch
         if failure.waitForExistence(timeout: 5) {
             // These messages describe a safe failure category, never a secret.
