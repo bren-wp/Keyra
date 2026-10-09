@@ -3631,7 +3631,9 @@ private fun AddScreen(model: KeyraViewModel) {
     var field2 by remember(original?.id) {
         mutableStateOf(
             when (original?.type) {
-                "Kartica" -> formatCardNumberInput(original.fields["Broj kartice"].orEmpty())
+                "Kartica" -> original.fields["Broj kartice"].orEmpty().let { raw ->
+                    if (isValidCardNumber(raw)) formatCardNumberInput(raw) else raw
+                }
                 "Identitet" -> original.fields["Broj dokumenta"].orEmpty()
                 "Wi-Fi" -> original.fields["Vrsta zaštite"].orEmpty()
                 "Autentifikator" -> original.fields["Račun"].orEmpty()
@@ -3972,7 +3974,7 @@ private fun AddScreen(model: KeyraViewModel) {
                                 "Unesite naziv Wi-Fi mreže."
                             type == "Kartica" && field2.isNotBlank() && cardDigits == null ->
                                 "Broj kartice smije sadržavati samo znamenke, razmake i crtice."
-                            type == "Kartica" && field2.isNotBlank() && cardDigits?.length !in 12..19 ->
+                            type == "Kartica" && field2.isNotBlank() && (cardDigits?.length ?: 0) !in 12..19 ->
                                 "Broj kartice mora sadržavati između 12 i 19 znamenki."
                             type == "Kartica" && field2.isNotBlank() && !isValidCardNumber(field2) ->
                                 "Broj kartice nije prošao provjeru kontrolne znamenke."
