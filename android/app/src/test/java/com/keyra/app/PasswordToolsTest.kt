@@ -32,6 +32,30 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun vaultErasureNeverRemovesKeyUntilEncryptedDataIsDeleted() {
+        val stages = mutableListOf<String>()
+        assertFalse(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; false },
+            removeKey = { stages += "key"; true }
+        ))
+        assertEquals(listOf("blob"), stages)
+
+        stages.clear()
+        assertTrue(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; true },
+            removeKey = { stages += "key"; true }
+        ))
+        assertEquals(listOf("blob", "key"), stages)
+
+        stages.clear()
+        assertFalse(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; true },
+            removeKey = { stages += "key"; false }
+        ))
+        assertEquals(listOf("blob", "key"), stages)
+    }
+
+    @Test
     fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
         val key = ByteArray(32) { it.toByte() }
         val owned = clipboardOwnershipTag(key, "lozinka#2026")
