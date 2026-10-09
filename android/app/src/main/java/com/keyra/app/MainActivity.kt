@@ -158,13 +158,6 @@ class MainActivity : FragmentActivity() {
         model.onAppForeground()
     }
 
-    override fun onPause() {
-        // Android may refuse clipboard reads once the activity loses foreground.
-        // Clear a Keyra-owned secret before leaving, but never overwrite another copy.
-        SensitiveClipboard.clearIfOwned(this)
-        super.onPause()
-    }
-
     override fun onStop() {
         model.onAppBackground()
         super.onStop()
@@ -246,6 +239,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var isRecoveringVault by mutableStateOf(false)
         private set
     var isProcessingBackup by mutableStateOf(false)
+        private set
+    var isProcessingRecovery by mutableStateOf(false)
         private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
@@ -646,7 +641,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
             return
         }
-        if (isProcessingBackup) {
+        if (isProcessingBackup || isProcessingRecovery) {
             message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
             return
         }
@@ -689,76 +684,100 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun makeRecoveryKeyPayload(passphrase: String): String? {
-        if (!isStrongRecoveryPassphrase(passphrase)) {
-            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
-            return null
-        }
-        val rawKey = runCatching { store.recoveryKeyBytes() }.getOrElse {
-            message = "Recovery ključ nije moguće dohvatiti iz zaštićenog trezora."
-            return null
-        }
-        return try {
-            RecoveryKeyEnvelope.encrypt(rawKey, passphrase)
-        } catch (_: Exception) {
-            message = "Recovery Key datoteku nije moguće izraditi."
-            null
-        } finally {
-            rawKey.fill(0)
-        }
-    }
+    private fun canCompleteSettingsCrypto(requestEpoch: Long): Boolean =
+        shouldAcceptProtectedCompletion(
+            requestEpoch, authenticationEpoch, appInForeground,
+            unlocked, screen == Screen.SETTINGS, sameItem = true
+        )
 
     fun exportRecoveryKeyToUri(context: Context, uri: Uri, passphrase: String) {
-        val payload = makeRecoveryKeyPayload(passphrase) ?: return
-        runCatching {
-            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                output.write(payload.toByteArray(Charsets.UTF_8))
-                output.flush()
-            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
-        }.onSuccess {
-            message = "Šifrirani Recovery Key spremljen je. Čuvajte datoteku i recovery lozinku odvojeno."
-        }.onFailure {
-            message = "Recovery Key nije moguće spremiti u odabranu datoteku."
+        if (!unlocked || !isSetup || screen != Screen.SETTINGS) return
+        if (!isStrongRecoveryPassphrase(passphrase)) {
+            message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
+            return
+        }
+        if (isProcessingRecovery || isProcessingBackup) {
+            message = "Pričekajte završetak prethodne sigurnosne radnje."
+            return
+        }
+        val requestEpoch = authenticationEpoch
+        val resolver = context.applicationContext.contentResolver
+        isProcessingRecovery = true
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                runCatching {
+                    val key = store.recoveryKeyBytes()
+                    try { RecoveryKeyEnvelope.encrypt(key, passphrase) }
+                    finally { key.fill(0) }
+                }.getOrNull()
+            }
+            if (!canCompleteSettingsCrypto(requestEpoch)) {
+                isProcessingRecovery = false
+                return@launch
+            }
+            if (payload == null) {
+                message = "Recovery Key datoteku nije moguće izraditi."
+                isProcessingRecovery = false
+                return@launch
+            }
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openOutputStream(uri, "wt")?.use { stream ->
+                        stream.write(payload.toByteArray(Charsets.UTF_8))
+                        stream.flush()
+                    } ?: error("Datoteku nije moguće otvoriti za pisanje.")
+                }.isSuccess
+            }
+            isProcessingRecovery = false
+            if (canCompleteSettingsCrypto(requestEpoch)) {
+                message = if (saved) {
+                    "Šifrirani Recovery Key spremljen je. Čuvajte datoteku i recovery lozinku odvojeno."
+                } else "Recovery Key nije moguće spremiti u odabranu datoteku."
+            }
         }
     }
 
-    fun importRecoveryKeyPayload(payload: String, passphrase: String): Boolean {
-        if (payload.isBlank() || payload.length > MAX_RECOVERY_CHARS) {
-            message = "Recovery Key datoteka nije valjana."
-            return false
+    fun importRecoveryKeyFromUri(context: Context, uri: Uri, passphrase: String) {
+        if (!unlocked || !isSetup || screen != Screen.SETTINGS) return
+        if (isProcessingRecovery || isProcessingBackup) {
+            message = "Pričekajte završetak prethodne sigurnosne radnje."
+            return
         }
-        val rawKey = runCatching { RecoveryKeyEnvelope.decrypt(payload, passphrase) }.getOrElse {
-            message = "Recovery Key je oštećen, izmijenjen ili recovery lozinka nije ispravna."
-            return false
-        }
-        return try {
-            val verifiedItems = store.installRecoveryKey(rawKey)
-            if (verifiedItems.isNotEmpty()) {
-                items.clear()
-                items.addAll(verifiedItems)
+        val requestEpoch = authenticationEpoch
+        val applicationContext = context.applicationContext
+        isProcessingRecovery = true
+        viewModelScope.launch {
+            val rawKey = withContext(Dispatchers.IO) {
+                runCatching {
+                    val payload = readUtf8Limited(applicationContext, uri, MAX_RECOVERY_CHARS)
+                    require(payload.isNotBlank()) { "Prazan Recovery Key." }
+                    RecoveryKeyEnvelope.decrypt(payload, passphrase)
+                }.getOrNull()
             }
-            message = if (verifiedItems.isEmpty()) {
-                "Recovery Key je obnovljen. Za povrat podataka odaberite zasebnu šifriranu sigurnosnu kopiju."
-            } else {
-                "Recovery Key je verificiran i ponovno zaštićen ključem ovog uređaja."
+            try {
+                if (!canCompleteSettingsCrypto(requestEpoch)) return@launch
+                if (rawKey == null) {
+                    message = "Recovery Key je oštećen ili recovery lozinka nije ispravna."
+                    return@launch
+                }
+                runCatching { store.installRecoveryKey(rawKey) }.onSuccess { recovered ->
+                    if (recovered.isNotEmpty()) {
+                        items.clear()
+                        items.addAll(recovered)
+                        selected = null
+                    }
+                    message = if (recovered.isEmpty()) {
+                        "Recovery Key je obnovljen. Za povrat zapisa potrebna je zasebna sigurnosna kopija."
+                    } else "Recovery Key verificiran je i ponovno zaštićen ključem ovog uređaja."
+                }.onFailure {
+                    message = "Recovery Key ne odgovara ovom trezoru ili ga nije moguće obnoviti."
+                }
+            } finally {
+                rawKey?.fill(0)
+                isProcessingRecovery = false
             }
-            true
-        } catch (_: Exception) {
-            message = "Recovery Key ne odgovara ovom trezoru ili ga nije moguće sigurno obnoviti."
-            false
-        } finally {
-            rawKey.fill(0)
         }
     }
-
-    fun importRecoveryKeyFromUri(context: Context, uri: Uri, passphrase: String): Boolean =
-        runCatching {
-            val payload = readUtf8Limited(context, uri, MAX_RECOVERY_CHARS)
-            importRecoveryKeyPayload(payload, passphrase)
-        }.getOrElse {
-            message = "Recovery Key datoteku nije moguće pročitati."
-            false
-        }
 
     fun importBackupFromUri(context: Context, uri: Uri) {
         val password = sessionPassword
@@ -766,7 +785,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
             return
         }
-        if (isProcessingBackup) {
+        if (isProcessingBackup || isProcessingRecovery) {
             message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
             return
         }
@@ -5239,7 +5258,7 @@ private fun SettingsScreen(
                     subtitle = "Sve važne opcije na jednom mjestu."
                 )
             }
-            if (model.isProcessingBackup) {
+            if (model.isProcessingBackup || model.isProcessingRecovery) {
                 item {
                     Row(
                         Modifier.fillMaxWidth()
@@ -5254,7 +5273,7 @@ private fun SettingsScreen(
                             strokeWidth = 2.dp
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Obrada šifrirane sigurnosne kopije…", color = Color.White)
+                        Text(if (model.isProcessingRecovery) "Zaštita i provjera Recovery Key datoteke…" else "Obrada šifrirane sigurnosne kopije…", color = Color.White)
                     }
                 }
             }
@@ -5311,7 +5330,7 @@ private fun SettingsScreen(
                 ) {
                     IconButton(
                         onClick = { exportFileLauncher.launch("Keyra-backup.keyra") },
-                        enabled = !model.isProcessingBackup
+                        enabled = !model.isProcessingBackup && !model.isProcessingRecovery
                     ) {
                         Icon(Icons.Outlined.SaveAlt, contentDescription = "Spremi sigurnosnu kopiju", tint = Cyan)
                     }
@@ -5329,7 +5348,7 @@ private fun SettingsScreen(
                                 arrayOf("application/octet-stream", "text/plain", "application/*")
                             )
                         },
-                        enabled = !model.isProcessingBackup
+                        enabled = !model.isProcessingBackup && !model.isProcessingRecovery
                     ) {
                         Icon(Icons.Outlined.FolderOpen, contentDescription = "Vrati sigurnosnu kopiju", tint = Cyan)
                     }
