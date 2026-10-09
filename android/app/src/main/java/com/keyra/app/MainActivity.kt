@@ -406,49 +406,62 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.VAULT
     }
 
-    fun unlock(password: String): Boolean {
+    var isUnlockingVault by mutableStateOf(false)
+        private set
+
+    fun unlock(password: String) {
+        if (isUnlockingVault || isCreatingVault) return
         val now = System.currentTimeMillis()
         val lockoutUntil = prefs.getLong("unlock_lockout_until", 0L)
         if (lockoutUntil > now) {
             val seconds = ((lockoutUntil - now + 999L) / 1000L).coerceAtLeast(1L)
-            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za " + seconds + " s."
-            return false
+            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
+            return
+        }
+        if (password.length > 256) {
+            message = "Glavna lozinka ne smije biti dulja od 256 znakova."
+            return
         }
 
-        if (!auth.verify(password)) {
-            val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
-            val penaltyMs = when {
-                attempts >= 10 -> 300_000L
-                attempts >= 7 -> 60_000L
-                attempts >= 5 -> 30_000L
-                else -> 0L
+        isUnlockingVault = true
+        viewModelScope.launch {
+            val verified = withContext(Dispatchers.IO) {
+                runCatching { auth.verify(password) }.getOrDefault(false)
             }
+            isUnlockingVault = false
+            if (!verified) {
+                val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
+                val penaltyMs = when {
+                    attempts >= 10 -> 300_000L
+                    attempts >= 7 -> 60_000L
+                    attempts >= 5 -> 30_000L
+                    else -> 0L
+                }
+                prefs.edit()
+                    .putInt("unlock_failed_attempts", attempts)
+                    .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
+                    .apply()
+                message = if (penaltyMs > 0L) {
+                    "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+                } else {
+                    "Glavna lozinka nije ispravna."
+                }
+                return@launch
+            }
+
             prefs.edit()
-                .putInt("unlock_failed_attempts", attempts)
-                .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
+                .remove("unlock_failed_attempts")
+                .remove("unlock_lockout_until")
                 .apply()
-
-            message = if (penaltyMs > 0L) {
-                "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
-            } else {
-                "Glavna lozinka nije ispravna."
+            sessionPassword = password
+            if (!loadVault()) {
+                sessionPassword = null
+                unlocked = false
+                return@launch
             }
-            return false
+            unlocked = true
+            screen = Screen.VAULT
         }
-
-        prefs.edit()
-            .remove("unlock_failed_attempts")
-            .remove("unlock_lockout_until")
-            .apply()
-        sessionPassword = password
-        if (!loadVault()) {
-            sessionPassword = null
-            unlocked = false
-            return false
-        }
-        unlocked = true
-        screen = Screen.VAULT
-        return true
     }
 
     fun unlockFromBiometric() {
@@ -2273,7 +2286,8 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
-                        enabled = !model.isCreatingVault && (!importing || importPayload != null),
+                        enabled = !model.isCreatingVault && !model.isUnlockingVault &&
+                            (!importing || importPayload != null),
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
@@ -2284,7 +2298,7 @@ private fun UnlockScreen(
                             when {
                                 importing -> "Uvezi trezor"
                                 creating -> if (model.isCreatingVault) "Izrada trezora…" else "Izradi trezor"
-                                else -> "Otključaj"
+                                else -> if (model.isUnlockingVault) "Otključavanje…" else "Otključaj"
                             },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
