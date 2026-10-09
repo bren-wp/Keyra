@@ -2388,8 +2388,8 @@ private fun BottomNav(model: KeyraViewModel, active: Screen) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
-                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
                 NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
+                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
                 NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
             }
         }
@@ -2434,7 +2434,7 @@ private fun RowScope.NavItem(
             Text(
                 label,
                 color = if (selected) Cyan else Muted,
-                fontSize = if (compact) 8.sp else 10.sp,
+                fontSize = if (compact) 9.sp else 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1
             )
@@ -2466,7 +2466,6 @@ private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(model.vaultTypeFilter ?: "Sve") }
     var newestFirst by remember { mutableStateOf(true) }
-    var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val displayed = model.items
         .filter {
@@ -2505,34 +2504,13 @@ private fun VaultScreen(model: KeyraViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = {
-                Box {
-                    IconButton(onClick = { filterMenuExpanded = true }) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Filtri i sortiranje", tint = Ice)
-                    }
-                    DropdownMenu(
-                        expanded = filterMenuExpanded,
-                        onDismissRequest = { filterMenuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (newestFirst) "Poredaj A–Ž" else "Poredaj po nedavnim") },
-                            onClick = {
-                                newestFirst = !newestFirst
-                                filterMenuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Prikaži sve") },
-                            onClick = {
-                                filter = "Sve"
-                                search = ""
-                                model.clearVaultCategoryFilter()
-                                filterMenuExpanded = false
-                            }
-                        )
+            trailingIcon = if (search.isNotBlank()) {
+                {
+                    IconButton(onClick = { search = "" }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu", tint = Ice)
                     }
                 }
-            },
+            } else null,
             colors = keyraFieldColors(),
             shape = RoundedCornerShape(24.dp)
         )
@@ -2886,7 +2864,6 @@ private fun CollectionsScreen(model: KeyraViewModel) {
     )
     var search by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Prijava") }
-    var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val collectionItems = model.items
         .filter { item ->
@@ -2917,21 +2894,13 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+            BrandHeader("KOLEKCIJE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
             Text(
-                "Kolekcije",
-                Modifier.padding(horizontal = side),
-                color = Color.White,
-                fontSize = if (narrow) 34.sp else 42.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Text(
-                "Organizirajte podatke. Pronađite ih odmah.",
-                Modifier.padding(horizontal = side),
+                "Organizirajte trezor po vrsti i kategoriji.",
+                Modifier.padding(horizontal = side, vertical = 4.dp),
                 color = Muted,
-                fontSize = if (narrow) 14.sp else 16.sp
+                fontSize = if (narrow) 13.sp else 14.sp
             )
-            Spacer(Modifier.height(if (narrow) 8.dp else 12.dp))
 
             OutlinedTextField(
                 search,
@@ -2939,44 +2908,13 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = side),
                 placeholder = { Text("Pretražite trezor...") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                trailingIcon = {
-                    Box {
-                        IconButton(onClick = { filterMenuExpanded = true }) {
-                            Icon(Icons.Outlined.Tune, contentDescription = "Filtriraj kolekcije", tint = Ice)
-                        }
-                        DropdownMenu(
-                            expanded = filterMenuExpanded,
-                            onDismissRequest = { filterMenuExpanded = false }
-                        ) {
-                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            when (value) {
-                                                "Prijava" -> "Lozinke"
-                                                "Bilješka" -> "Bilješke"
-                                                "Kartica" -> "Kartice"
-                                                "Autentifikator" -> "2FA"
-                                                else -> value
-                                            }
-                                        )
-                                    },
-                                    onClick = {
-                                        type = value
-                                        filterMenuExpanded = false
-                                    }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Očisti pretragu") },
-                                onClick = {
-                                    search = ""
-                                    filterMenuExpanded = false
-                                }
-                            )
+                trailingIcon = if (search.isNotBlank()) {
+                    {
+                        IconButton(onClick = { search = "" }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu", tint = Ice)
                         }
                     }
-                },
+                } else null,
                 colors = keyraFieldColors(),
                 shape = RoundedCornerShape(24.dp),
                 singleLine = true
