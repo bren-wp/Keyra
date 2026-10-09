@@ -1250,6 +1250,7 @@ final class KeyraStore: ObservableObject {
     @Published var autoLockSeconds: Int
     @Published var isSetup: Bool
     @Published var importingNewVault = false
+    @Published private(set) var isCreatingVault = false
 
     private var sessionPassword: String?
 
@@ -1309,26 +1310,35 @@ final class KeyraStore: ObservableObject {
     func editSelected() { if selected != nil { screen = .add } }
     func select(_ item: VaultItem) { selected = item; screen = .detail }
 
-    func createVault(password: String) -> Bool {
-        guard password.count >= 12 else {
-            message = "Glavna lozinka mora imati najmanje 12 znakova."
-            return false
-        }
-        do {
-            try vault.save([])
-        } catch {
-            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
-            return false
+    func createVault(password: String) {
+        guard !isSetup, !isCreatingVault else { return }
+        guard (12...256).contains(password.count) else {
+            message = "Glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
 
-        guard auth.create(password: password) else {
-            vault.clear()
-            message = "Zaštitu glavne lozinke nije moguće postaviti. Spremanje je poništeno."
-            return false
+        isCreatingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let saved: Bool
+            do {
+                try self.vault.save([])
+                saved = self.auth.create(password: password)
+            } catch {
+                saved = false
+            }
+            if !saved {
+                self.vault.clear()
+            }
+            DispatchQueue.main.async {
+                self.isCreatingVault = false
+                if saved {
+                    self.finishInitialSetup(password: password, initialItems: [])
+                } else {
+                    self.message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+                }
+            }
         }
-
-        finishInitialSetup(password: password, initialItems: [])
-        return true
     }
 
     func importNewVault(payload: String, password: String) -> Bool {
@@ -2646,14 +2656,14 @@ struct UnlockView: View {
                             }
                         } else if creating {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
-                            else { _ = store.createVault(password: password) }
+                            else { store.createVault(password: password) }
                         } else {
                             _ = store.unlock(password: password)
                         }
                     } label: {
                         HStack {
                             Image(systemName: "lock.fill")
-                            Text(importing ? "Uvezi trezor" : (creating ? "Izradi trezor" : "Otključaj")).fontWeight(.bold)
+                            Text(importing ? "Uvezi trezor" : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : "Otključaj")).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -2662,7 +2672,7 @@ struct UnlockView: View {
                     .foregroundStyle(midnight)
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
-                    .disabled(importing && importPayload == nil)
+                    .disabled(store.isCreatingVault || (importing && importPayload == nil))
 
                     if creating {
                         Button {
