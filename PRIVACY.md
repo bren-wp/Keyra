@@ -50,3 +50,9 @@ Kritični izvoz/uvoz sigurnosnih kopija i Recovery Key datoteka te trajno brisan
 Keyra 0.6.3 dodatno smanjuje izlaganje osjetljivog sadržaja u sistemskim prikazima aplikacije. Android na podržanim verzijama zasebno onemogućuje Recents screenshot uz postojeći `FLAG_SECURE`, a touch događaji kroz obscured prozor odbacuju se kao dodatna zaštita od tapjacking scenarija. iOS privacy shield sada se aktivira čim aplikacija počne napuštati aktivno stanje.
 
 Osjetljivi password/recovery inputi na Androidu označeni su kao password input prema tipkovnici. Clipboard ponašanje ostaje ograničeno: Android automatski čisti nepromijenjeni Keyra sadržaj nakon 30 sekundi i označava ga kao sensitive gdje je podržano, a iOS koristi `localOnly` pasteboard s istekom nakon 30 sekundi.
+
+## UI/UX i privatnost u verziji 0.6.4
+
+Keyra 0.6.4 uklanja duplicirani backup/import tok preko međuspremnika iz korisničkog sučelja. Sigurnosne kopije podataka sada se u Postavkama izvoze i vraćaju kroz jedan jasan sistemski Files/Document picker tok, pri čemu se `.keyra` sadržaj šifrira prije predaje odabranoj lokaciji ili cloud provideru. Time se smanjuje nepotrebno izlaganje cijele šifrirane sigurnosne kopije međuspremniku i pojednostavljuje izbor korisniku.
+
+Međuspremnik se i dalje koristi samo za korisnički pokrenuto kopiranje pojedinačnih osjetljivih vrijednosti. Te vrijednosti ostaju privremene i automatski se uklanjaju prema implementiranim platformskim zaštitama.
