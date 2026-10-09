@@ -5270,7 +5270,7 @@ private fun SettingsScreen(
         BrandHeader("POSTAVKE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            Modifier.fillMaxSize().padding(horizontal = 18.dp).testTag("keyra-settings-list"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
         ) {
