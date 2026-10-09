@@ -33,11 +33,13 @@ class PasswordToolsTest {
 
     @Test
     fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
-        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null))
-        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst"))
-        assertFalse(shouldClearOwnedClipboard(null, null))
+        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "OtherApp"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", null))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, null, null))
     }
 
     @Test
