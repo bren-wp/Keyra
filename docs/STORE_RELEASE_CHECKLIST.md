@@ -226,5 +226,16 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Potvrditi vanjsku dostupnost sve tri pravne stranice na poslužitelju (ovaj repozitorij ih ne objavljuje).
 - [ ] Android lint/unit/build/privacy uspješni na završnom PR SHA-u.
 - [ ] iOS build/analyze/simulator launch smoke/privacy uspješni na istom SHA-u.
-- [ ] Android/iOS main CI i release workflow uspješni; v0.6.13 sa svih 7 artefakata.
+- [x] Android/iOS main CI i release workflow uspješni na `cf9285af4428463add4f3e65679be167b2da0729`; v0.6.13 sa svih 7 artefakata.
 - [ ] Klik-po-klik QA na fizičkim Android/iOS uređajima: soft keyboard, izrada, otključavanje, pogrešna lozinka, uvoz/recovery, kratki i visoki zasloni, zvonce/profil i vanjske poveznice.
+
+## 0.6.14 potpuno brisanje i unos glavne lozinke
+- [x] Android: potpuno brisanje poziva i AuthStore.clear() za Keystore ključ provjere glavne lozinke te zasebno provjerava rezultat.
+- [x] iOS: AuthStore.clear() vraća rezultat brisanja verifikatora iz Keychaina; postupak brisanja ne prijavljuje lažni uspjeh ako taj korak ne uspije.
+- [x] Android/iOS: novi unos glavne lozinke i potvrde ograničen je na 256 znakova te ima kratku uputu o 12 znakova; postojeća lozinka pri otključavanju i importu ne mijenja se.
+- [x] Android JUnit testovi za ograničenje unosa i nepromijenjene kraće vrijednosti.
+- [ ] Android lint/unit/build/privacy uspješni na završnom PR SHA-u.
+- [ ] iOS build/analyze/simulator launch smoke/privacy uspješni na istom PR SHA-u.
+- [ ] Android/iOS main CI i release workflow uspješni; v0.6.14 objavljen sa 7 artefakata.
+- [ ] Fizički Android/iOS QA, provjera tipkovnice/IME, izrada trezora i potpunog brisanja s provjerom KeyStore/Keychain unosa.
+- [ ] Potvrda dostupnosti vanjskih pravnih stranica app.brendigo.com/keya.
