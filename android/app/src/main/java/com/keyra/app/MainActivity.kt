@@ -2145,7 +2145,15 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(27.dp)
                     ) {
-                        Icon(Icons.Outlined.Restore, contentDescription = null)
+                        if (model.isRecoveringVault) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Midnight,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Restore, contentDescription = null)
+                        }
                         Spacer(Modifier.width(8.dp))
                         Text(if (model.isRecoveringVault) "Obnova trezora…" else "Obnovi trezor", fontWeight = FontWeight.Bold)
                     }
