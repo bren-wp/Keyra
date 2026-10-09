@@ -8,6 +8,15 @@ import org.junit.Test
 
 class PasswordToolsTest {
     @Test
+    fun pendingAuthenticationCannotUnlockAfterBackgroundOrExplicitLock() {
+        assertTrue(shouldAcceptAuthCompletion(10L, 10L, foreground = true))
+        assertFalse(shouldAcceptAuthCompletion(10L, 10L, foreground = false))
+        assertFalse(shouldAcceptAuthCompletion(10L, 11L, foreground = true))
+        assertFalse(shouldAcceptAuthCompletion(10L, 12L, foreground = false))
+        assertTrue(shouldAcceptAuthCompletion(12L, 12L, foreground = true))
+    }
+
+    @Test
     fun newMasterPasswordInputIsBoundedWithoutChangingOrdinaryPasswords() {
         assertEquals("", boundedNewMasterPasswordInput(""))
         assertEquals("MojaLozinka#2026", boundedNewMasterPasswordInput("MojaLozinka#2026"))
