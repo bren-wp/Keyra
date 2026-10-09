@@ -31,6 +31,10 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master = app.secureTextFields["keyra-master-password"]
         XCTAssertTrue(master.waitForExistence(timeout: 10))
         master.tap()
+        master.typeText(String(repeating: "A", count: 260))
+        XCTAssertEqual((master.value as? String)?.count, 256,
+                       "First-run field must cap long pasted/typed passwords at 256 characters")
+        master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256))
         let synthetic = "SafeDemo#2026"
         master.typeText(synthetic)
         let confirmation = app.secureTextFields["keyra-confirm-master-password"]
