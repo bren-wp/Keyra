@@ -69,3 +69,14 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect
           script: gradle -p android :app:connectedDebugAndroidTest --no-daemon --stacktrace
+
+      - name: Preserve synthetic first-run UI test reports for failed CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyra-first-run-ui-test-report
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            android/app/build/outputs/androidTest-results/connected/
+            android/app/build/reports/androidTests/connected/
