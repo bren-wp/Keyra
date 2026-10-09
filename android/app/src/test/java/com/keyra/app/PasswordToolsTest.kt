@@ -358,6 +358,36 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun expiredCardWarningsCoverPastAndInvalidDatesWithoutFlaggingMissingExpiry() {
+        val entries = listOf(
+            VaultItem(id = "expired", type = "Kartica", title = "Expired", fields = mapOf("Vrijedi do" to "09/26")),
+            VaultItem(id = "invalid", type = "Kartica", title = "Invalid", fields = mapOf("Vrijedi do" to "13/29")),
+            VaultItem(id = "current", type = "Kartica", title = "Current", fields = mapOf("Vrijedi do" to "10/26")),
+            VaultItem(id = "future", type = "Kartica", title = "Future", fields = mapOf("Vrijedi do" to "12/30")),
+            VaultItem(id = "no-expiry", type = "Kartica", title = "Unknown"),
+            VaultItem(id = "note", type = "Bilješka", title = "Note", fields = mapOf("Vrijedi do" to "01/20"))
+        )
+        assertEquals(setOf("expired", "invalid"), expiredCardIssueIds(entries, 2026, 10))
+        assertTrue(cardExpiryNeedsAttention("09/26", 2026, 10))
+        assertTrue(cardExpiryNeedsAttention("not-a-date", 2026, 10))
+        assertFalse(cardExpiryNeedsAttention("10/26", 2026, 10))
+        assertFalse(cardExpiryNeedsAttention("12/30", 2026, 10))
+        assertFalse(cardExpiryNeedsAttention("", 2026, 10))
+        assertFalse(cardExpiryNeedsAttention("   ", 2026, 10))
+    }
+
+    @Test
+    fun expiredCardsAreCountedAsSecurityIssuesButNotAsPasswordFailures() {
+        val password = VaultItem(id = "login", title = "Safe login", password = "Abcd1234!Efgh56")
+        val expired = VaultItem(id = "card", type = "Kartica", title = "Expired", fields = mapOf("Vrijedi do" to "01/20"))
+        val entries = listOf(password, expired)
+        assertEquals(setOf("card"), securityIssueIds(entries))
+        assertEquals(1, securityIssueCount(entries))
+        assertEquals(100, securityScore(entries))
+        assertEquals(null, securityScore(listOf(expired)))
+    }
+
+    @Test
     fun predictableLongPasswordsAreNotMarkedStrong() {
         listOf(
             "Password123!VeryLong",
