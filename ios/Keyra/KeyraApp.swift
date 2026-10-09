@@ -3134,7 +3134,7 @@ struct VaultRow: View {
 struct CollectionsView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
-    @State private var selectedType = "Prijava"
+    @State private var selectedType = "Sve"
 
     let categories: [(String, Color, String)] = [
         ("Osobno", Color(hex: 0x00AEE8), "person.fill"),
@@ -3149,7 +3149,12 @@ struct CollectionsView: View {
 
     private var collectionItems: [VaultItem] {
         store.items.filter { item in
-            let typeMatch = selectedType == "Favoriti" ? item.favorite : item.kind == selectedType
+            let typeMatch: Bool
+            switch selectedType {
+            case "Sve": typeMatch = true
+            case "Favoriti": typeMatch = item.favorite
+            default: typeMatch = item.kind == selectedType
+            }
             let haystack = [
                 item.title,
                 item.username,
@@ -3199,7 +3204,7 @@ struct CollectionsView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
+                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             selectedType = value
                         } label: {
