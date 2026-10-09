@@ -2127,52 +2127,6 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
 }
 
 @Composable
-private fun FeatureCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    compact: Boolean = false
-) {
-    Surface(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = if (compact) 3.dp else 5.dp),
-        shape = RoundedCornerShape(if (compact) 17.dp else 20.dp),
-        color = Slate.copy(alpha = .9f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .35f))
-    ) {
-        Row(
-            Modifier.padding(if (compact) 10.dp else 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(if (compact) 40.dp else 48.dp)
-                    .clip(RoundedCornerShape(if (compact) 12.dp else 15.dp))
-                    .background(Color(0xFF0A2D3C)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Cyan, modifier = Modifier.size(if (compact) 21.dp else 24.dp))
-            }
-            Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = if (compact) 15.sp else 17.sp
-                )
-                Text(
-                    subtitle,
-                    color = Muted,
-                    fontSize = if (compact) 12.sp else 14.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun UnlockScreen(
     model: KeyraViewModel,
     requestBiometric: (String, () -> Unit) -> Unit
