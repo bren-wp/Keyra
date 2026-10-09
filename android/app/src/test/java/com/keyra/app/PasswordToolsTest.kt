@@ -148,6 +148,7 @@ class PasswordToolsTest {
         assertEquals("Posebno", resolvedCategoryName("Posebno", original = "Posao"))
         assertEquals(null, resolvedCategoryName("  ", original = null))
         assertEquals("", resolvedCategoryName("", original = ""))
+        assertEquals("", resolvedCategoryName("", original = null, existing = listOf("")))
     }
 
     @Test
@@ -155,6 +156,7 @@ class PasswordToolsTest {
         val oversized = "K".repeat(60)
         assertEquals(40, resolvedCategoryName(oversized, original = null)?.length)
         assertEquals(oversized, resolvedCategoryName(oversized, original = oversized))
+        assertEquals(oversized, resolvedCategoryName(oversized, original = null, existing = listOf(oversized)))
     }
 
     @Test
