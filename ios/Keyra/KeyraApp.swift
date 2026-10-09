@@ -1250,6 +1250,9 @@ final class KeyraStore: ObservableObject {
     @Published var autoLockSeconds: Int
     @Published var isSetup: Bool
     @Published var importingNewVault = false
+    @Published private(set) var isCreatingVault = false
+    @Published private(set) var isUnlockingVault = false
+    @Published private(set) var isImportingVault = false
 
     private var sessionPassword: String?
 
@@ -1283,6 +1286,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func cancelSetup() {
+        guard !isCreatingVault, !isImportingVault, !isUnlockingVault else { return }
         importingNewVault = false
         if !isSetup { screen = .onboarding }
     }
@@ -1309,60 +1313,78 @@ final class KeyraStore: ObservableObject {
     func editSelected() { if selected != nil { screen = .add } }
     func select(_ item: VaultItem) { selected = item; screen = .detail }
 
-    func createVault(password: String) -> Bool {
-        guard password.count >= 12 else {
-            message = "Glavna lozinka mora imati najmanje 12 znakova."
-            return false
-        }
-        do {
-            try vault.save([])
-        } catch {
-            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
-            return false
+    func createVault(password: String) {
+        guard !isSetup, !isCreatingVault else { return }
+        guard (12...256).contains(password.count) else {
+            message = "Glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
 
-        guard auth.create(password: password) else {
-            vault.clear()
-            message = "Zaštitu glavne lozinke nije moguće postaviti. Spremanje je poništeno."
-            return false
+        isCreatingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let saved: Bool
+            do {
+                try self.vault.save([])
+                saved = self.auth.create(password: password)
+            } catch {
+                saved = false
+            }
+            if !saved {
+                self.vault.clear()
+            }
+            DispatchQueue.main.async {
+                self.isCreatingVault = false
+                if saved {
+                    self.finishInitialSetup(password: password, initialItems: [])
+                } else {
+                    self.message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+                }
+            }
         }
-
-        finishInitialSetup(password: password, initialItems: [])
-        return true
     }
 
-    func importNewVault(payload: String, password: String) -> Bool {
+    func importNewVault(payload: String, password: String) {
+        guard !isSetup, !isCreatingVault, !isImportingVault else { return }
         guard password.count >= 12 else {
-            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
-            return false
+            message = "Lozinka mora imati najmanje 12 znakova."
+            return
         }
         guard !payload.isEmpty else {
             message = "Odaberite .keyra sigurnosnu kopiju."
-            return false
+            return
         }
         guard payload.utf8.count <= 2_500_000 else {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
+            message = "Sigurnosna kopija je prevelika."
+            return
         }
 
-        let imported: [VaultItem]
-        do {
-            imported = try PortableBackup.decrypt(payload, password: password)
-            try vault.save(imported)
-        } catch {
-            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
-            return false
+        isImportingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let imported: [VaultItem]?
+            do {
+                let decoded = try PortableBackup.decrypt(payload, password: password)
+                try self.vault.save(decoded)
+                if self.auth.create(password: password) {
+                    imported = decoded
+                } else {
+                    self.vault.clear()
+                    imported = nil
+                }
+            } catch {
+                imported = nil
+            }
+            DispatchQueue.main.async {
+                self.isImportingVault = false
+                if let imported {
+                    self.finishInitialSetup(password: password, initialItems: imported)
+                    self.message = "Keyra trezor uspješno je uvezen."
+                } else {
+                    self.message = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
+                }
+            }
         }
-
-        guard auth.create(password: password) else {
-            vault.clear()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
-            return false
-        }
-
-        finishInitialSetup(password: password, initialItems: imported)
-        message = "Keyra trezor uspješno je uvezen."
-        return true
     }
 
     func recoverInitialVault(
@@ -1434,7 +1456,7 @@ final class KeyraStore: ObservableObject {
         }
 
         finishInitialSetup(password: newPassword, initialItems: imported)
-        message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
+        message = "Trezor je uspješno obnovljen."
         return true
     }
 
@@ -1449,41 +1471,48 @@ final class KeyraStore: ObservableObject {
         screen = .vault
     }
 
-    func unlock(password: String) -> Bool {
+    func unlock(password: String) {
+        guard !isUnlockingVault, !isCreatingVault else { return }
         let now = Date().timeIntervalSince1970
         let lockoutUntil = defaults.double(forKey: "unlock_lockout_until")
         if lockoutUntil > now {
             let seconds = max(1, Int(ceil(lockoutUntil - now)))
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
-            return false
+            return
         }
+        isUnlockingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let verified = self.auth.verify(password: password)
+            DispatchQueue.main.async {
+                self.isUnlockingVault = false
+                if !verified {
+                    let attempts = self.defaults.integer(forKey: "unlock_failed_attempts") + 1
+                    let penalty: TimeInterval
+                    switch attempts {
+                    case 10...: penalty = 300
+                    case 7...: penalty = 60
+                    case 5...: penalty = 30
+                    default: penalty = 0
+                    }
+                    self.defaults.set(attempts, forKey: "unlock_failed_attempts")
+                    self.defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
+                    self.message = penalty > 0
+                        ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+                        : "Glavna lozinka nije ispravna."
+                    return
+                }
 
-        guard auth.verify(password: password) else {
-            let attempts = defaults.integer(forKey: "unlock_failed_attempts") + 1
-            let penalty: TimeInterval
-            switch attempts {
-            case 10...: penalty = 300
-            case 7...: penalty = 60
-            case 5...: penalty = 30
-            default: penalty = 0
+                self.defaults.removeObject(forKey: "unlock_failed_attempts")
+                self.defaults.removeObject(forKey: "unlock_lockout_until")
+                self.sessionPassword = password
+                guard self.load() else {
+                    self.sessionPassword = nil
+                    return
+                }
+                self.screen = .vault
             }
-            defaults.set(attempts, forKey: "unlock_failed_attempts")
-            defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
-            message = penalty > 0
-                ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
-                : "Glavna lozinka nije ispravna."
-            return false
         }
-
-        defaults.removeObject(forKey: "unlock_failed_attempts")
-        defaults.removeObject(forKey: "unlock_lockout_until")
-        sessionPassword = password
-        guard load() else {
-            sessionPassword = nil
-            return false
-        }
-        screen = .vault
-        return true
     }
 
     func unlockBiometric() {
@@ -2021,21 +2050,7 @@ struct BrandHeader: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
 
-                    if !compact {
-                        HStack(spacing: 4) {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 8, weight: .bold))
-                            Text("LOCAL")
-                                .font(.system(size: 8, weight: .bold))
-                                .tracking(0.8)
-                        }
-                        .foregroundStyle(good)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(cyan.opacity(0.09))
-                        .overlay(Capsule().stroke(cyan.opacity(0.22), lineWidth: 1))
-                        .clipShape(Capsule())
-                    }
+
                 }
 
                 Text(subtitle.uppercased())
@@ -2077,19 +2092,25 @@ struct BrandHeader: View {
                     : "Nema sigurnosnih upozorenja"
             )
 
-            Text("K")
-                .font(.system(size: compact ? 12 : 14, weight: .black))
-                .foregroundStyle(.white)
-                .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
-                .background(
-                    LinearGradient(
-                        colors: [cyan.opacity(0.18), indigo.opacity(0.20)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+            Button {
+                store.open(.settings)
+            } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: compact ? 19 : 21))
+                    .foregroundStyle(.white)
+                    .frame(width: compact ? 36 : 40, height: compact ? 36 : 40)
+                    .background(
+                        LinearGradient(
+                            colors: [cyan.opacity(0.18), indigo.opacity(0.20)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .overlay(Circle().stroke(cyan.opacity(0.62), lineWidth: 1))
-                .clipShape(Circle())
+                    .overlay(Circle().stroke(cyan.opacity(0.62), lineWidth: 1))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Otvori postavke profila")
         }
         .padding(.horizontal, compact ? 12 : 16)
         .padding(.vertical, compact ? 9 : 11)
@@ -2145,42 +2166,6 @@ struct GlassCard<Content: View>: View {
             .shadow(color: .black.opacity(0.20), radius: 9, y: 5)
     }
 }
-
-struct FeatureCard: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var compact = false
-
-    var body: some View {
-        HStack(spacing: compact ? 10 : 14) {
-            Image(systemName: icon)
-                .font(compact ? .headline : .title2)
-                .foregroundStyle(cyan)
-                .frame(width: compact ? 40 : 48, height: compact ? 40 : 48)
-                .background(Color(hex: 0x0A2D3C))
-                .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 15))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(compact ? .subheadline.bold() : .headline)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(subtitle)
-                    .font(compact ? .caption : .subheadline)
-                    .foregroundStyle(muted)
-                    .lineLimit(compact ? 1 : 2)
-                    .minimumScaleFactor(0.8)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(compact ? 10 : 14)
-        .background(slate.opacity(0.92))
-        .overlay(RoundedRectangle(cornerRadius: compact ? 17 : 20).stroke(cyan.opacity(0.34), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: compact ? 17 : 20))
-    }
-}
-
 
 struct OnboardingHeroBadge: View {
     let icon: String
@@ -2253,13 +2238,13 @@ struct OnboardingView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let compact = proxy.size.height < 720 || proxy.size.width < 360
+            let compact = proxy.size.height < 800 || proxy.size.width < 360
+            let short = proxy.size.height < 590
 
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: compact ? 7 : 11) {
-                        KeyraMark(size: compact ? 64 : 82)
-                            .padding(.top, compact ? 8 : 18)
+                VStack(spacing: compact ? 7 : 11) {
+                        KeyraMark(size: short ? 50 : (compact ? 64 : 82))
+                            .padding(.top, compact ? 6 : 14)
 
                         Text("Keyra")
                             .font(.system(size: compact ? 34 : 42, weight: .black, design: .rounded))
@@ -2273,8 +2258,10 @@ struct OnboardingView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
 
-                        OnboardingVaultHero(compact: compact)
-                            .padding(.top, compact ? 3 : 7)
+                        if !short {
+                            OnboardingVaultHero(compact: compact)
+                                .padding(.top, compact ? 3 : 7)
+                        }
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
                             Text("Sigurniji način upravljanja lozinkama")
@@ -2288,28 +2275,10 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, compact ? 6 : 12)
 
-                        FeatureCard(
-                            icon: "lock.fill",
-                            title: "Potpuno šifrirano",
-                            subtitle: "Vaši podaci ostaju na vašem uređaju.",
-                            compact: compact
-                        )
-                        FeatureCard(
-                            icon: "faceid",
-                            title: "Privatnost u osnovi",
-                            subtitle: "Stvoreno za vaš mir.",
-                            compact: compact
-                        )
-                        FeatureCard(
-                            icon: "rectangle.on.rectangle",
-                            title: "Radi svugdje",
-                            subtitle: "Pregledno na Androidu i iOS-u.",
-                            compact: compact
-                        )
+
                     }
-                    .padding(.horizontal, compact ? 16 : 22)
-                    .padding(.bottom, 8)
-                }
+                .padding(.horizontal, compact ? 16 : 22)
+                .frame(maxHeight: .infinity)
 
                 VStack(spacing: 8) {
                     Button {
@@ -2408,7 +2377,7 @@ struct RecoverySetupView: View {
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
 
-                    Text("Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.")
+                    Text("Za obnovu trezora trebaju vam Recovery Key i odgovarajuća sigurnosna kopija.")
                         .font(compact ? .footnote : .subheadline)
                         .foregroundStyle(muted)
                         .multilineTextAlignment(.center)
@@ -2666,18 +2635,18 @@ struct UnlockView: View {
                     Button {
                         if importing {
                             if let importPayload {
-                                _ = store.importNewVault(payload: importPayload, password: password)
+                                store.importNewVault(payload: importPayload, password: password)
                             }
                         } else if creating {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
-                            else { _ = store.createVault(password: password) }
+                            else { store.createVault(password: password) }
                         } else {
-                            _ = store.unlock(password: password)
+                            store.unlock(password: password)
                         }
                     } label: {
                         HStack {
                             Image(systemName: "lock.fill")
-                            Text(importing ? "Uvezi trezor" : (creating ? "Izradi trezor" : "Otključaj")).fontWeight(.bold)
+                            Text(importing ? (store.isImportingVault ? "Uvoz trezora…" : "Uvezi trezor") : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : (store.isUnlockingVault ? "Otključavanje…" : "Otključaj"))).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -2686,7 +2655,7 @@ struct UnlockView: View {
                     .foregroundStyle(midnight)
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
-                    .disabled(importing && importPayload == nil)
+                    .disabled(store.isCreatingVault || store.isImportingVault || store.isUnlockingVault || (importing && importPayload == nil))
 
                     if creating {
                         Button {
@@ -4687,10 +4656,10 @@ struct DetailView: View {
                                         return "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                     }
                                     if isPasswordItem {
-                                        return "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
+                                        return "Lozinka zadovoljava preporučene sigurnosne uvjete."
                                     }
                                     if item.kind == "Autentifikator", totpConfig != nil {
-                                        return "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                        return "Kod se automatski osvježava prema vremenu uređaja."
                                     }
                                     if item.kind == "Autentifikator" {
                                         return "TOTP konfiguracija nije valjana i treba je urediti."
@@ -4854,7 +4823,7 @@ struct TotpCodeCard: View {
                 .font(.caption)
                 .foregroundStyle(muted)
 
-            Text("Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.")
+            Text("Ako kod ne radi, provjerite jesu li datum i vrijeme uređaja točni.")
                 .font(.caption)
                 .foregroundStyle(muted)
         }
@@ -5079,8 +5048,8 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     SettingsIntroCard(
-                        title: "Jednostavno. Lokalno. Zaštićeno.",
-                        subtitle: "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                        title: "Vaša Keyra, vaše postavke.",
+                        subtitle: "Sve važne opcije na jednom mjestu."
                     )
 
                     SectionLabel("ZAŠTITA")
@@ -5186,7 +5155,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "key.fill",
                         title: "Izvezi Recovery Key",
-                        subtitle: "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
+                        subtitle: "Spremite ključ za obnovu na sigurno mjesto."
                     ) {
                         Button {
                             recoveryExportPassphrase = ""
@@ -5202,7 +5171,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "key.fill",
                         title: "Uvezi Recovery Key",
-                        subtitle: "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
+                        subtitle: "Provjerite ključ za obnovu i potvrdite novu zaštitu trezora."
                     ) {
                         Button {
                             importRecoveryFile = true
@@ -5216,33 +5185,57 @@ struct SettingsView: View {
                     SectionLabel("PRIVATNOST I APLIKACIJA")
 
                     Button {
-                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
+                        if let url = URL(string: "https://app.brendigo.com/keya/politika-privatnosti") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "hand.raised.fill",
                             title: "Pravila privatnosti",
-                            subtitle: "Saznajte kako Keyra štiti podatke i što ne prikuplja."
+                            subtitle: "Pročitajte pravila privatnosti."
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
                     }
                     .buttonStyle(.plain)
 
-                    SettingRow(
-                        icon: "info.circle",
-                        title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
-                    )
+                    Button {
+                        if let url = URL(string: "https://app.brendigo.com/keya/uvjeti-koristenja") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "doc.text",
+                            title: "Uvjeti korištenja",
+                            subtitle: "Pročitajte uvjete korištenja aplikacije."
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        if let url = URL(string: "https://app.brendigo.com/keya/o-nama") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "info.circle",
+                            title: "O aplikaciji",
+                            subtitle: "Keyra 0.6.13"
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
 
                     Button {
                         confirmErase = true
                     } label: {
                         SettingRow(
                             icon: "trash.slash.fill",
-                            title: "Izbriši sve lokalne podatke",
-                            subtitle: "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja."
+                            title: "Izbriši sve podatke",
+                            subtitle: "Trajno izbrišite trezor i postavke s ovog uređaja."
                         ) {
                             Image(systemName: "chevron.right").foregroundStyle(danger)
                         }
@@ -5268,19 +5261,19 @@ struct SettingsView: View {
             }
         }
         .confirmationDialog(
-            "Izbrisati sve lokalne podatke?",
+            "Izbrisati sve podatke?",
             isPresented: $confirmErase,
             titleVisibility: .visible
         ) {
             Button("Trajno izbriši", role: .destructive) {
-                store.authorizeCritical(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                store.authorizeCritical(reason: "Potvrdite brisanje podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }
             Button("Odustani", role: .cancel) {}
         } message: {
             Text(
-                "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
                 "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
             )
         }
@@ -5304,7 +5297,7 @@ struct SettingsView: View {
             }
         } message: {
             Text(
-                "Recovery Key štiti prijenosni vault ključ, ne podatke trezora. " +
+                "Ključ za obnovu i njegovu lozinku čuvajte na dva odvojena mjesta. " +
                 "Koristite najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi; datoteku i lozinku čuvajte odvojeno."
             )
         }
@@ -5499,7 +5492,7 @@ struct SecurityCenterView: View {
                                     : "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             }
                             return issues.isEmpty
-                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
+                                ? "Nisu pronađeni sigurnosni problemi."
                                 : "Pregledajte stavke koje zahtijevaju pažnju."
                         }())
                         .foregroundStyle(muted)
@@ -5529,8 +5522,8 @@ struct SecurityCenterView: View {
                         GlassCard {
                             SecurityProtectionRow(
                                 icon: "lock.shield.fill",
-                                title: "Lokalni šifrirani trezor",
-                                subtitle: "AES-256-GCM • bez Keyra backenda"
+                                title: "Šifrirani trezor",
+                                subtitle: "Zaštićeni podaci"
                             )
                             Divider().overlay(ice.opacity(0.14))
                             SecurityProtectionRow(
@@ -5542,7 +5535,7 @@ struct SecurityCenterView: View {
                             SecurityProtectionRow(
                                 icon: "doc.on.doc.fill",
                                 title: "Privremeni međuspremnik",
-                                subtitle: "Osjetljivi sadržaj je local-only i istječe nakon 30 sekundi."
+                                subtitle: "Osjetljivi sadržaj uklanja se nakon 30 sekundi."
                             )
                             Divider().overlay(ice.opacity(0.14))
                             SecurityProtectionRow(

@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.12"
+        default: "0.6.13"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.12 dodaje upozorenja za istekle i neispravno datirane kartice na Androidu i iOS-u. Stavke kartica s upisanim isteklim ili nevažećim datumom sada se u trezoru jasno označavaju oznakom Provjeri istek, prikazuju u Sigurnosnom centru i uključuju u ukupan broj rizičnih zapisa. Kartice bez upisanog datuma nisu automatski označene kao istekle. Postotni rezultat ostaje isključivo ocjena lozinki, pa valjana jedinstvena lozinka ne gubi bodove zbog kartice. Korisnik može otvoriti upozorenje i urediti karticu bez automatske izmjene uvezenih podataka. Android regresijski testovi provjeravaju prošli, trenutačni i budući mjesec, neispravan i prazan datum te neovisnost ocjene lozinki. Lokalni AES-GCM trezor, KEYRA1/KEYRA2 i KEYRAREC1 ostaju nepromijenjeni.
+          Keyra 0.6.13 donosi pregledniji početni zaslon bez pomicanja na Androidu i iOS-u. Uklonjene su tri suvišne promotivne kartice i tehničke oznake iz zaglavlja, dok profil otvara postavke, a zvonce sigurnosna upozorenja. Pravila privatnosti, Uvjeti korištenja i O aplikaciji vode na tražene stranice domene app.brendigo.com/keya. Izrada trezora, provjera glavne lozinke i uvoz sigurnosne kopije izvršavaju se izvan glavne UI niti uz status i zaštitu od dvostrukih zahtjeva kako bi se smanjili zastoji i rušenja. Pojednostavljene su postavke i korisničke poruke, bez promjene šifriranja, formata trezora, KEYRA1/KEYRA2 sigurnosnih kopija ili KEYRAREC1 ključa. Produkcijske trgovine i ručni QA stvarnih uređaja zahtijevaju zasebne provjere.
 
           ## Provjere
           - Android lint i unit testovi

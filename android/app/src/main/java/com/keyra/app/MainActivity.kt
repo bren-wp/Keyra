@@ -61,6 +61,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
@@ -208,6 +212,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     )
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
     var importingNewVault by mutableStateOf(false)
+    var isCreatingVault by mutableStateOf(false)
+        private set
+    var isImportingVault by mutableStateOf(false)
+        private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
 
@@ -227,6 +235,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelSetup() {
+        if (isCreatingVault || isImportingVault || isUnlockingVault) return
         importingNewVault = false
         if (!isSetup) screen = Screen.ONBOARDING
     }
@@ -253,62 +262,76 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun editSelected() { if (selected != null) screen = Screen.ADD }
     fun select(item: VaultItem) { selected = item; screen = Screen.DETAIL }
 
-    fun createVault(password: String): Boolean {
-        if (password.length < 12) {
-            message = "Glavna lozinka mora imati najmanje 12 znakova."
-            return false
+    fun createVault(password: String) {
+        if (isSetup || isCreatingVault) return
+        if (password.length !in 12..256) {
+            message = "Glavna lozinka mora imati između 12 i 256 znakova."
+            return
         }
-
-        if (runCatching { store.save(emptyList()) }.isFailure) {
-            message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
-            return false
+        isCreatingVault = true
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    store.save(emptyList())
+                    if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
+                }.isSuccess.also { success ->
+                    if (!success) runCatching { store.destroy() }
+                }
+            }
+            isCreatingVault = false
+            if (saved) finishInitialSetup(password, emptyList())
+            else message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
         }
-        if (!auth.create(password)) {
-            store.destroy()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Pokušajte ponovno."
-            return false
-        }
-
-        finishInitialSetup(password, emptyList())
-        return true
     }
 
-    fun importNewVault(payload: String, password: String): Boolean {
+    fun importNewVault(payload: String, password: String) {
+        if (isSetup || isCreatingVault || isImportingVault) return
         if (password.length < 12) {
-            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
-            return false
+            message = "Lozinka mora imati najmanje 12 znakova."
+            return
         }
-
         if (payload.isBlank()) {
             message = "Odaberite .keyra sigurnosnu kopiju."
-            return false
+            return
         }
         if (payload.length > MAX_BACKUP_CHARS) {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
+            message = "Sigurnosna kopija je prevelika."
+            return
         }
 
-        val imported = runCatching {
-            val json = PortableBackup.decrypt(payload, password)
-            store.fromJson(json)
-        }.getOrElse {
-            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
-            return false
+        isImportingVault = true
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val imported = runCatching {
+                    val json = PortableBackup.decrypt(payload, password)
+                    store.fromJson(json)
+                }.getOrElse {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+                    )
+                }
+                if (runCatching { store.save(imported) }.isFailure) {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Trezor nije moguće spremiti. Provjerite slobodan prostor."
+                    )
+                }
+                if (!runCatching { auth.create(password) }.getOrDefault(false)) {
+                    runCatching { store.destroy() }
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Zaštitu glavne lozinke nije moguće spremiti."
+                    )
+                }
+                Pair<List<VaultItem>?, String>(imported, "")
+            }
+            isImportingVault = false
+            val imported = result.first
+            if (imported == null) {
+                message = result.second
+            } else {
+                finishInitialSetup(password, imported)
+                message = "Keyra trezor uspješno je uvezen."
+            }
         }
-
-        if (runCatching { store.save(imported) }.isFailure) {
-            message = "Uvezeni trezor nije moguće trajno spremiti. Postojeći podaci nisu promijenjeni."
-            return false
-        }
-        if (!auth.create(password)) {
-            store.destroy()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
-            return false
-        }
-
-        finishInitialSetup(password, imported)
-        message = "Keyra trezor uspješno je uvezen."
-        return true
     }
 
     fun recoverInitialVault(
@@ -370,7 +393,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                 false
             } else {
                 finishInitialSetup(newPassword, imported)
-                message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
+                message = "Trezor je uspješno obnovljen."
                 true
             }
         } catch (_: Exception) {
@@ -398,49 +421,57 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.VAULT
     }
 
-    fun unlock(password: String): Boolean {
+    var isUnlockingVault by mutableStateOf(false)
+        private set
+
+    fun unlock(password: String) {
+        if (isUnlockingVault || isCreatingVault) return
         val now = System.currentTimeMillis()
         val lockoutUntil = prefs.getLong("unlock_lockout_until", 0L)
         if (lockoutUntil > now) {
             val seconds = ((lockoutUntil - now + 999L) / 1000L).coerceAtLeast(1L)
-            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za " + seconds + " s."
-            return false
+            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
+            return
         }
-
-        if (!auth.verify(password)) {
-            val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
-            val penaltyMs = when {
-                attempts >= 10 -> 300_000L
-                attempts >= 7 -> 60_000L
-                attempts >= 5 -> 30_000L
-                else -> 0L
+        isUnlockingVault = true
+        viewModelScope.launch {
+            val verified = withContext(Dispatchers.IO) {
+                runCatching { auth.verify(password) }.getOrDefault(false)
             }
+            isUnlockingVault = false
+            if (!verified) {
+                val attempts = prefs.getInt("unlock_failed_attempts", 0) + 1
+                val penaltyMs = when {
+                    attempts >= 10 -> 300_000L
+                    attempts >= 7 -> 60_000L
+                    attempts >= 5 -> 30_000L
+                    else -> 0L
+                }
+                prefs.edit()
+                    .putInt("unlock_failed_attempts", attempts)
+                    .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
+                    .apply()
+                message = if (penaltyMs > 0L) {
+                    "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
+                } else {
+                    "Glavna lozinka nije ispravna."
+                }
+                return@launch
+            }
+
             prefs.edit()
-                .putInt("unlock_failed_attempts", attempts)
-                .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
+                .remove("unlock_failed_attempts")
+                .remove("unlock_lockout_until")
                 .apply()
-
-            message = if (penaltyMs > 0L) {
-                "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
-            } else {
-                "Glavna lozinka nije ispravna."
+            sessionPassword = password
+            if (!loadVault()) {
+                sessionPassword = null
+                unlocked = false
+                return@launch
             }
-            return false
+            unlocked = true
+            screen = Screen.VAULT
         }
-
-        prefs.edit()
-            .remove("unlock_failed_attempts")
-            .remove("unlock_lockout_until")
-            .apply()
-        sessionPassword = password
-        if (!loadVault()) {
-            sessionPassword = null
-            unlocked = false
-            return false
-        }
-        unlocked = true
-        screen = Screen.VAULT
-        return true
     }
 
     fun unlockFromBiometric() {
@@ -1620,7 +1651,8 @@ internal fun securityScore(items: List<VaultItem>): Int? {
 private fun BrandHeader(
     subtitle: String,
     notificationCount: Int = 0,
-    onNotifications: () -> Unit = {}
+    onNotifications: () -> Unit = {},
+    onProfile: () -> Unit = {}
 ) {
     BoxWithConstraints(
         Modifier
@@ -1666,23 +1698,7 @@ private fun BrandHeader(
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1
                             )
-                            if (!compact) {
-                                Spacer(Modifier.width(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Cyan.copy(alpha = .10f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .24f))
-                                ) {
-                                    Row(
-                                        Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Outlined.Lock, null, tint = Good, modifier = Modifier.size(11.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("LOCAL", color = Good, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
-                                    }
-                                }
-                            }
+
                         }
                         Text(
                             subtitle.uppercase(),
@@ -1738,10 +1754,11 @@ private fun BrandHeader(
                                     listOf(Cyan.copy(alpha = .18f), Indigo.copy(alpha = .20f))
                                 )
                             )
-                            .border(1.dp, Cyan.copy(alpha = .62f), CircleShape),
+                            .border(1.dp, Cyan.copy(alpha = .62f), CircleShape)
+                            .clickable(onClick = onProfile),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("K", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 13.sp else 14.sp)
+                        Icon(Icons.Outlined.PersonOutline, contentDescription = "Otvori postavke profila", tint = Color.White)
                     }
                 }
             }
@@ -1817,7 +1834,8 @@ private fun OnboardingVaultHero(compact: Boolean) {
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val compact = maxHeight < 720.dp || maxWidth < 360.dp
+        val compact = maxHeight < 800.dp || maxWidth < 360.dp
+        val short = maxHeight < 590.dp
         val horizontal = if (maxWidth >= 600.dp) 72.dp else 20.dp
 
         Column(
@@ -1830,12 +1848,12 @@ private fun OnboardingScreen(model: KeyraViewModel) {
             Column(
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
-                KeyraMark(if (compact) 66.dp else 84.dp)
+                Spacer(Modifier.height(if (compact) 6.dp else 16.dp))
+                KeyraMark(if (short) 50.dp else if (compact) 66.dp else 84.dp)
                 Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
                 Text(
                     "Keyra",
@@ -1852,9 +1870,9 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     maxLines = 1
                 )
 
-                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-                OnboardingVaultHero(compact)
-                Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
+                Spacer(Modifier.height(if (compact) 7.dp else 12.dp))
+                if (!short) OnboardingVaultHero(compact)
+                Spacer(Modifier.height(if (compact) 9.dp else 18.dp))
                 Text(
                     "Sigurniji način upravljanja lozinkama",
                     modifier = Modifier.fillMaxWidth(),
@@ -1869,26 +1887,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     fontSize = if (compact) 14.sp else 16.sp
                 )
 
-                Spacer(Modifier.height(if (compact) 12.dp else 18.dp))
-                FeatureCard(
-                    Icons.Outlined.Lock,
-                    "Potpuno šifrirano",
-                    "Vaši podaci ostaju na vašem uređaju.",
-                    compact
-                )
-                FeatureCard(
-                    Icons.Outlined.Fingerprint,
-                    "Privatnost u osnovi",
-                    "Stvoreno za vaš mir.",
-                    compact
-                )
-                FeatureCard(
-                    Icons.Outlined.PhoneAndroid,
-                    "Radi svugdje",
-                    "Pregledno na Androidu i iOS-u.",
-                    compact
-                )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
             }
 
             Column(
@@ -2008,7 +2007,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                 textAlign = TextAlign.Center
             )
             Text(
-                "Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.",
+                "Za obnovu trezora trebaju vam Recovery Key i odgovarajuća sigurnosna kopija.",
                 color = Muted,
                 fontSize = if (compact) 13.sp else 15.sp,
                 textAlign = TextAlign.Center,
@@ -2137,52 +2136,6 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
 }
 
 @Composable
-private fun FeatureCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    compact: Boolean = false
-) {
-    Surface(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = if (compact) 3.dp else 5.dp),
-        shape = RoundedCornerShape(if (compact) 17.dp else 20.dp),
-        color = Slate.copy(alpha = .9f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .35f))
-    ) {
-        Row(
-            Modifier.padding(if (compact) 10.dp else 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(if (compact) 40.dp else 48.dp)
-                    .clip(RoundedCornerShape(if (compact) 12.dp else 15.dp))
-                    .background(Color(0xFF0A2D3C)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Cyan, modifier = Modifier.size(if (compact) 21.dp else 24.dp))
-            }
-            Spacer(Modifier.width(if (compact) 10.dp else 14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = if (compact) 15.sp else 17.sp
-                )
-                Text(
-                    subtitle,
-                    color = Muted,
-                    fontSize = if (compact) 12.sp else 14.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun UnlockScreen(
     model: KeyraViewModel,
     requestBiometric: (String, () -> Unit) -> Unit
@@ -2296,7 +2249,8 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
-                        enabled = !importing || importPayload != null,
+                        enabled = !model.isCreatingVault && !model.isImportingVault && !model.isUnlockingVault &&
+                            (!importing || importPayload != null),
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
@@ -2305,9 +2259,9 @@ private fun UnlockScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when {
-                                importing -> "Uvezi trezor"
-                                creating -> "Izradi trezor"
-                                else -> "Otključaj"
+                                importing -> if (model.isImportingVault) "Uvoz trezora…" else "Uvezi trezor"
+                                creating -> if (model.isCreatingVault) "Izrada trezora…" else "Izradi trezor"
+                                else -> if (model.isUnlockingVault) "Otključavanje…" else "Otključaj"
                             },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
@@ -2572,7 +2526,7 @@ private fun VaultScreen(model: KeyraViewModel) {
         .values.flatten().map { it.id }.toSet()
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("MOJ TREZOR", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         OutlinedTextField(
             search, { search = it },
@@ -2993,7 +2947,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("KOLEKCIJE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+            BrandHeader("KOLEKCIJE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
             Text(
                 "Organizirajte trezor po vrsti i kategoriji.",
                 Modifier.padding(horizontal = side, vertical = 4.dp),
@@ -3190,7 +3144,7 @@ private fun GeneratorScreen(model: KeyraViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("Generator lozinki", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("Generator lozinki", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -4511,9 +4465,9 @@ private fun DetailScreen(
                                 isPasswordItem && !isStrongPassword(current.password) ->
                                     "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                 isPasswordItem ->
-                                    "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
+                                    "Lozinka zadovoljava preporučene sigurnosne uvjete."
                                 current.type == "Autentifikator" && totpConfig != null ->
-                                    "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                    "Kod se automatski osvježava prema vremenu uređaja."
                                 current.type == "Autentifikator" ->
                                     "TOTP konfiguracija nije valjana i treba je urediti."
                                 else ->
@@ -4691,7 +4645,7 @@ private fun TotpCodeCard(
             }
 
             Text(
-                "Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.",
+                "Ako kod ne radi, provjerite jesu li datum i vrijeme uređaja točni.",
                 color = Muted,
                 fontSize = 12.sp
             )
@@ -5002,7 +4956,7 @@ private fun SettingsScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "Keyra će prvo verificirati recovery datoteku i postojeći trezor. Lokalni kriptografski materijal neće biti zamijenjen ako provjera ne uspije."
+                            "Keyra će provjeriti datoteku prije obnove. Ako provjera ne uspije, vaši zapisi ostaju nepromijenjeni."
                         )
                         OutlinedTextField(
                             value = recoveryImportPassphrase,
@@ -5058,10 +5012,10 @@ private fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
                 icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
-                title = { Text("Izbrisati sve lokalne podatke?") },
+                title = { Text("Izbrisati sve podatke?") },
                 text = {
                     Text(
-                        "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                        "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
                             "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
                     )
                 },
@@ -5070,7 +5024,7 @@ private fun SettingsScreen(
                         onClick = {
                             confirmErase = false
                             if (model.criticalReauthAvailable()) {
-                                requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                                requestBiometric("Potvrdite brisanje podataka.") {
                                     model.eraseAllLocalData()
                                 }
                             } else {
@@ -5130,7 +5084,7 @@ private fun SettingsScreen(
             )
         }
 
-        BrandHeader("POSTAVKE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("POSTAVKE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
@@ -5139,8 +5093,8 @@ private fun SettingsScreen(
         ) {
             item {
                 SettingsIntroCard(
-                    title = "Jednostavno. Lokalno. Zaštićeno.",
-                    subtitle = "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                    title = "Vaša Keyra, vaše postavke.",
+                    subtitle = "Sve važne opcije na jednom mjestu."
                 )
             }
 
@@ -5226,7 +5180,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Izvezi Recovery Key",
-                    "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
+                    "Spremite ključ za obnovu na sigurno mjesto."
                 ) {
                     IconButton(onClick = { exportRecoveryLauncher.launch("Keyra-Recovery.keyra") }) {
                         Icon(Icons.Outlined.SaveAlt, contentDescription = "Izvezi Recovery Key", tint = Cyan)
@@ -5237,7 +5191,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Uvezi Recovery Key",
-                    "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
+                    "Provjerite ključ za obnovu i potvrdite novu zaštitu trezora."
                 ) {
                     IconButton(onClick = {
                         importRecoveryLauncher.launch(
@@ -5249,15 +5203,27 @@ private fun SettingsScreen(
                 }
             }
 
-            item { SectionTitle("PRIVATNOST I APLIKACIJA") }
+            item { SectionTitle("INFORMACIJE") }
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
                     "Pravila privatnosti",
-                    "Saznajte kako Keyra štiti podatke i što ne prikuplja.",
+                    "Pročitajte pravila privatnosti.",
                     onClick = {
-                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
-                            model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/politika-privatnosti")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
+                )
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Description,
+                    "Uvjeti korištenja",
+                    "Pročitajte uvjete korištenja aplikacije.",
+                    onClick = {
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/uvjeti-koristenja")) {
+                            model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
                 )
@@ -5265,15 +5231,20 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Info,
-                    "O aplikaciji Keyra",
-                    "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "O aplikaciji",
+                    "Keyra 0.6.13",
+                    onClick = {
+                        if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
                 )
             }
             item {
                 SettingRow(
                     Icons.Outlined.DeleteForever,
-                    "Izbriši sve lokalne podatke",
-                    "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja.",
+                    "Izbriši sve podatke",
+                    "Trajno izbrišite trezor i postavke s ovog uređaja.",
                     onClick = { confirmErase = true }
                 )
             }
@@ -5466,7 +5437,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
     val score = securityScore(model.items)
 
     Column(Modifier.fillMaxSize()) {
-        BrandHeader("SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+        BrandHeader("SIGURNOST", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -5494,7 +5465,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                         when {
                             score == null && issueIds.isNotEmpty() -> "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
-                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
+                            issueIds.isEmpty() -> "Nisu pronađeni sigurnosni problemi."
                             else -> "Pregledajte stavke koje zahtijevaju pažnju."
                         },
                         color = Muted
@@ -5526,8 +5497,8 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 GlassCard {
                     SecurityProtectionRow(
                         icon = Icons.Outlined.Lock,
-                        title = "Lokalni šifrirani trezor",
-                        subtitle = "AES-256-GCM • bez Keyra backenda"
+                        title = "Šifrirani trezor",
+                        subtitle = "Zaštićeni podaci"
                     )
                     HorizontalDivider(color = Ice.copy(alpha = .14f))
                     SecurityProtectionRow(

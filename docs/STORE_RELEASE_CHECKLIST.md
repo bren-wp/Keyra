@@ -212,7 +212,19 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Trezor i detalji kartice prikazuju „Provjeri istek”, a Sigurnosni centar navodi konkretne kartice koje treba ažurirati.
 - [x] Brojač rizičnih stavki uključuje istekle kartice; ocjena 0–100 ostaje ograničena na lozinke.
 - [x] Android regresijski testovi pokrivaju prethodni/aktualni/budući mjesec, loše i prazne datume, broj upozorenja i ocjenu lozinki.
-- [ ] Android lint/unit/build/privacy 0.6.12 uspješni na završnom PR SHA-u.
-- [ ] iOS build/analyze/simulator smoke/privacy 0.6.12 uspješni na istom SHA-u.
-- [ ] Oba main CI-ja i release workflow uspješni te GitHub release v0.6.12 ima svih 7 paketa.
+- [x] Android lint/unit/build/privacy 0.6.12 uspješni na završnom PR SHA-u `7ba93d4a8f28bc3ecdb17a6f99eaec6ad717b4c5`.
+- [x] iOS build/analyze/simulator smoke/privacy 0.6.12 uspješni na istom SHA-u.
+- [x] Oba main CI-ja i release workflow uspješni na `5917115dc7d88c2830e8868bff1c60d2b90673a4`; izdanje v0.6.12 ima svih 7 paketa.
 - [ ] Fizički Android/iOS QA i obnove KEYRA1/KEYRA2 sigurnosnih kopija.
+
+## 0.6.13 jednostavniji početak, stabilnost i pravne stranice
+- [x] Android/iOS: početna stranica ne skrola; uklonjene tri promotivne kartice, a visina dizajna prilagođava se manjim zaslonima.
+- [x] Uklonjena promotivna oznaka LOCAL i nepotrebni tehnički izrazi iz vidljivih tekstova i postavki.
+- [x] Android/iOS: zvonce vodi u Sigurnosni centar, profil u Postavke.
+- [x] Pravila privatnosti, Uvjeti korištenja i O aplikaciji vode na zadane /keya/ adrese.
+- [x] Android/iOS: izrada, otključavanje i uvoz trezora izdvojeni iz glavne UI niti uz blokiranje dvostrukih zahtjeva, status i poruke za neuspjeh.
+- [ ] Potvrditi vanjsku dostupnost sve tri pravne stranice na poslužitelju (ovaj repozitorij ih ne objavljuje).
+- [ ] Android lint/unit/build/privacy uspješni na završnom PR SHA-u.
+- [ ] iOS build/analyze/simulator launch smoke/privacy uspješni na istom SHA-u.
+- [ ] Android/iOS main CI i release workflow uspješni; v0.6.13 sa svih 7 artefakata.
+- [ ] Klik-po-klik QA na fizičkim Android/iOS uređajima: soft keyboard, izrada, otključavanje, pogrešna lozinka, uvoz/recovery, kratki i visoki zasloni, zvonce/profil i vanjske poveznice.
