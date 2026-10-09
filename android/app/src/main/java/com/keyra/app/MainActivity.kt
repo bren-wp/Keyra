@@ -5508,20 +5508,6 @@ private fun openWebsite(context: Context, raw: String): Boolean {
     }.getOrDefault(false)
 }
 
-private fun clearClipboardIfMatches(context: Context, expected: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = clipboard.primaryClip
-    val current = if (clip != null && clip.itemCount > 0) {
-        clip.getItemAt(0).coerceToText(context)?.toString()
-    } else {
-        null
-    }
-    if (current == expected) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-        else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-    }
-}
-
 private fun copy(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Keyra", text)
