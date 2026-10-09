@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
@@ -76,6 +78,11 @@ class MasterPasswordEntryInstrumentedTest {
 
         waitFor("keyra-nav-Postavke", 60_000)
         compose.onNodeWithTag("keyra-nav-Postavke").performClick()
+        // LazyColumn only composes visible rows. Scroll the actual Settings list
+        // to its footer rather than asserting that an off-screen row exists.
+        waitFor("keyra-settings-list")
+        compose.onNodeWithTag("keyra-settings-list")
+            .performScrollToNode(hasTestTag("keyra-lock-vault"))
         waitFor("keyra-lock-vault")
         compose.onNodeWithTag("keyra-lock-vault").performClick()
         waitFor("keyra-master-password")
