@@ -286,8 +286,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importNewVault(payload: String, password: String) {
         if (isSetup || isCreatingVault || isImportingVault) return
-        if (password.length !in 12..256) {
-            message = "Lozinka mora imati između 12 i 256 znakova."
+        if (password.length < 12) {
+            message = "Lozinka mora imati najmanje 12 znakova."
             return
         }
         if (payload.isBlank()) {
