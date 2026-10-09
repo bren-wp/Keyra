@@ -1228,13 +1228,13 @@ final class KeyraStore: ObservableObject {
         return true
     }
 
-    func importNewVault(password: String) -> Bool {
+    func importNewVault(payload: String, password: String) -> Bool {
         guard password.count >= 12 else {
             message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
             return false
         }
-        guard let payload = UIPasteboard.general.string, !payload.isEmpty else {
-            message = "Međuspremnik ne sadrži Keyra sigurnosnu kopiju."
+        guard !payload.isEmpty else {
+            message = "Odaberite .keyra sigurnosnu kopiju."
             return false
         }
         guard payload.utf8.count <= 2_500_000 else {
@@ -1257,9 +1257,6 @@ final class KeyraStore: ObservableObject {
             return false
         }
 
-        if UIPasteboard.general.string == payload {
-            UIPasteboard.general.items = []
-        }
         finishInitialSetup(password: password, initialItems: imported)
         message = "Keyra trezor uspješno je uvezen."
         return true
@@ -2500,6 +2497,8 @@ struct UnlockView: View {
     @State private var password = ""
     @State private var confirm = ""
     @State private var reveal = false
+    @State private var importPayload: String?
+    @State private var showImportPicker = false
 
     private var creating: Bool { !store.isSetup }
     private var importing: Bool { creating && store.importingNewVault }
@@ -2529,7 +2528,7 @@ struct UnlockView: View {
 
                     Text(
                         importing
-                            ? "Kopirajte šifriranu Keyra sigurnosnu kopiju u međuspremnik i unesite njezinu glavnu lozinku."
+                            ? "Odaberite šifriranu .keyra datoteku i unesite lozinku sigurnosne kopije."
                             : (creating
                                 ? "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
                                 : "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru.")
@@ -2541,6 +2540,21 @@ struct UnlockView: View {
                         SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal)
                     }
                     if importing {
+                        Button {
+                            showImportPicker = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "folder")
+                                Text(importPayload == nil ? "Odaberi .keyra datoteku" : "Sigurnosna kopija odabrana")
+                                Spacer()
+                                Image(systemName: importPayload == nil ? "chevron.right" : "checkmark.circle.fill")
+                            }
+                            .padding(14)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(importPayload == nil ? .white : good)
+                        .background(slate2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                         Text("Uvoz neće zamijeniti podatke ako provjera ili trajno spremanje ne uspiju.")
                             .font(.caption)
                             .foregroundStyle(muted)
@@ -2548,7 +2562,9 @@ struct UnlockView: View {
 
                     Button {
                         if importing {
-                            _ = store.importNewVault(password: password)
+                            if let importPayload {
+                                _ = store.importNewVault(payload: importPayload, password: password)
+                            }
                         } else if creating {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
                             else { _ = store.createVault(password: password) }
@@ -2565,8 +2581,9 @@ struct UnlockView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(midnight)
-                    .background(cyan)
+                    .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
+                    .disabled(importing && importPayload == nil)
 
                     if creating {
                         Button {
@@ -2598,6 +2615,28 @@ struct UnlockView: View {
                 }
             }
             .padding(compact ? 16 : 24)
+            }
+        }
+        .fileImporter(
+            isPresented: $showImportPicker,
+            allowedContentTypes: KeyraBackupDocument.readableContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                guard data.count <= 2_500_000, let text = String(data: data, encoding: .utf8) else {
+                    importPayload = nil
+                    store.message = "Sigurnosna kopija nije valjana ili je prevelika."
+                    return
+                }
+                importPayload = text
+                store.message = "Šifrirana sigurnosna kopija je učitana."
+            } catch {
+                importPayload = nil
+                store.message = "Sigurnosnu kopiju nije moguće otvoriti."
             }
         }
     }
@@ -2767,6 +2806,8 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 if !search.isEmpty {
                     Button {
                         search = ""
@@ -2888,6 +2929,7 @@ struct VaultView: View {
                     .foregroundStyle(muted)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Sortiraj stavke: \(newestFirst ? "Najnovije" : "A–Ž")")
 
                 Button { store.addNew() } label: {
                     Image(systemName: "plus")
@@ -2897,6 +2939,7 @@ struct VaultView: View {
                         .background(cyan)
                         .clipShape(Circle())
                 }
+                .accessibilityLabel("Dodaj stavku")
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
@@ -2904,8 +2947,13 @@ struct VaultView: View {
             ScrollView {
                 LazyVStack(spacing: 9) {
                     ForEach(filtered) { item in
-                        VaultRow(item: item, duplicated: duplicates.contains(item.id))
-                            .onTapGesture { store.select(item) }
+                        Button {
+                            store.select(item)
+                        } label: {
+                            VaultRow(item: item, duplicated: duplicates.contains(item.id))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Otvori stavku")
                     }
                     if filtered.isEmpty {
                         GlassCard {
@@ -2927,6 +2975,21 @@ struct VaultView: View {
                                     store.addNew()
                                 } label: {
                                     Label("Dodaj prvu stavku", systemImage: "plus")
+                                        .fontWeight(.bold)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 11)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(midnight)
+                                .background(cyan)
+                                .clipShape(Capsule())
+                            } else {
+                                Button {
+                                    search = ""
+                                    filter = "Sve"
+                                    store.clearVaultCategoryFilter()
+                                } label: {
+                                    Text("Očisti filtre")
                                         .fontWeight(.bold)
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 11)
@@ -3010,6 +3073,7 @@ struct VaultRow: View {
 
     private var state: (String, Color) {
         if duplicated { return ("Ponovno korištena", danger) }
+        if isPasswordItem && item.password.isEmpty { return ("Bez lozinke", warn) }
         if isPasswordItem && !item.password.isEmpty && !isStrongPassword(item.password) { return ("Potrebno ažuriranje", warn) }
         switch item.kind {
         case "Bilješka", "Kartica": return ("Zaštićena", good)
@@ -3185,6 +3249,8 @@ struct CollectionsView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 if !search.isEmpty {
                     Button {
                         search = ""
@@ -3230,6 +3296,29 @@ struct CollectionsView: View {
             }
 
             ScrollView {
+                if collectionItems.isEmpty && (!search.isEmpty || selectedType != "Sve") {
+                    GlassCard {
+                        Text("Nema rezultata")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text("Promijenite pretragu ili odaberite drugi tip.")
+                            .foregroundStyle(muted)
+                        Button {
+                            search = ""
+                            selectedType = "Sve"
+                        } label: {
+                            Text("Očisti filtre")
+                                .fontWeight(.bold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(midnight)
+                        .background(cyan)
+                        .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 18)
+                } else {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 150, maximum: 280), spacing: 10)],
                     spacing: 10
@@ -3260,9 +3349,15 @@ struct CollectionsView: View {
                         .onTapGesture {
                             store.openCategory(name, type: selectedType)
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction {
+                            store.openCategory(name, type: selectedType)
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
+                }
 
                 Spacer(minLength: 18)
                     .frame(height: 18)
@@ -4970,7 +5065,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.5 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
@@ -5320,14 +5415,15 @@ struct SecurityCenterView: View {
 
                         if issues.isEmpty {
                             HStack(spacing: 12) {
-                                Image(systemName: "checkmark.shield.fill").foregroundStyle(good)
-                                Text("Nisu pronađene slabe ili ponovljene lozinke.")
+                                Image(systemName: score == nil ? "info.circle.fill" : "checkmark.shield.fill")
+                                    .foregroundStyle(score == nil ? ice : good)
+                                Text(score == nil ? "Nema spremljenih lozinki za provjeru." : "Nisu pronađene slabe ili ponovljene lozinke.")
                                     .foregroundStyle(.white)
                                 Spacer()
                             }
                             .padding(18)
-                            .background(good.opacity(0.10))
-                            .overlay(RoundedRectangle(cornerRadius: 20).stroke(good.opacity(0.55), lineWidth: 1))
+                            .background((score == nil ? ice : good).opacity(0.10))
+                            .overlay(RoundedRectangle(cornerRadius: 20).stroke((score == nil ? ice : good).opacity(0.55), lineWidth: 1))
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                         }
                     }

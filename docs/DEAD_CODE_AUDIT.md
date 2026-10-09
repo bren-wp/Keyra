@@ -127,3 +127,11 @@ Nakon audita Keyra nema dokazano mrtvih produkcijskih screenova, storeova, helpe
 Stvarni dead weight pronađen je u Android dependency sloju i uklonjen je. Legacy migracijski i backup kod namjerno je zadržan jer ima aktivnu kompatibilnosnu ili korisničku ulogu.
 
 Svako buduće uklanjanje legacy KEYRA1/KEYRA2 putanja treba raditi tek nakon eksplicitne odluke o minimalno podržanoj migracijskoj verziji, a ne kao običan dead-code cleanup.
+
+## Dopunski pregled — 9. listopada 2026. (0.6.5)
+
+Usporedbom trenutačnih Android i iOS izvora pronađen je preostali clipboard uvoz sigurnosne kopije u **početnom import toku**, izvan Settings ekrana. Zamijenjen je sistemskim odabirom datoteke na obje platforme. Androidov `clearClipboardIfMatches` nakon uklanjanja tog toka više nije imao pozivatelja pa je uklonjen; zasebni `copy` i iOS sensitive clipboard ostaju jer služe kopiranju pojedinačnih tajni.
+
+Provjera izvornog teksta nakon izmjena: nema korisničkih poruka `Kopirajte šifriranu`, `Kopiraj sigurnosnu kopiju`, `Pretražite postavke` ni `Tamni način`; `importNewVault` prima sadržaj odabrane datoteke i na Androidu i na iOS-u. KEYRA1, KEYRA2 i KEYRAREC1 kompatibilnost ostaje. Android manifest ostaje bez `INTERNET` dozvole, uz `allowBackup=false` i `usesCleartextTraffic=false`; iOS privacy manifest ostaje nepromijenjen.
+
+Ovo je **ciljani pregled identificiranih tokova i simbola**, a ne dokaz odsutnosti svakog neiskorištenog simbola; statički lint/analyze i build trebaju proći u CI-ju na završnom SHA-u. Ručno testiranje prvog uvoza na oba uređaja i provjera starijih datoteka ostaju zasebni QA zadaci.

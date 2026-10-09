@@ -273,21 +273,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    fun importNewVault(context: Context, password: String): Boolean {
+    fun importNewVault(payload: String, password: String): Boolean {
         if (password.length < 12) {
             message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
             return false
         }
 
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
-        val payload = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
-        } else {
-            ""
-        }
         if (payload.isBlank()) {
-            message = "Međuspremnik ne sadrži Keyra sigurnosnu kopiju."
+            message = "Odaberite .keyra sigurnosnu kopiju."
             return false
         }
         if (payload.length > MAX_BACKUP_CHARS) {
@@ -313,7 +306,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
 
-        clearClipboardIfMatches(context, payload)
         finishInitialSetup(password, imported)
         message = "Keyra trezor uspješno je uvezen."
         return true
@@ -2149,9 +2141,23 @@ private fun UnlockScreen(
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
+    var importPayload by remember { mutableStateOf<String?>(null) }
     val creating = !model.isSetup
     val importing = creating && model.importingNewVault
     val context = LocalContext.current
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { readUtf8Limited(context, uri, MAX_BACKUP_CHARS) }
+                .onSuccess {
+                    importPayload = it
+                    model.message = "Šifrirana sigurnosna kopija je učitana."
+                }
+                .onFailure {
+                    importPayload = null
+                    model.message = "Sigurnosnu kopiju nije moguće pročitati ili je prevelika."
+                }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 700.dp || maxWidth < 360.dp
@@ -2200,7 +2206,7 @@ private fun UnlockScreen(
                     )
                     Text(
                         when {
-                            importing -> "Kopirajte šifriranu Keyra sigurnosnu kopiju u međuspremnik i unesite njezinu glavnu lozinku."
+                            importing -> "Odaberite šifriranu .keyra datoteku i unesite lozinku sigurnosne kopije."
                             creating -> "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
                             else -> "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru."
                         },
@@ -2215,6 +2221,14 @@ private fun UnlockScreen(
                     }
                     if (importing) {
                         Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.FolderOpen, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (importPayload == null) "Odaberi .keyra datoteku" else "Sigurnosna kopija odabrana")
+                        }
                         Text(
                             "Uvoz prihvaća šifriranu Keyra sigurnosnu kopiju i neće zamijeniti podatke ako provjera ili spremanje ne uspiju.",
                             color = Muted,
@@ -2225,7 +2239,7 @@ private fun UnlockScreen(
                     Button(
                         onClick = {
                             when {
-                                importing -> model.importNewVault(context, password)
+                                importing -> model.importNewVault(importPayload.orEmpty(), password)
                                 creating -> {
                                     if (password != confirm) model.message = "Lozinke se ne podudaraju."
                                     else model.createVault(password)
@@ -2233,6 +2247,7 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
+                        enabled = !importing || importPayload != null,
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
@@ -2503,6 +2518,7 @@ private fun VaultScreen(model: KeyraViewModel) {
             search, { search = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
+            singleLine = true,
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = if (search.isNotBlank()) {
                 {
@@ -2628,7 +2644,7 @@ private fun VaultScreen(model: KeyraViewModel) {
             FilledIconButton(
                 onClick = model::addNew,
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Cyan, contentColor = Midnight)
-            ) { Icon(Icons.Outlined.Add, null) }
+            ) { Icon(Icons.Outlined.Add, contentDescription = "Dodaj stavku") }
         }
 
         LazyColumn(
@@ -2671,6 +2687,12 @@ private fun VaultScreen(model: KeyraViewModel) {
                                 Spacer(Modifier.width(6.dp))
                                 Text("Dodaj prvu stavku", fontWeight = FontWeight.Bold)
                             }
+                        } else {
+                            Button(
+                                onClick = { search = ""; filter = "Sve"; model.clearVaultCategoryFilter() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                                shape = RoundedCornerShape(24.dp)
+                            ) { Text("Očisti filtre", fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
@@ -2724,11 +2746,13 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
     val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
     val stateColor = when {
         duplicated -> Danger
+        isPasswordItem && item.password.isBlank() -> Warn
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> Warn
         else -> Good
     }
     val state = when {
         duplicated -> "Ponovno korištena"
+        isPasswordItem && item.password.isBlank() -> "Bez lozinke"
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> "Potrebno ažuriranje"
         item.type == "Bilješka" -> "Zaštićena"
         item.type == "Kartica" -> "Zaštićena"
@@ -2947,7 +2971,19 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 18.dp)
             ) {
-                items(categories.chunked(if (narrow) 1 else 2)) { group ->
+                if (collectionItems.isEmpty() && (search.isNotBlank() || type != "Sve")) {
+                    item {
+                        GlassCard {
+                            Text("Nema rezultata", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Promijenite pretragu ili odaberite drugi tip.", color = Muted)
+                            Button(
+                                onClick = { search = ""; type = "Sve" },
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight)
+                            ) { Text("Očisti filtre") }
+                        }
+                    }
+                } else {
+                    items(categories.chunked(if (narrow) 1 else 2)) { group ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         group.forEach { (name, accent) ->
                             val count = collectionItems.count { it.category == name }
@@ -2995,6 +3031,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                             }
                         }
                         if (!narrow && group.size == 1) Spacer(Modifier.weight(1f))
+                    }
                     }
                 }
 
@@ -5056,7 +5093,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.5 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
@@ -5370,13 +5407,18 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = Good.copy(alpha=.10f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha=.55f))
+                        color = if (passwordItems.isEmpty()) Slate2 else Good.copy(alpha=.10f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, (if (passwordItems.isEmpty()) Ice else Good).copy(alpha=.45f))
                     ) {
                         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.VerifiedUser, null, tint = Good)
+                            Icon(if (passwordItems.isEmpty()) Icons.Outlined.Info else Icons.Outlined.VerifiedUser, null,
+                                tint = if (passwordItems.isEmpty()) Ice else Good)
                             Spacer(Modifier.width(12.dp))
-                            Text("Nisu pronađene slabe ili ponovljene lozinke.", color = Color.White)
+                            Text(
+                                if (passwordItems.isEmpty()) "Nema spremljenih lozinki za provjeru."
+                                else "Nisu pronađene slabe ili ponovljene lozinke.",
+                                color = Color.White
+                            )
                         }
                     }
                 }
@@ -5464,20 +5506,6 @@ private fun openWebsite(context: Context, raw: String): Boolean {
         context.startActivity(intent)
         true
     }.getOrDefault(false)
-}
-
-private fun clearClipboardIfMatches(context: Context, expected: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = clipboard.primaryClip
-    val current = if (clip != null && clip.itemCount > 0) {
-        clip.getItemAt(0).coerceToText(context)?.toString()
-    } else {
-        null
-    }
-    if (current == expected) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-        else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-    }
 }
 
 private fun copy(context: Context, text: String) {
