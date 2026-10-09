@@ -105,6 +105,16 @@ private const val MAX_VAULT_ITEMS = 10_000
 internal fun shouldAcceptAuthCompletion(requestEpoch: Long, currentEpoch: Long, foreground: Boolean): Boolean =
     foreground && requestEpoch == currentEpoch
 
+internal fun shouldAcceptProtectedCompletion(
+    requestEpoch: Long,
+    currentEpoch: Long,
+    foreground: Boolean,
+    vaultUnlocked: Boolean,
+    sameScreen: Boolean,
+    sameItem: Boolean
+): Boolean = shouldAcceptAuthCompletion(requestEpoch, currentEpoch, foreground) &&
+    vaultUnlocked && sameScreen && sameItem
+
 enum class Screen { ONBOARDING, RECOVERY, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
@@ -154,6 +164,9 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun authenticateBiometric(reason: String, onSuccess: () -> Unit) {
+        val requestEpoch = model.biometricRequestToken()
+        val expectedScreen = model.screen
+        val expectedItemId = model.selected?.id
         val allowed = BiometricManager.from(this).canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or
                 BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -167,10 +180,14 @@ class MainActivity : FragmentActivity() {
             ContextCompat.getMainExecutor(this),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    onSuccess()
+                    if (model.canCompleteBiometricRequest(requestEpoch, expectedScreen, expectedItemId)) {
+                        onSuccess()
+                    }
                 }
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    model.message = errString.toString()
+                    if (model.canCompleteBiometricRequest(requestEpoch, expectedScreen, expectedItemId)) {
+                        model.message = errString.toString()
+                    }
                 }
             }
         )
@@ -494,6 +511,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun biometricRequestToken(): Long = authenticationEpoch
+
+    fun canCompleteBiometricRequest(requestEpoch: Long, expectedScreen: Screen, expectedItemId: java.util.UUID?): Boolean {
+        if (!isSetup || screen != expectedScreen || selected?.id != expectedItemId) return false
+        if (expectedScreen == Screen.UNLOCK) {
+            return shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
+        }
+        return shouldAcceptProtectedCompletion(
+            requestEpoch, authenticationEpoch, appInForeground,
+            unlocked, sameScreen = true, sameItem = true
+        )
+    }
 
     fun unlockFromBiometric(requestEpoch: Long) {
         if (!isSetup || screen != Screen.UNLOCK ||
@@ -2312,7 +2340,15 @@ private fun UnlockScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
                     ) {
-                        Icon(Icons.Outlined.Lock, null)
+                        if (model.isCreatingVault || model.isImportingVault || model.isUnlockingVault) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Midnight,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Lock, contentDescription = null)
+                        }
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when {
@@ -2377,7 +2413,10 @@ private fun KeyraPasswordField(
         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = toggle) {
-                Icon(if (show) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null)
+                Icon(
+                    if (show) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = if (show) "Sakrij $label" else "Prikaži $label"
+                )
             }
         },
         colors = keyraFieldColors(),
@@ -4880,6 +4919,10 @@ private fun SettingsScreen(
     requestBiometric: (String, () -> Unit) -> Unit
 ) {
     val context = LocalContext.current
+    val versionName = remember(context) {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+            .getOrNull() ?: "—"
+    }
     var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
     var pendingRecoveryExport by remember { mutableStateOf<Uri?>(null) }
@@ -5290,7 +5333,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji",
-                    "Keyra 0.6.14",
+                    "Keyra $versionName",
                     onClick = {
                         if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
                             model.message = "Stranicu nije moguće otvoriti."
