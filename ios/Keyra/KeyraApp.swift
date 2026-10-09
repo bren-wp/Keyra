@@ -49,23 +49,35 @@ struct TotpConfig {
 private let base32Alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
 func normalizedBase32Secret(_ raw: String) -> String? {
-    let clean = raw
+    let encoded = raw
+        .trimmingCharacters(in: .whitespacesAndNewlines)
         .uppercased()
         .filter { $0 != " " && $0 != "-" }
-        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
 
-    guard !clean.isEmpty else { return nil }
-    let allowed = Set(base32Alphabet)
-    guard clean.allSatisfy({ allowed.contains($0) }) else { return nil }
-    guard let decoded = decodeBase32(clean), !decoded.isEmpty else { return nil }
-    return clean
+    guard let decoded = decodeBase32(encoded), !decoded.isEmpty else { return nil }
+    return String(encoded.prefix { $0 != "=" })
 }
 
 func decodeBase32(_ raw: String) -> Data? {
-    let clean = raw
-        .uppercased()
-        .trimmingCharacters(in: CharacterSet(charactersIn: "="))
-    guard !clean.isEmpty else { return nil }
+    let encoded = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    let clean = String(encoded.prefix { $0 != "=" })
+    let allowed = Set(base32Alphabet)
+    guard !clean.isEmpty, clean.allSatisfy({ allowed.contains($0) }) else { return nil }
+    let remainder = clean.count % 8
+    guard [0, 2, 4, 5, 7].contains(remainder) else { return nil }
+    let padding = encoded.count - clean.count
+    guard encoded.dropFirst(clean.count).allSatisfy({ $0 == "=" }) else { return nil }
+    let expectedPadding: Int
+    switch remainder {
+    case 2: expectedPadding = 6
+    case 4: expectedPadding = 4
+    case 5: expectedPadding = 3
+    case 7: expectedPadding = 1
+    default: expectedPadding = 0
+    }
+    if padding > 0 && (encoded.count % 8 != 0 || padding != expectedPadding) {
+        return nil
+    }
 
     let table = Dictionary(uniqueKeysWithValues: base32Alphabet.enumerated().map { ($0.element, $0.offset) })
     var output = [UInt8]()
@@ -84,6 +96,8 @@ func decodeBase32(_ raw: String) -> Data? {
         }
     }
 
+    // RFC 4648 requires any remaining unused bits to be zero.
+    guard buffer == 0 else { return nil }
     return Data(output)
 }
 
@@ -2875,7 +2889,7 @@ struct VaultView: View {
             if let category = store.vaultCategoryFilter {
                 HStack {
                     HStack(spacing: 5) {
-                        Text("Kategorija: \(category)")
+                        Text("Kategorija: \(category.isEmpty ? "Bez kategorije" : category)")
                             .font(.caption)
                             .foregroundStyle(cyan)
                         Button {
@@ -2904,14 +2918,14 @@ struct VaultView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan)
-                    Summary(value: "\(passwordItems.filter { !isStrongPassword($0.password) }.count)", label: "Rizične", accent: danger)
+                    Summary(value: "\(securityIssueCount(store.items))", label: "Rizične", accent: danger)
                     Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         Summary(value: "\(store.items.count)", label: "Ukupno", accent: cyan).frame(width: 112)
-                        Summary(value: "\(passwordItems.filter { !isStrongPassword($0.password) }.count)", label: "Rizične", accent: danger).frame(width: 112)
+                        Summary(value: "\(securityIssueCount(store.items))", label: "Rizične", accent: danger).frame(width: 112)
                         Summary(value: "\(duplicates.count)", label: "Ponovljene", accent: indigo).frame(width: 124)
                     }
                 }
@@ -3352,7 +3366,7 @@ struct CollectionsView: View {
                                 .background(accent.opacity(0.18))
                                 .clipShape(RoundedRectangle(cornerRadius: 13))
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(name).font(.headline).foregroundStyle(.white)
+                                Text(name.isEmpty ? "Bez kategorije" : name).font(.headline).foregroundStyle(.white)
                                 Text("\(collectionItems.filter { $0.category == name }.count) stavki")
                                     .font(.subheadline).foregroundStyle(muted)
                             }
@@ -3544,8 +3558,9 @@ struct GeneratorView: View {
                                 .background(cyan.opacity(0.12))
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        Slider(value: $length, in: 8...64, step: 1) { _ in refresh() }
+                        Slider(value: $length, in: 8...64, step: 1)
                             .tint(cyan)
+                            .onChange(of: length) { _, _ in refresh() }
 
                         Divider().overlay(ice.opacity(0.14))
 
@@ -3652,6 +3667,11 @@ struct AddEditView: View {
     @State private var reveal = false
 
     private let original: VaultItem?
+
+    private var categoryOptions: [String] {
+        let standard = ["Osobno", "Posao", "Financije", "Društvene mreže", "Kupovina", "Putovanja", "Zdravlje", "Ostalo"]
+        return standard.contains(category) ? standard : standard + [category]
+    }
 
     private var itemLabel: String {
         switch type {
@@ -3967,8 +3987,8 @@ struct AddEditView: View {
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(["Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo"], id: \.self) { value in
-                                Button(value) { category = value }
+                            ForEach(categoryOptions, id: \.self) { value in
+                                Button(value.isEmpty ? "Bez kategorije" : value) { category = value }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(category == value ? midnight : .white)
                                     .padding(.horizontal, 14)
@@ -5083,7 +5103,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.6 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.7 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
