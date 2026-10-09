@@ -378,7 +378,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                 false
             } else {
                 finishInitialSetup(newPassword, imported)
-                message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
+                message = "Trezor je uspješno obnovljen."
                 true
             }
         } catch (_: Exception) {
@@ -1998,7 +1998,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                 textAlign = TextAlign.Center
             )
             Text(
-                "Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.",
+                "Za obnovu trezora trebaju vam Recovery Key i odgovarajuća sigurnosna kopija.",
                 color = Muted,
                 fontSize = if (compact) 13.sp else 15.sp,
                 textAlign = TextAlign.Center,
@@ -4456,9 +4456,9 @@ private fun DetailScreen(
                                 isPasswordItem && !isStrongPassword(current.password) ->
                                     "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                 isPasswordItem ->
-                                    "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
+                                    "Lozinka zadovoljava preporučene sigurnosne uvjete."
                                 current.type == "Autentifikator" && totpConfig != null ->
-                                    "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                    "Kod se automatski osvježava prema vremenu uređaja."
                                 current.type == "Autentifikator" ->
                                     "TOTP konfiguracija nije valjana i treba je urediti."
                                 else ->
@@ -4636,7 +4636,7 @@ private fun TotpCodeCard(
             }
 
             Text(
-                "Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.",
+                "Ako kod ne radi, provjerite jesu li datum i vrijeme uređaja točni.",
                 color = Muted,
                 fontSize = 12.sp
             )
@@ -4947,7 +4947,7 @@ private fun SettingsScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "Keyra će prvo verificirati recovery datoteku i postojeći trezor. Lokalni kriptografski materijal neće biti zamijenjen ako provjera ne uspije."
+                            "Keyra će provjeriti datoteku prije obnove. Ako provjera ne uspije, vaši zapisi ostaju nepromijenjeni."
                         )
                         OutlinedTextField(
                             value = recoveryImportPassphrase,
@@ -5003,10 +5003,10 @@ private fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
                 icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
-                title = { Text("Izbrisati sve lokalne podatke?") },
+                title = { Text("Izbrisati sve podatke?") },
                 text = {
                     Text(
-                        "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                        "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
                             "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
                     )
                 },
@@ -5015,7 +5015,7 @@ private fun SettingsScreen(
                         onClick = {
                             confirmErase = false
                             if (model.criticalReauthAvailable()) {
-                                requestBiometric("Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                                requestBiometric("Potvrdite brisanje podataka.") {
                                     model.eraseAllLocalData()
                                 }
                             } else {
@@ -5171,7 +5171,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Izvezi Recovery Key",
-                    "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
+                    "Spremite ključ za obnovu na sigurno mjesto."
                 ) {
                     IconButton(onClick = { exportRecoveryLauncher.launch("Keyra-Recovery.keyra") }) {
                         Icon(Icons.Outlined.SaveAlt, contentDescription = "Izvezi Recovery Key", tint = Cyan)
@@ -5182,7 +5182,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Uvezi Recovery Key",
-                    "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
+                    "Provjerite ključ za obnovu i potvrdite novu zaštitu trezora."
                 ) {
                     IconButton(onClick = {
                         importRecoveryLauncher.launch(
