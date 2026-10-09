@@ -1547,6 +1547,21 @@ private fun KeyraMark(size: androidx.compose.ui.unit.Dp = 74.dp) {
     }
 }
 
+internal fun cardExpiryNeedsAttention(expiry: String, currentYear: Int, currentMonth: Int): Boolean =
+    expiry.isNotBlank() && !isCardExpiryNotPast(expiry, currentYear, currentMonth)
+
+internal fun expiredCardIssueIds(
+    items: List<VaultItem>,
+    currentYear: Int,
+    currentMonth: Int
+): Set<String> = items
+    .filter {
+        it.type == "Kartica" &&
+            cardExpiryNeedsAttention(it.fields["Vrijedi do"].orEmpty(), currentYear, currentMonth)
+    }
+    .map { it.id }
+    .toSet()
+
 internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
     val passwordItems = items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
     val duplicatedIds = passwordItems
@@ -1565,7 +1580,11 @@ internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
         .filter { it.type == "Autentifikator" && totpConfigFromFields(it.fields) == null }
         .map { it.id }
         .toSet()
-    return duplicatedIds + weakIds + invalidTotpIds
+    val today = Calendar.getInstance()
+    val expiredCards = expiredCardIssueIds(
+        items, today.get(Calendar.YEAR), today.get(Calendar.MONTH) + 1
+    )
+    return duplicatedIds + weakIds + invalidTotpIds + expiredCards
 }
 
 internal fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
@@ -2786,7 +2805,12 @@ private fun SummaryCard(value: String, label: String, accent: Color, modifier: M
 private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) {
     val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
     val invalidTotp = item.type == "Autentifikator" && totpConfigFromFields(item.fields) == null
+    val today = Calendar.getInstance()
+    val expiryAttention = item.type == "Kartica" && cardExpiryNeedsAttention(
+        item.fields["Vrijedi do"].orEmpty(), today.get(Calendar.YEAR), today.get(Calendar.MONTH) + 1
+    )
     val stateColor = when {
+        expiryAttention -> Warn
         invalidTotp -> Danger
         duplicated -> Danger
         isPasswordItem && item.password.isBlank() -> Warn
@@ -2794,6 +2818,7 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
         else -> Good
     }
     val state = when {
+        expiryAttention -> "Provjeri istek"
         invalidTotp -> "TOTP greška"
         duplicated -> "Ponovno korištena"
         isPasswordItem && item.password.isBlank() -> "Bez lozinke"
@@ -4115,7 +4140,12 @@ private fun DetailScreen(
                 (it.type == "Prijava" || it.type == "Wi-Fi") &&
                 it.password == current.password
         }
+    val today = Calendar.getInstance()
+    val expiryAttention = current.type == "Kartica" && cardExpiryNeedsAttention(
+        current.fields["Vrijedi do"].orEmpty(), today.get(Calendar.YEAR), today.get(Calendar.MONTH) + 1
+    )
     val securityLabel = when {
+        expiryAttention -> "Provjeri istek"
         current.type == "Autentifikator" && totpConfig != null -> "TOTP aktivan"
         current.type == "Autentifikator" -> "TOTP greška"
         isPasswordItem && current.password.isBlank() -> "Bez lozinke"
@@ -4127,7 +4157,7 @@ private fun DetailScreen(
     val securityColor = when (securityLabel) {
         "Snažna", "Zaštićena", "TOTP aktivan" -> Good
         "Ponovno korištena", "TOTP greška" -> Danger
-        "Potrebno ažuriranje" -> Warn
+        "Potrebno ažuriranje", "Provjeri istek" -> Warn
         else -> Muted
     }
     val updatedLabel = remember(current.updatedAt) {
@@ -4472,6 +4502,8 @@ private fun DetailScreen(
                         )
                         Text(
                             when {
+                                expiryAttention ->
+                                    "Datum isteka kartice je prošao ili je neispravan. Provjerite karticu i ažurirajte podatke."
                                 duplicatedPassword ->
                                     "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
                                 isPasswordItem && current.password.isBlank() ->
@@ -5234,7 +5266,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.11 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
@@ -5425,6 +5457,11 @@ private fun SecurityScreen(model: KeyraViewModel) {
     val invalidTotp = model.items.filter {
         it.type == "Autentifikator" && totpConfigFromFields(it.fields) == null
     }
+    val today = Calendar.getInstance()
+    val expiringCardIds = expiredCardIssueIds(
+        model.items, today.get(Calendar.YEAR), today.get(Calendar.MONTH) + 1
+    )
+    val expiredCards = model.items.filter { it.id in expiringCardIds }
     val issueIds = securityIssueIds(model.items)
     val score = securityScore(model.items)
 
@@ -5441,7 +5478,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             score?.toString() ?: "—",
-                            color = if (score == null) Muted else if (issueIds.isEmpty()) Good else Warn,
+                            color = if (score == null) Muted else if (score == 100) Good else Warn,
                             fontSize = 54.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -5450,14 +5487,14 @@ private fun SecurityScreen(model: KeyraViewModel) {
                     LinearProgressIndicator(
                         progress = { (score ?: 0) / 100f },
                         modifier = Modifier.fillMaxWidth(),
-                        color = if (score == null) Muted else if (issueIds.isEmpty()) Good else Warn,
+                        color = if (score == null) Muted else if (score == 100) Good else Warn,
                         trackColor = Color(0xFF203449)
                     )
                     Text(
                         when {
-                            score == null && issueIds.isNotEmpty() -> "Nema lozinki za ocjenu. Provjerite neispravne 2FA stavke."
+                            score == null && issueIds.isNotEmpty() -> "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             score == null -> "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
-                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke ni 2FA pogreške."
+                            issueIds.isEmpty() -> "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
                             else -> "Pregledajte stavke koje zahtijevaju pažnju."
                         },
                         color = Muted
@@ -5513,7 +5550,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 }
             }
             item { SectionTitle("STAVKE KOJE ZAHTIJEVAJU PAŽNJU") }
-            items((weak + model.items.filter { it.id in duplicatedIds } + invalidTotp).distinctBy { it.id }) { issue ->
+            items((weak + model.items.filter { it.id in duplicatedIds } + invalidTotp + expiredCards).distinctBy { it.id }) { issue ->
                 val duplicate = issue.id in duplicatedIds
                 val weakPassword = !isStrongPassword(issue.password)
                 Surface(
@@ -5533,6 +5570,7 @@ private fun SecurityScreen(model: KeyraViewModel) {
                             Text(issue.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text(
                                 when {
+                                    issue.type == "Kartica" -> "Datum isteka kartice je prošao ili je neispravan. Uredite karticu."
                                     issue.type == "Autentifikator" -> "Neispravna 2FA tajna ili postavke. Uredite autentifikator."
                                     issue.password.isBlank() -> "Ovoj stavci nedostaje spremljena lozinka."
                                     duplicate && weakPassword -> "Lozinka je slaba i koristi se na više mjesta."
