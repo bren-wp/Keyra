@@ -145,7 +145,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Trezor i Security Center prikazuju broj rizičnih umjesto samo slabih lozinki.
 - [x] Kolekcije ne prikazuju kartice s 0 stavki i imaju akciju za prazan trezor; uvezene kategorije ostaju dostupne.
 - [x] Android unit testovi dodani za prazne/ponovljene lozinke i sigurnosni rezultat.
-- [ ] Android 0.6.6 lint, unit testovi, build i privacy gate zeleni na završnom PR SHA-u.
-- [ ] iOS 0.6.6 build, analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
-- [ ] GitHub release v0.6.6 sa svim paketima i SHA256SUMS potvrđen nakon mergea i main CI-ja.
+- [x] Android 0.6.6 lint, unit testovi, build i privacy gate zeleni na PR SHA-u `0de4986922e5fc08d97e7028f3fa5d8c22bd0288`.
+- [x] iOS 0.6.6 build, analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
+- [x] GitHub release v0.6.6 sa sedam artefakata i SHA256SUMS potvrđen nakon zelenog main CI-ja na `fe553c535a3ea51d100120abdb7ae321c77e3193`.
 - [ ] Ručna provjera na fizičkom Android i iOS uređaju (uvijek ostaje otvorena dok se ne provede).
+
+## 0.6.7 TOTP RFC4648 i sigurnosni brojači
+- [x] Android/iOS Trezor prikazuje jedinstveni broj svih rizičnih stavki uključujući ponovno korištene snažne lozinke.
+- [x] Android/iOS Base32 parser odbacuje nevaljanu duljinu, neispravan znak =, pogrešan padding i nezero ostatne bitove po RFC 4648.
+- [x] Ispravni RFC4648 padded/unpadded TOTP zapisi ostaju prihvaćeni; Android ima regresijske testove.
+- [x] iOS generator odmah osvježava lozinku kada korisnik promijeni duljinu klizačem.
+- [x] Uvezene kategorije dostupne su u uređivaču; prazan naziv se korisniku prikazuje kao „Bez kategorije”, bez izmjene vrijednosti u trezoru.
+- [ ] Android 0.6.7 lint, unit, build i privacy gate zeleni na završnom PR SHA-u.
+- [ ] iOS 0.6.7 build/analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
+- [ ] Oba main CI-ja zelena i GitHub release v0.6.7 s 7 artefakata objavljen.
+- [ ] Ručni testovi na fizičkim Android/iOS uređajima uključujući stare KEYRA1/KEYRA2 kopije.
