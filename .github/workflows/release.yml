@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Ovo izdanje donosi premium UI/UX simplification na Androidu i iOS-u: uklonjeni su duplicirani backup/import tokovi i nepotrebne Settings opcije, navigacija i filteri su pojednostavljeni, Kolekcije otvaraju puni pregled trezora, a Generator je konsolidiran u čišći i pregledniji tijek.
+          Ovo izdanje pojednostavljuje Keyra UI/UX na Androidu i iOS-u: uklonjeni su duplicirani backup/import putovi preko clipboarda, suvišne postavke i dupli filter meniji; Settings je reorganiziran u jasne cjeline, navigacija i Collections/Vault tokovi su dodatno usklađeni 1:1.
 
           ## Provjere
           - Android lint i unit testovi
