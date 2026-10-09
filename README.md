@@ -1,150 +1,162 @@
 <div align="center">
 
-<img src="assets/brand/keyra-logo.svg" alt="Keyra" width="460">
+<a href="https://github.com/bren-wp/Keyra"><img src="assets/brand/keyra-logo.svg" alt="Keyra" width="460"></a>
 
 # Keyra
 
-### Sigurni upravitelj lozinki za Android i iOS
+### Your digital life. One beautifully protected vault.
 
-**Vaši ključevi. Vaši podaci. Uvijek vaši.**
+**A refined, privacy-first password manager for Android and iOS.**
 
-<img src="assets/brand/keyra-icon.svg" alt="Keyra ikona" width="118">
+Secure passwords, private notes, cards, identities, Wi-Fi credentials and authenticator codes — without registration, ads or a Keyra cloud account.
 
-**Bez računa · Bez oglasa · Šifrirani trezor na uređaju**
+[![Latest release](https://img.shields.io/github/v/release/bren-wp/Keyra?style=for-the-badge&label=Release&color=00bfae)](https://github.com/bren-wp/Keyra/releases/latest)
+[![Android CI](https://img.shields.io/github/actions/workflow/status/bren-wp/Keyra/android.yml?style=for-the-badge&label=Android)](https://github.com/bren-wp/Keyra/actions/workflows/android.yml)
+[![iOS CI](https://img.shields.io/github/actions/workflow/status/bren-wp/Keyra/ios.yml?style=for-the-badge&label=iOS)](https://github.com/bren-wp/Keyra/actions/workflows/ios.yml)
+
+[Explore](#explore-keyra) · [Privacy](#built-around-privacy) · [Download](#download--installation) · [Build](#build-from-source) · [Security](#security--responsible-disclosure)
+
+<img src="assets/brand/keyra-styleboard.svg" alt="Keyra brand colors and visual language" width="100%">
 
 </div>
 
 ---
 
-## Sigurniji način upravljanja lozinkama
+## Beautifully simple. Thoughtfully secure.
 
-Keyra objedinjuje prijave, sigurne bilješke, kartice, identitete i Wi‑Fi podatke u jednom preglednom trezoru. Sučelje prati tamni Keyra identitet s tirkiznim, plavim i indigo naglascima, tankim obrubima i jasnom hijerarhijom.
+Your important information deserves more than an endless list of passwords. Keyra gives it a considered home: an elegant dark interface, clear navigation, useful security insights and familiar actions that feel effortless.
 
-<div align="center">
-<img src="assets/screens/splash.svg" alt="Keyra početni prikaz" width="230">
-<img src="assets/screens/onboarding.svg" alt="Keyra dobrodošlica" width="230">
-<img src="assets/screens/unlock.svg" alt="Keyra otključavanje" width="230">
-</div>
+<table>
+<tr>
+<td width="33%" align="center"><strong>🔒 Privacy by design</strong><br><sub>No account, advertising SDK, analytics or Keyra-operated sync service.</sub></td>
+<td width="33%" align="center"><strong>✨ Crafted for clarity</strong><br><sub>Thoughtful typography, useful collections and a distraction-free experience.</sub></td>
+<td width="33%" align="center"><strong>📱 Two platforms, one experience</strong><br><sub>Android and iOS, with portable encrypted backups.</sub></td>
+</tr>
+</table>
 
-## Ključne mogućnosti
-
-🔐 **Šifrirani trezor** — sadržaj se štiti AES‑256‑GCM enkripcijom.  
-🔑 **Glavna lozinka** — provjera koristi PBKDF2‑HMAC‑SHA‑256 s 600.000 iteracija.  
-👆 **Biometrijsko otključavanje** — koristi podržanu potvrdu identiteta uređaja.  
-🛡️ **Dodatna potvrda za osjetljive radnje** — prikaz i kopiranje tajnih vrijednosti mogu tražiti novu potvrdu identiteta.  
-⏱️ **Automatsko zaključavanje** — odmah ili nakon odabranog vremenskog razdoblja.  
-🚫 **Zaštita od uzastopnih pokušaja** — ponavljani pogrešni pokušaji privremeno zaustavljaju novo otključavanje.  
-📋 **Zaštićeni međuspremnik** — osjetljive kopirane vrijednosti automatski istječu.  
-🔎 **Provjera sigurnosti** — prepoznaje slabe i ponovno korištene lozinke.  
-✨ **Generator lozinki** — duljina do 64 znaka, vrste znakova i brzi presetovi jačine.  
-🔢 **TOTP / 2FA autentifikator** — vremenski kodovi kompatibilni s RFC 6238; podržani su Base32 tajne i `otpauth://totp` URI-jevi.  
-📦 **Šifrirana sigurnosna kopija** — izvoz i povrat Keyra trezora uz provjeru formata i ograničenja veličine; KEYRA2 kopije prenosive su između Androida i iOS-a.  
-☁️ **Privatni cloud backup** — .keyra datoteka može se spremiti ili otvoriti kroz sistemski Files/Document picker, uključujući kompatibilne privatne cloud providere bez predaje njihovih vjerodajnica Keyri.  
-📱 **Prilagodljivo sučelje** — telefoni, veći zasloni, tableti, uspravni i vodoravni prikaz.  
-🧯 **Sigurno spremanje** — prikaz podataka mijenja se tek nakon uspješnog trajnog spremanja.  
-🗑️ **Potpuno lokalno brisanje** — korisnik može trajno ukloniti trezor, glavnu lozinku, lokalne postavke i uređajni ključ s uređaja.
-
-## Moj trezor
-
-Pretraga, tipovi stavki, favoriti, kategorije, sortiranje i sigurnosni sažetak dostupni su odmah nakon otključavanja. Novi trezor počinje prazan i Keyra ne umeće probne vjerodajnice.
+## Explore Keyra
 
 <div align="center">
-<img src="assets/screens/vault.svg" alt="Moj trezor" width="320">
+<img src="assets/screens/splash.svg" alt="Splash preview" width="22%">
+<img src="assets/screens/onboarding.svg" alt="Welcome preview" width="22%">
+<img src="assets/screens/unlock.svg" alt="Vault unlock preview" width="22%">
+<img src="assets/screens/vault.svg" alt="Vault preview" width="22%">
+
+<sub>Existing Keyra UI illustrations; appearance may differ on individual screens and devices.</sub>
 </div>
 
-## Dodavanje i detalji
+### Your vault, your way
 
-Podržane su prijave, bilješke, kartice, identiteti, Wi‑Fi podaci i TOTP autentifikatori. Svaki tip prikazuje samo odgovarajuća polja. Osjetljive vrijednosti ostaju skrivene dok ih korisnik ne odluči prikazati ili kopirati.
-
-Prije spremanja provjeravaju se obavezna i posebna polja, web-adrese se otvaraju samo kroz HTTP/HTTPS, a brisanje uvijek traži potvrdu. Broj kartice dodatno prolazi Luhn provjeru, a datum isteka ne može biti u prošlosti.
+| Organize everything | Take control of security |
+| --- | --- |
+| **Passwords & logins** — store the credentials that matter | **Password generator** — adjust length and character groups |
+| **Private notes** — protect information beyond logins | **Security Center** — weak/reused password and invalid TOTP alerts |
+| **Payment cards** — card details and expiry warnings | **TOTP codes** — offline, RFC 6238-compatible authenticator |
+| **Identities & Wi-Fi** — fields built for each type | **Biometric access** — supported device authentication |
+| **Favorites & collections** — find what you need quickly | **Automatic lock** — protect the vault when you leave |
+| **Encrypted backups** — deliberately export and restore | **Recovery Key** — the existing KEYRAREC1 recovery process |
 
 <div align="center">
-<img src="assets/screens/add-login.svg" alt="Dodavanje prijave" width="280">
-<img src="assets/screens/detail.svg" alt="Detalji stavke" width="280">
+<img src="assets/screens/add-login.svg" alt="Create item preview" width="29%">
+<img src="assets/screens/detail.svg" alt="Item details preview" width="29%">
+<img src="assets/screens/generator.svg" alt="Password generator preview" width="29%">
 </div>
 
-## 2FA autentifikator
+### The little things matter
 
-Keyra može čuvati TOTP tajnu i generirati vremenski jednokratni kod koji se automatski obnavlja. Podržan je ručni unos Base32 tajne ili lijepljenje standardnog `otpauth://totp` URI-ja. Iz URI-ja se mogu preuzeti izdavatelj, račun, algoritam, broj znamenki i vremenski period.
-
-Kod se računa lokalno na uređaju prema RFC 6238, bez slanja TOTP tajne na udaljeni poslužitelj. Podržani su SHA‑1, SHA‑256 i SHA‑512, kodovi od 6 do 8 znamenki te periodi od 15 do 120 sekundi. TOTP tajna ostaje dio šifriranog trezora, a njezin prikaz i kopiranje mogu koristiti dodatnu potvrdu identiteta.
-
-Za ispravne kodove uređaj mora imati točno postavljeno vrijeme. Ako autentifikacija ne prolazi, prvo treba provjeriti automatsku sinkronizaciju vremena operacijskog sustava.
-
-## Generator lozinki
-
-Presetovi **Jednostavna**, **Snažna** i **Maksimalna** omogućuju brz izbor, dok **Prilagodi** daje potpunu kontrolu nad duljinom i vrstama znakova. Generator koristi sigurni izvor slučajnosti platforme i prikazuje procjenu jačine.
+Useful search, dedicated item editors, hidden sensitive values, understandable error messages, and clipboard content that expires. Every new vault starts empty: no invented accounts or example passwords.
 
 <div align="center">
-<img src="assets/screens/generator.svg" alt="Generator lozinki" width="320">
+<img src="assets/screens/collections.svg" alt="Collections preview" width="42%">
+<img src="assets/screens/settings.svg" alt="Settings preview" width="42%">
 </div>
 
-## Kolekcije
+## Built around privacy
 
-Kategorije **Osobno**, **Posao**, **Financije**, **Društvene mreže**, **Kupovina**, **Putovanja**, **Zdravlje** i **Ostalo** otvaraju odgovarajući filtrirani sadržaj trezora. Brojevi stavki dolaze iz stvarnog sadržaja korisničkog trezora.
+Keyra's core vault operates without a user account or a Keyra-operated backend. On Android the app does not request Internet permission; the code contains no analytics or remote-sync SDK. Files are exported only when you choose the destination.
 
-<div align="center">
-<img src="assets/screens/collections.svg" alt="Kolekcije" width="320">
-</div>
+| Protection | Current implementation |
+| --- | --- |
+| Encrypted vault | AES-256-GCM |
+| Master-password verifier | PBKDF2-HMAC-SHA-256, 600,000 iterations for current records |
+| Protected device key | Android Keystore / Apple Keychain |
+| Access control | Supported biometric or device authentication |
+| Sensitive UI | Android screenshot restrictions / iOS privacy shield where supported |
+| Clipboard | Clear or expire copied sensitive values after approximately 30 seconds, subject to OS behavior |
+| Portable backup | Encrypted KEYRA2; legacy KEYRA1 compatible |
+| Recovery | KEYRAREC1, separate from the actual vault backup |
 
-## Privatni cloud backup
+**Privacy is a design principle, not an absolute guarantee.** A compromised device, another app's clipboard access, weak master passwords, or an unprotected exported backup can still expose information. See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 
-Keyra ne traži korisničko ime ni lozinku za Proton Drive, iCloud Drive, Nextcloud ili drugi cloud servis. Umjesto toga stvara već šifriranu `.keyra` datoteku i predaje je sistemskom odabiru datoteka. Time korisnik sam bira gdje će je spremiti ili iz kojeg će je providera vratiti.
+### Your backup. Your choice.
 
-Na iOS-u se koristi standardni Files dokumentni tok. Na Androidu se koristi Storage Access Framework, bez široke dozvole za pristup pohrani. Dostupnost pojedinog providera ovisi o tome je li njegov servis registriran u sistemskom Files/Document sučelju na uređaju.
+Export an encrypted `.keyra` document, then save it through your preferred system file provider, including compatible private cloud apps. This is **manual document export/import**, not automatic background cloud sync. Your Recovery Key is not a backup of your vault contents; the two files may both be needed for recovery.
 
-Izravna automatska Proton Drive sinkronizacija trenutačno nije ugrađena. Protonovi službeni materijali opisuju njihov Drive SDK kao zajedničku osnovu vlastitih Drive aplikacija i navode buduće lakše integracije za vanjske alate, ali ne dokumentiraju stabilan third-party produkcijski login/storage API koji bi Keyra trebala ugraditi. Zato Keyra koristi službene sistemske file-provider tokove umjesto privatnih ili nedokumentiranih Proton API-ja.
+[Recovery guide](docs/RECOVERY_KEY.md) · [Private document backup](docs/PRIVACY_CLOUD_BACKUP.md)
 
-## Postavke i sigurnost
+## Download & installation
 
-Keyra prikazuje samo dostupne mogućnosti: biometrijsko otključavanje, dodatnu potvrdu identiteta, automatsko zaključavanje, provjeru sigurnosti, šifriranu sigurnosnu kopiju i ručno zaključavanje trezora. Zaštita uređaja ne može se uključiti ako platforma nema dostupnu biometriju ili zaključavanje uređaja. Tamni Keyra prikaz dio je stalnog vizualnog identiteta.
+### [⬇ Get Keyra from GitHub Releases](https://github.com/bren-wp/Keyra/releases/latest)
 
-Na Androidu je osjetljivi prozor zaštićen od snimanja kada platforma to omogućuje. Na iOS-u Keyra skriva sadržaj kada aplikacija nije aktivna te tijekom aktivnog snimanja zaslona.
+The release workflow publishes these file types:
 
-<div align="center">
-<img src="assets/screens/settings.svg" alt="Postavke i sigurnost" width="320">
-</div>
+| Release file | Purpose |
+| --- | --- |
+| `Keyra-*-Android-debug.apk` | Debug-signed Android build for testing |
+| `Keyra-*-Android-unsigned.apk` | Unsigned APK, **requires signing** |
+| `Keyra-*-Android.aab` | App Bundle, **not automatically production-signed** |
+| `Keyra-*-iOS-Simulator.zip` | Build for iOS simulator QA |
+| `Keyra-*-iOS-unsigned.ipa` | Unsigned IPA, **not ready for normal iOS installation or App Store** |
+| `SHA256SUMS-Android.txt`, `SHA256SUMS-iOS.txt` | File integrity checksums |
 
-## Sigurnost podataka
+**Android:** verify the release checksums, then install the debug APK on a compatible testing device. The debug APK is not intended as a store-ready production package.
 
-- sadržaj trezora šifrira se prije trajnog spremanja
-- ključ trezora štiti Android Keystore ili Apple Keychain
-- sigurnosna kopija dodatno se šifrira glavnom lozinkom
-- KEYRA2 format sigurnosne kopije koristi isti prijenosni format na Androidu i iOS-u
-- podržan je uvoz postojećih KEYRA1 i ranijih KEYRA2 kopija s obje platforme
-- uvoz koji zamjenjuje trenutačni trezor traži izričitu potvrdu
-- oštećena ili prevelika sigurnosna kopija ne zamjenjuje postojeći trezor
-- neuspjelo spremanje ne mijenja prikazano stanje kao da je radnja uspjela
-- TOTP tajne ostaju u šifriranom trezoru, a vremenski kodovi generiraju se lokalno
-- Keyra nema široku storage dozvolu; cloud backup prolazi kroz korisnički odabrani sistemski file provider
-- Keyra ne sprema vjerodajnice privatnog cloud servisa
-- osjetljive vrijednosti ne zapisuju se u aplikacijske logove
-- novi trezor ne sadrži unaprijed umetnute račune ni lozinke
+**iOS:** use the Xcode simulator build or create a correctly provisioned and signed device build. An unsigned IPA cannot be installed as a normal App Store app. This README does not claim that Keyra is published in the app stores.
 
-Više pojedinosti nalazi se u [SECURITY.md](SECURITY.md) i [PRIVACY.md](PRIVACY.md).
+## Build from source
 
-## Vizualni identitet
+### Android
 
-| Element | Vrijednost |
-|---|---|
-| Ponoćna | `#0B0F14` |
-| Duboki škriljevac | `#121826` |
-| Tirkizna | `#00E5D1` |
-| Indigo | `#6366F1` |
-| Ledeno plava | `#7DD3FC` |
+Use Java 17, Gradle 8.13 and the required Android SDK, matching the CI toolchain.
 
-<div align="center">
-<img src="assets/brand/keyra-styleboard.svg" alt="Keyra vizualni identitet" width="100%">
-</div>
+```bash
+git clone https://github.com/bren-wp/Keyra.git
+cd Keyra
+gradle -p android :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+```
+
+### iOS
+
+Use macOS, Xcode and the appropriate iOS SDK. The current CI requirement is documented in [.github/workflows/ios.yml](.github/workflows/ios.yml).
+
+```bash
+git clone https://github.com/bren-wp/Keyra.git
+cd Keyra
+xcodebuild -project ios/Keyra.xcodeproj -scheme Keyra \
+  -sdk iphonesimulator -configuration Debug \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+### Quality standards
+
+Android CI checks lint, unit tests, builds and privacy restrictions. iOS CI runs builds, static analysis, privacy checks and a simulator launch smoke test. Release validation runs separately from the merged `main` commit.
+
+**Passing automated checks does not prove every screen or keyboard interaction works on physical devices.** Known gaps stay visible in [GitHub Issues](https://github.com/bren-wp/Keyra/issues) and the [release QA checklist](docs/STORE_RELEASE_CHECKLIST.md).
+
+## Security & responsible disclosure
+
+For security problems, follow [SECURITY.md](SECURITY.md). Never post actual passwords, recovery keys, TOTP secrets, vault exports or unredacted crash logs in public GitHub issues.
+
+[Security](SECURITY.md) · [Privacy](PRIVACY.md) · [Android data safety](docs/PLAY_DATA_SAFETY.md) · [iOS privacy](docs/APP_STORE_PRIVACY.md) · [Open issues](https://github.com/bren-wp/Keyra/issues)
 
 ---
 
 <div align="center">
+<img src="assets/brand/keyra-icon.svg" alt="Keyra icon" width="88">
 
 ### Keyra
 
-**Sigurnost za bezbrižniji život.**
+**Everything important. Beautifully protected.**
 
-Vaši ključevi. Vaši podaci. Uvijek vaši.
-
+<sub>Made for privacy-conscious people on Android and iOS.</sub>
 </div>
