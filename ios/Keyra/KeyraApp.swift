@@ -49,6 +49,7 @@ struct TotpConfig {
 private let base32Alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
 func normalizedBase32Secret(_ raw: String) -> String? {
+    guard raw.count <= 2_048 else { return nil }
     let encoded = raw
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .uppercased()
@@ -59,6 +60,7 @@ func normalizedBase32Secret(_ raw: String) -> String? {
 }
 
 func decodeBase32(_ raw: String) -> Data? {
+    guard raw.count <= 1_024 else { return nil }
     let encoded = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     let clean = String(encoded.prefix { $0 != "=" })
     let allowed = Set(base32Alphabet)
@@ -119,7 +121,7 @@ func parseTotpInput(
     fallbackPeriod: Int = 30
 ) -> TotpConfig? {
     let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !input.isEmpty else { return nil }
+    guard !input.isEmpty, input.count <= 4_096 else { return nil }
 
     if !input.lowercased().hasPrefix("otpauth://") {
         guard let secret = normalizedBase32Secret(input) else { return nil }
@@ -141,14 +143,20 @@ func parseTotpInput(
     guard
         let components = URLComponents(string: input),
         components.scheme?.lowercased() == "otpauth",
-        components.host?.lowercased() == "totp"
+        components.host?.lowercased() == "totp",
+        components.user == nil,
+        components.password == nil,
+        components.port == nil,
+        components.fragment == nil
     else {
         return nil
     }
 
     var params: [String: String] = [:]
     for item in components.queryItems ?? [] {
-        params[item.name.lowercased()] = item.value ?? ""
+        let key = item.name.lowercased()
+        guard !key.isEmpty, params[key] == nil, let value = item.value else { return nil }
+        params[key] = value
     }
     guard let secret = normalizedBase32Secret(params["secret"] ?? "") else { return nil }
 
@@ -192,21 +200,29 @@ func generateTotp(
     _ config: TotpConfig,
     at date: Date = Date()
 ) -> String? {
-    guard let secret = decodeBase32(config.secret), !secret.isEmpty else { return nil }
+    let timestamp = date.timeIntervalSince1970
+    guard timestamp.isFinite, timestamp >= 0,
+          timestamp < Double(UInt64.max),
+          (15...120).contains(config.period),
+          (6...8).contains(config.digits),
+          let algorithm = normalizedTotpAlgorithm(config.algorithm),
+          let secret = decodeBase32(config.secret), !secret.isEmpty else { return nil }
 
-    let counter = UInt64(date.timeIntervalSince1970) / UInt64(config.period)
+    let counter = UInt64(timestamp) / UInt64(config.period)
     var bigEndianCounter = counter.bigEndian
     let counterData = withUnsafeBytes(of: &bigEndianCounter) { Data($0) }
     let key = SymmetricKey(data: secret)
 
     let hash: [UInt8]
-    switch config.algorithm {
+    switch algorithm {
     case "SHA256":
         hash = Array(HMAC<SHA256>.authenticationCode(for: counterData, using: key))
     case "SHA512":
         hash = Array(HMAC<SHA512>.authenticationCode(for: counterData, using: key))
-    default:
+    case "SHA1":
         hash = Array(HMAC<Insecure.SHA1>.authenticationCode(for: counterData, using: key))
+    default:
+        return nil
     }
 
     guard let last = hash.last else { return nil }
@@ -228,7 +244,12 @@ func totpRemainingSeconds(
     _ config: TotpConfig,
     at date: Date = Date()
 ) -> Int {
-    let seconds = Int(date.timeIntervalSince1970)
+    let timestamp = date.timeIntervalSince1970
+    guard timestamp.isFinite, timestamp >= 0,
+          timestamp < Double(Int.max),
+          (15...120).contains(config.period),
+          (6...8).contains(config.digits) else { return 0 }
+    let seconds = Int(timestamp)
     return config.period - (seconds % config.period)
 }
 
@@ -5192,7 +5213,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.10 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.11 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {

@@ -190,7 +190,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Android/iOS: CVV unos skriven je prema zadanim postavkama, postoji prekidač prikaza i brojčana tipkovnica.
 - [x] Postojeći neispravni uvezeni brojevi ostaju neizmijenjeni dok se korisnik ne odluči urediti ih.
 - [x] Android testovi pokrivaju grupiranje, Unicode/slovna odbijanja, Luhn, sigurnosni kod i uvezene zapise.
-- [ ] Android CI lint, unit, build, privacy 0.6.10 uspješni na završnom PR SHA-u.
-- [ ] iOS CI build/analyze, simulator launch smoke, privacy 0.6.10 uspješni na istom SHA-u.
-- [ ] Oba main CI-ja i release workflow uspješni; v0.6.10 objavljen sa svih 7 artefakata.
+- [x] Android CI lint, unit, build, privacy 0.6.10 uspješni na završnom PR SHA-u `ba0f4a33fbc84c516a442a23bcd472df68d41f1f`.
+- [x] iOS CI build/analyze, simulator launch smoke, privacy 0.6.10 uspješni na istom SHA-u.
+- [x] Oba main CI-ja i release workflow uspješni na `c725eade59215f4b2e3d78a31e35d13e0f817d75`; v0.6.10 objavljen sa svih 7 artefakata.
 - [ ] Ručna provjera fizičkih Android/iOS uređaja i obnove starijih KEYRA1/KEYRA2 kopija.
+
+## 0.6.11 stroga obrada autentifikatora i otporniji TOTP
+- [x] Android/iOS: duplicirani otpauth URI parametri odbijaju se umjesto tihog prepisivanja, uz usporedbu naziva bez razlike velikih i malih slova.
+- [x] Otpauth URI adrese odbijaju nevaljanu strukturu, korisničke podatke u authority dijelu, port i fragment.
+- [x] Base32 i otpauth ulazi imaju gornje granice duljine radi zaštite memorije i vremena parsiranja.
+- [x] Generiranje TOTP koda validira algoritam, interval, broj znamenki i vrijeme; neispravna konfiguracija ne ruši aplikaciju.
+- [x] Android JUnit regresijski testovi dodani za duplicirane URI parametre, velika polja, pogrešne periode i postojeći RFC 6238 vektor.
+- [ ] Android lint/unit/build/privacy na završnom PR SHA-u uspješni.
+- [ ] iOS build/analyze/simulator launch smoke/privacy na istom PR SHA-u uspješni.
+- [ ] Android/iOS main CI i release workflow uspješni, v0.6.11 objavljen sa svih 7 artefakata.
+- [ ] Ručni testovi na stvarnim Android/iOS uređajima i povrat KEYRA1/KEYRA2 kopija.

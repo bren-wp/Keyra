@@ -410,6 +410,49 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun otpauthRejectsDuplicateParametersAndUnsupportedAuthority() {
+        val secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        listOf(
+            "otpauth://totp/Account?secret=$secret&secret=$secret",
+            "otpauth://totp/Account?secret=$secret&SeCrEt=$secret",
+            "otpauth://totp/Account?secret=$secret&digits=6&digits=8",
+            "otpauth://totp/Account?secret=$secret&period=30&period=60",
+            "otpauth://totp/Account?secret=$secret&issuer=One&issuer=Two",
+            "otpauth://totp/Account?secret=$secret&bad=%GG",
+            "otpauth://totp/Account?secret=$secret&missingEquals",
+            "otpauth://user@totp/Account?secret=$secret",
+            "otpauth://totp:80/Account?secret=$secret",
+            "otpauth://totp/Account?secret=$secret#fragment"
+        ).forEach { invalid ->
+            assertTrue("Reject ambiguous otpauth URI: $invalid", parseTotpInput(invalid) == null)
+        }
+        assertTrue(parseTotpInput("otpauth://totp/Account?secret=$secret&digits=6&period=30") != null)
+    }
+
+    @Test
+    fun totpLimitsVeryLargeSecretsAndMalformedTimeSettings() {
+        val secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        assertTrue(decodeBase32("A".repeat(1_025)) == null)
+        assertTrue(normalizeBase32Secret("A".repeat(2_049)) == null)
+        assertTrue(parseTotpInput("otpauth://totp/Test?secret=" + "A".repeat(4_100)) == null)
+        val invalidPeriods = listOf(0, -1, 14, 121, Int.MAX_VALUE)
+        invalidPeriods.forEach { period ->
+            val config = TotpConfig(secret = secret, period = period)
+            assertTrue("Invalid period must not generate TOTP: $period", generateTotp(config, 59_000L) == null)
+            assertEquals(0, totpRemainingSeconds(config, 59_000L))
+        }
+        listOf(0, 5, 9).forEach { digits ->
+            val config = TotpConfig(secret = secret, digits = digits)
+            assertTrue(generateTotp(config, 59_000L) == null)
+            assertEquals(0, totpRemainingSeconds(config, 59_000L))
+        }
+        assertTrue(generateTotp(TotpConfig(secret = secret, algorithm = "SHA999"), 59_000L) == null)
+        assertTrue(generateTotp(TotpConfig(secret = secret), -1L) == null)
+        assertEquals(0, totpRemainingSeconds(TotpConfig(secret = secret), -1L))
+        assertEquals("287082", generateTotp(TotpConfig(secret = secret), 59_000L))
+    }
+
+    @Test
     fun strongPasswordRequiresLengthAndCharacterDiversity() {
         assertTrue(isStrongPassword("Abcd1234!Efgh56"))
         assertFalse(isStrongPassword("abcdefghijklmnop"))
