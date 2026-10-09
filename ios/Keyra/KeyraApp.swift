@@ -1276,6 +1276,7 @@ final class KeyraStore: ObservableObject {
     @Published private(set) var isUnlockingVault = false
     @Published private(set) var isImportingVault = false
     @Published private(set) var isRecoveringVault = false
+    @Published private(set) var isProcessingBackup = false
 
     private var sessionPassword: String?
     private var authenticationEpoch: UInt64 = 0
@@ -1804,16 +1805,30 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func makeBackupPayload() -> String? {
-        guard let password = sessionPassword else {
+    func makeBackupPayloadAsync(completion: @escaping (String?) -> Void) {
+        guard let password = sessionPassword, isSetup, screen == .settings else {
             message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return nil
+            return
         }
-        do {
-            return try PortableBackup.encrypt(items, password: password)
-        } catch {
-            message = "Sigurnosnu kopiju nije moguće izraditi."
-            return nil
+        guard !isProcessingBackup else {
+            message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
+            return
+        }
+        let requestEpoch = authenticationEpoch
+        let snapshot = items
+        isProcessingBackup = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let payload = try? PortableBackup.encrypt(snapshot, password: password)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isProcessingBackup = false
+                guard self.canFinishAuthentication(requestEpoch), self.isSetup,
+                      self.screen == .settings else { return }
+                if payload == nil {
+                    self.message = "Sigurnosnu kopiju nije moguće izraditi."
+                }
+                completion(payload)
+            }
         }
     }
 
@@ -1853,31 +1868,43 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    @discardableResult
-    func importBackupPayload(_ text: String) -> Bool {
-        guard let password = sessionPassword else {
+    func importBackupPayloadAsync(_ text: String) {
+        guard let password = sessionPassword, isSetup, screen == .settings else {
             message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return false
+            return
         }
-        guard !text.isEmpty else {
-            message = "Odabrana sigurnosna kopija je prazna."
-            return false
+        guard !isProcessingBackup else {
+            message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
+            return
         }
-        guard text.utf8.count <= 2_500_000 else {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
+        guard !text.isEmpty, text.utf8.count <= 2_500_000 else {
+            message = "Sigurnosna kopija je prazna ili prevelika za siguran uvoz."
+            return
         }
-
-        do {
-            let imported = try PortableBackup.decrypt(text, password: password)
-            try vault.save(imported)
-            items = imported
-            selected = nil
-            message = "Sigurnosna kopija uspješno je uvezena."
-            return true
-        } catch {
-            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
-            return false
+        let requestEpoch = authenticationEpoch
+        isProcessingBackup = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let imported = try? PortableBackup.decrypt(text, password: password)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isProcessingBackup = false
+                guard self.canFinishAuthentication(requestEpoch), self.isSetup,
+                      self.screen == .settings else { return }
+                guard let imported else {
+                    self.message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+                    return
+                }
+                do {
+                    // Commit only on the active main-thread vault session. Stale
+                    // asynchronous decryptions cannot replace a locked/erased vault.
+                    try self.vault.save(imported)
+                    self.items = imported
+                    self.selected = nil
+                    self.message = "Sigurnosna kopija uspješno je uvezena."
+                } catch {
+                    self.message = "Sigurnosnu kopiju nije moguće spremiti. Trezor nije promijenjen."
+                }
+            }
         }
     }
 
@@ -5120,15 +5147,17 @@ struct SettingsView: View {
 
     private func runProtectedFileImport(_ payload: String) {
         store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
-            _ = store.importBackupPayload(payload)
+            store.importBackupPayloadAsync(payload)
         }
     }
 
     private func prepareBackupExport() {
         store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
-            guard let payload = store.makeBackupPayload() else { return }
-            backupDocument = KeyraBackupDocument(payload: payload)
-            exportBackupFile = true
+            store.makeBackupPayloadAsync { payload in
+                guard let payload else { return }
+                backupDocument = KeyraBackupDocument(payload: payload)
+                exportBackupFile = true
+            }
         }
     }
 
@@ -5168,6 +5197,18 @@ struct SettingsView: View {
                         title: "Vaša Keyra, vaše postavke.",
                         subtitle: "Sve važne opcije na jednom mjestu."
                     )
+                    if store.isProcessingBackup {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(cyan)
+                            Text("Obrada šifrirane sigurnosne kopije…")
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(slate2)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
 
                     SectionLabel("ZAŠTITA")
 
@@ -5246,6 +5287,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Spremi sigurnosnu kopiju")
+                        .disabled(store.isProcessingBackup)
                     }
 
                     SettingRow(
@@ -5260,6 +5302,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Vrati sigurnosnu kopiju")
+                        .disabled(store.isProcessingBackup)
                     }
 
                     SettingsHintCard(

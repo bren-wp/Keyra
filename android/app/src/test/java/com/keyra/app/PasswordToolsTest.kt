@@ -21,6 +21,28 @@ class PasswordToolsTest {
         assertEquals("A".repeat(254) + "😀", boundedNewMasterPasswordInput("A".repeat(254) + "😀" + "suffix"))
     }
     @Test
+    fun portableBackupRetainsDataAndRejectsTheWrongPassword() {
+        val plain = """[{"id":"example","title":"Banka","password":"⚡Sigurna#2026"}]"""
+        val secret = "VrloJaka-Lozinka#2026"
+        val encrypted = PortableBackup.encrypt(plain, secret)
+        assertTrue(encrypted.startsWith("KEYRA2."))
+        assertFalse(encrypted.contains("⚡Sigurna#2026"))
+        assertEquals(plain, PortableBackup.decrypt(encrypted, secret))
+        assertTrue(runCatching { PortableBackup.decrypt(encrypted, "PogresnaLozinka#2026") }.isFailure)
+    }
+
+    @Test
+    fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
+        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "OtherApp"))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", null))
+        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst", "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, null, null))
+    }
+
+    @Test
     fun pendingAuthenticationCannotUnlockAfterBackgroundOrExplicitLock() {
         assertTrue(shouldAcceptAuthCompletion(10L, 10L, foreground = true))
         assertFalse(shouldAcceptAuthCompletion(10L, 10L, foreground = false))

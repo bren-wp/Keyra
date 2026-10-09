@@ -158,6 +158,13 @@ class MainActivity : FragmentActivity() {
         model.onAppForeground()
     }
 
+    override fun onPause() {
+        // Android may refuse clipboard reads once the activity loses foreground.
+        // Clear a Keyra-owned secret before leaving, but never overwrite another copy.
+        SensitiveClipboard.clearIfOwned(this)
+        super.onPause()
+    }
+
     override fun onStop() {
         model.onAppBackground()
         super.onStop()
@@ -237,6 +244,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var isImportingVault by mutableStateOf(false)
         private set
     var isRecoveringVault by mutableStateOf(false)
+        private set
+    var isProcessingBackup by mutableStateOf(false)
         private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
@@ -631,28 +640,52 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             }
     }
 
-    fun makeBackupPayload(): String? {
-        val password = sessionPassword
-        if (password.isNullOrBlank()) {
-            message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
-            return null
-        }
-        return runCatching { PortableBackup.encrypt(store.toJson(items), password) }
-            .onFailure { message = "Sigurnosnu kopiju nije moguće izraditi." }
-            .getOrNull()
-    }
-
     fun exportBackupToUri(context: Context, uri: Uri) {
-        val payload = makeBackupPayload() ?: return
-        runCatching {
-            context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                output.write(payload.toByteArray(Charsets.UTF_8))
-                output.flush()
-            } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
-        }.onSuccess {
-            message = "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
-        }.onFailure {
-            message = "Sigurnosnu kopiju nije moguće spremiti u odabranu datoteku."
+        val password = sessionPassword
+        if (!unlocked || password.isNullOrBlank()) {
+            message = "Za sigurnosnu kopiju prvo otključajte trezor glavnom lozinkom."
+            return
+        }
+        if (isProcessingBackup) {
+            message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
+            return
+        }
+        val requestEpoch = authenticationEpoch
+        val snapshot = items.toList()
+        val resolver = context.applicationContext.contentResolver
+        isProcessingBackup = true
+        viewModelScope.launch {
+            val payload = withContext(Dispatchers.IO) {
+                runCatching { PortableBackup.encrypt(store.toJson(snapshot), password) }.getOrNull()
+            }
+            if (!shouldAcceptProtectedCompletion(
+                requestEpoch, authenticationEpoch, appInForeground,
+                unlocked, screen == Screen.SETTINGS, sameItem = true
+            )) {
+                isProcessingBackup = false
+                return@launch
+            }
+            if (payload == null) {
+                message = "Sigurnosnu kopiju nije moguće izraditi."
+                isProcessingBackup = false
+                return@launch
+            }
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openOutputStream(uri, "wt")?.use { output ->
+                        output.write(payload.toByteArray(Charsets.UTF_8))
+                        output.flush()
+                    } ?: error("Odabranu datoteku nije moguće otvoriti za pisanje.")
+                }.isSuccess
+            }
+            isProcessingBackup = false
+            if (shouldAcceptProtectedCompletion(
+                requestEpoch, authenticationEpoch, appInForeground,
+                unlocked, screen == Screen.SETTINGS, sameItem = true
+            )) {
+                message = if (saved) "Šifrirana .keyra kopija spremljena je na odabrano mjesto."
+                    else "Sigurnosnu kopiju nije moguće spremiti u odabranu datoteku."
+            }
         }
     }
 
@@ -727,46 +760,50 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             false
         }
 
-    fun importBackupPayload(payload: String): Boolean {
-        val password = sessionPassword
-        if (password.isNullOrBlank()) {
-            message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
-            return false
-        }
-        if (payload.isBlank()) {
-            message = "Odabrana sigurnosna kopija je prazna."
-            return false
-        }
-        if (payload.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_CHARS) {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
-        }
-
-        return runCatching {
-            val json = PortableBackup.decrypt(payload, password)
-            val imported = store.fromJson(json)
-            store.save(imported)
-            imported
-        }.onSuccess { imported ->
-            items.clear()
-            items.addAll(imported)
-            selected = null
-            message = "Sigurnosna kopija uspješno je uvezena."
-        }.onFailure {
-            message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
-        }.isSuccess
-    }
-
     fun importBackupFromUri(context: Context, uri: Uri) {
-        runCatching {
-            val payload = readUtf8Limited(context, uri, MAX_BACKUP_CHARS)
-            if (!importBackupPayload(payload)) {
-                error("Uvoz sigurnosne kopije nije uspio.")
+        val password = sessionPassword
+        if (!unlocked || password.isNullOrBlank()) {
+            message = "Za uvoz prvo otključajte trezor glavnom lozinkom."
+            return
+        }
+        if (isProcessingBackup) {
+            message = "Pričekajte završetak prethodne radnje sa sigurnosnom kopijom."
+            return
+        }
+        val requestEpoch = authenticationEpoch
+        val resolverContext = context.applicationContext
+        isProcessingBackup = true
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val payload = readUtf8Limited(resolverContext, uri, MAX_BACKUP_CHARS)
+                    require(payload.isNotBlank()) { "Prazna sigurnosna kopija." }
+                    store.fromJson(PortableBackup.decrypt(payload, password))
+                }
             }
-        }.onFailure {
-            if (message.isNullOrBlank() || message == "Sigurnosna kopija uspješno je uvezena.") {
-                message = "Odabranu sigurnosnu kopiju nije moguće uvesti."
+            if (!shouldAcceptProtectedCompletion(
+                requestEpoch, authenticationEpoch, appInForeground,
+                unlocked, screen == Screen.SETTINGS, sameItem = true
+            )) {
+                isProcessingBackup = false
+                return@launch
             }
+            result.fold(
+                onSuccess = { imported ->
+                    runCatching { store.save(imported) }.onSuccess {
+                        items.clear()
+                        items.addAll(imported)
+                        selected = null
+                        message = "Sigurnosna kopija uspješno je uvezena."
+                    }.onFailure {
+                        message = "Sigurnosnu kopiju nije moguće spremiti. Trezor je nepromijenjen."
+                    }
+                },
+                onFailure = {
+                    message = "Sigurnosna kopija je neispravna, prevelika ili lozinka nije odgovarajuća."
+                }
+            )
+            isProcessingBackup = false
         }
     }
 
@@ -5202,6 +5239,25 @@ private fun SettingsScreen(
                     subtitle = "Sve važne opcije na jednom mjestu."
                 )
             }
+            if (model.isProcessingBackup) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Slate2)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Cyan,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Obrada šifrirane sigurnosne kopije…", color = Color.White)
+                    }
+                }
+            }
 
             item { SectionTitle("ZAŠTITA") }
             item {
@@ -5253,7 +5309,10 @@ private fun SettingsScreen(
                     "Spremi sigurnosnu kopiju",
                     "Spremite šifriranu .keyra datoteku u Files ili odabrani cloud provider."
                 ) {
-                    IconButton(onClick = { exportFileLauncher.launch("Keyra-backup.keyra") }) {
+                    IconButton(
+                        onClick = { exportFileLauncher.launch("Keyra-backup.keyra") },
+                        enabled = !model.isProcessingBackup
+                    ) {
                         Icon(Icons.Outlined.SaveAlt, contentDescription = "Spremi sigurnosnu kopiju", tint = Cyan)
                     }
                 }
@@ -5264,11 +5323,14 @@ private fun SettingsScreen(
                     "Vrati sigurnosnu kopiju",
                     "Odaberite .keyra datoteku i vratite trezor tek nakon potvrde."
                 ) {
-                    IconButton(onClick = {
-                        importFileLauncher.launch(
-                            arrayOf("application/octet-stream", "text/plain", "application/*")
-                        )
-                    }) {
+                    IconButton(
+                        onClick = {
+                            importFileLauncher.launch(
+                                arrayOf("application/octet-stream", "text/plain", "application/*")
+                            )
+                        },
+                        enabled = !model.isProcessingBackup
+                    ) {
                         Icon(Icons.Outlined.FolderOpen, contentDescription = "Vrati sigurnosnu kopiju", tint = Cyan)
                     }
                 }
@@ -5766,25 +5828,50 @@ private fun openWebsite(context: Context, raw: String): Boolean {
     }.getOrDefault(false)
 }
 
-private fun copy(context: Context, text: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("Keyra", text)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        clip.description.extras = PersistableBundle().apply {
-            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+internal fun shouldClearOwnedClipboard(expected: String?, actual: String?, clipLabel: String?): Boolean =
+    expected != null && actual == expected && clipLabel == "Keyra"
+
+private object SensitiveClipboard {
+    private val handler = Handler(Looper.getMainLooper())
+    private var ownedValue: String? = null
+    private var clearTask: Runnable? = null
+
+    fun copy(context: Context, text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Keyra", text)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
         }
+        clipboard.setPrimaryClip(clip)
+        clearTask?.let(handler::removeCallbacks)
+        ownedValue = text
+        val task = Runnable { clearIfOwned(context.applicationContext) }
+        clearTask = task
+        handler.postDelayed(task, 30_000L)
     }
-    clipboard.setPrimaryClip(clip)
-    Handler(Looper.getMainLooper()).postDelayed({
-        val currentClip = clipboard.primaryClip
-        val current = if (currentClip != null && currentClip.itemCount > 0) {
-            currentClip.getItemAt(0).text?.toString()
-        } else {
-            null
+
+    fun clearIfOwned(context: Context) {
+        val expected = ownedValue ?: return
+        // Do not clear text copied by the user in another application.
+        runCatching {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val currentClip = clipboard.primaryClip
+            val actual = if (currentClip != null && currentClip.itemCount > 0) {
+                currentClip.getItemAt(0).text?.toString()
+            } else null
+            if (shouldClearOwnedClipboard(expected, actual, currentClip?.description?.label?.toString())) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+                else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+            }
         }
-        if (current == text) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
-            else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-        }
-    }, 30_000)
+        ownedValue = null
+        clearTask?.let(handler::removeCallbacks)
+        clearTask = null
+    }
+}
+
+private fun copy(context: Context, text: String) {
+    runCatching { SensitiveClipboard.copy(context, text) }
 }

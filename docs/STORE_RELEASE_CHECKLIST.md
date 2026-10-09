@@ -277,3 +277,17 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Both main CI runs and release workflow pass and all seven v0.6.17 assets are verified.
 - [ ] Physical-device testing: #25 master-password typing crash, biometrics, backup import/export, erase, recovery and accessibility.
 - [ ] Store signing, distribution readiness and full end-to-end testing on physical Android and iOS devices.
+
+## 0.6.18 async Settings backups and clipboard privacy
+
+- [x] Android: Settings backup export performs PBKDF2 encryption and document writes on IO dispatcher; progress state and duplicate-operation guard added.
+- [x] Android: Settings backup import reads and decrypts on IO dispatcher; main-thread commit only when the original authenticated session and Settings screen are still active.
+- [x] iOS: Settings backup encrypt/decrypt performed off main thread; UI commit guarded by authentication epoch, foreground and screen state.
+- [x] Both apps: progress feedback and import/export buttons disabled during ongoing backup operations.
+- [x] Android: clear Keyra-owned clipboard content on activity pause and after 30 seconds when OS permits; do not clear a different clipboard value.
+- [x] Android JUnit coverage for clipboard ownership comparison.
+- [ ] Android and iOS PR CI succeed on exact final branch commit.
+- [ ] Both main CI workflows and release succeed on merge commit; verify seven v0.6.18 assets.
+- [ ] Physical Android/iOS QA of large encrypted backup round trips, lifecycle changes mid-import, automatic locking, clipboard and OS file providers.
+- [ ] Reproduce and fix #25 keyboard crash on physical devices; check passwords with accents, emoji, paste, visibility toggle, IME focus and orientation.
+- [ ] Verify distribution signing, store packaging and end-to-end accessibility on supported physical devices.
