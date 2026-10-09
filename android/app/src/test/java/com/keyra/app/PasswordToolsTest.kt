@@ -106,6 +106,35 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun missingLoginAndWifiPasswordsAreSecurityIssues() {
+        val items = listOf(
+            VaultItem(id = "login", title = "Prijava bez lozinke", password = ""),
+            VaultItem(id = "wifi", title = "Wi-Fi bez lozinke", type = "Wi-Fi", password = "  "),
+            VaultItem(id = "strong", title = "Snažna prijava", password = "Abcd1234!Efgh56"),
+            VaultItem(id = "note", title = "Bilješka", type = "Bilješka"),
+            VaultItem(id = "card", title = "Kartica", type = "Kartica")
+        )
+
+        assertEquals(setOf("login", "wifi"), securityIssueIds(items))
+        assertEquals(2, securityIssueCount(items))
+        assertEquals(33, securityScore(items) ?: -1)
+    }
+
+    @Test
+    fun securityScoreIgnoresNonPasswordRecordsAndCountsReusedPasswords() {
+        val strong = "Abcd1234!Efgh56"
+        val items = listOf(
+            VaultItem(id = "a", title = "A", password = strong),
+            VaultItem(id = "b", title = "B", password = strong),
+            VaultItem(id = "c", title = "C", password = "Xyz12345!Klmn67890")
+        )
+
+        assertEquals(setOf("a", "b"), securityIssueIds(items))
+        assertEquals(33, securityScore(items) ?: -1)
+        assertEquals(null, securityScore(listOf(VaultItem(title = "Bilješka", type = "Bilješka"))))
+    }
+
+    @Test
     fun portableTimestampKeepsUnixMilliseconds() {
         val timestamp = 1_796_675_123_000.0
         assertEquals(timestamp.toLong(), normalizePortableUpdatedAt(timestamp, fallback = 1L))
