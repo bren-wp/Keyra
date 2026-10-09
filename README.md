@@ -82,7 +82,7 @@ Keyra's core vault operates without a user account or a Keyra-operated backend. 
 | Protected device key | Android Keystore / Apple Keychain |
 | Access control | Supported biometric or device authentication |
 | Sensitive UI | Android screenshot restrictions / iOS privacy shield where supported |
-| Clipboard | Copied sensitive values remain briefly available for pasting into another app; Android attempts to clear Keyra-owned clipboard content after approximately 30 seconds, and iOS sets a 30-second pasteboard expiration. Background clipboard restrictions may prevent Android cleanup. |
+| Clipboard | Copied secrets remain briefly available for external pasting. Android uses a short-lived, keyed ownership tag (not a second plaintext copy) and attempts cleanup after ~30 seconds. iOS uses a 30-second pasteboard expiration. Successful full-vault erasure also clears Keyra-owned pasteboard content where the OS allows it; neither platform promises guaranteed clipboard removal. |
 | Portable backup | Encrypted KEYRA2; legacy KEYRA1 compatible |
 | Recovery | KEYRAREC1, separate from the actual vault backup |
 

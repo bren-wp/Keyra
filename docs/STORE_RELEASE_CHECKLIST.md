@@ -284,7 +284,7 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Android: Settings backup import reads and decrypts on IO dispatcher; main-thread commit only when the original authenticated session and Settings screen are still active.
 - [x] iOS: Settings backup encrypt/decrypt performed off main thread; UI commit guarded by authentication epoch, foreground and screen state.
 - [x] Both apps: progress feedback and import/export buttons disabled during ongoing backup operations.
-- [x] Android: clear Keyra-owned clipboard content on activity pause and after 30 seconds when OS permits; do not clear a different clipboard value.
+- [x] Android 0.6.18: initial clipboard cleanup on activity pause and after 30 seconds; immediate on-pause cleanup was **superseded in 0.6.19** to permit pasting passwords into other apps. Timed cleanup remains best-effort.
 - [x] Android JUnit coverage for clipboard ownership comparison.
 - [ ] Android and iOS PR CI succeed on exact final branch commit.
 - [ ] Both main CI workflows and release succeed on merge commit; verify seven v0.6.18 assets.
@@ -301,6 +301,20 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Physical Android QA: copy a password, switch to another app, paste within 30 seconds; confirm expiration where OS supports it, and ensure unrelated clipboard contents stay intact.
 - [ ] Physical Android/iOS QA: open system document picker, import/export Recovery Key and KEYRA2 backup with immediate auto-lock enabled; test background/lock before KDF completes.
 - [ ] Android PR lint/unit/build/privacy and iOS PR build/analyze/simulator/privacy both succeed on final commit.
-- [ ] Android/iOS main CI, release workflow, and seven v0.6.19 assets independently verified.
+- [x] Android/iOS main CI and release workflow succeeded on v0.6.19 merge SHA; seven assets were verified.
 - [ ] Issue #25 master-password entry crash reproduced, diagnosed and fixed on physical devices (not yet confirmed).
 - [ ] Production signing / App Store and Play Store readiness independently verified.
+
+## 0.6.20 verified local wipe and clipboard ownership
+
+- [x] iOS: encrypted vault file removal now returns a verified result; failure is reported and Keychain keys are kept for retry rather than reporting a successful complete erase.
+- [x] Android: stage vault removal, verifier cleanup and preference cleanup; encrypted vault removal **short-circuits** key deletion on failure, preserving later credentials/settings for retry.
+- [x] Both apps: after a successful complete local wipe, attempt to clear only clipboard contents still owned by Keyra; never erase another app's newer clipboard write.
+- [x] Android: clipboard expiry retains an ephemeral random HMAC-SHA256 key/tag rather than an additional plaintext password in a process-static variable, and zeroes those bytes after use.
+- [x] Android JUnit tests cover same content, changed contents, foreign clipboard source, altered ownership key and absent clips, plus vault-before-key erasure order and failure short-circuiting.
+- [ ] PR Android lint/JUnit/build/privacy CI succeeds on final v0.6.20 HEAD SHA.
+- [ ] PR iOS build/analyze/simulator/privacy CI succeeds on same final HEAD SHA.
+- [ ] Both main CI runs, release workflow and seven published v0.6.20 files are verified.
+- [ ] Physical iOS QA: simulate vault.bin deletion failure and Keychain deletion failures; verify user receives error, data is not incorrectly reported erased and retries are safe.
+- [ ] Physical Android/iOS QA: full vault erasure, pasteboard owned/third-party content, Android background clipboard read restrictions, and device lock lifecycle.
+- [ ] Issue #25 first-run master-password keyboard crash remains open pending redacted physical crash logs and UI test.

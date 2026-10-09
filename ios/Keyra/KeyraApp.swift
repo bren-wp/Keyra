@@ -391,6 +391,10 @@ func readLimitedKeyraText(_ url: URL, maxBytes: Int) throws -> String {
 }
 
 enum SecureClipboard {
+    // Store only the system's mutation counter, never an additional secret copy.
+    // Clearing after a destructive wipe must not erase newer third-party content.
+    private static var keyraChangeCount: Int?
+
     static func copy(_ text: String) {
         UIPasteboard.general.setItems(
             [[UTType.plainText.identifier: text]],
@@ -399,6 +403,16 @@ enum SecureClipboard {
                 .expirationDate: Date().addingTimeInterval(30)
             ]
         )
+        keyraChangeCount = UIPasteboard.general.changeCount
+    }
+
+    static func clearIfOwned() {
+        guard let expected = keyraChangeCount else { return }
+        defer { keyraChangeCount = nil }
+        let pasteboard = UIPasteboard.general
+        if pasteboard.changeCount == expected {
+            pasteboard.items = []
+        }
     }
 }
 
@@ -848,11 +862,21 @@ final class EncryptedVault {
         return verified
     }
 
-    func clear() {
-        if let url = try? storageURL(), FileManager.default.fileExists(atPath: url.path) {
-            try? FileManager.default.removeItem(at: url)
+    // Report filesystem errors instead of confirming that secret data was wiped.
+    // Do not delete the encryption keys if this stage fails: callers may retry.
+    @discardableResult
+    func clear() -> Bool {
+        do {
+            let url = try storageURL()
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            defaults.removeObject(forKey: legacyKey)
+            return !FileManager.default.fileExists(atPath: url.path) &&
+                defaults.data(forKey: legacyKey) == nil
+        } catch {
+            return false
         }
-        defaults.removeObject(forKey: legacyKey)
     }
 }
 
@@ -1601,7 +1625,10 @@ final class KeyraStore: ObservableObject {
     @discardableResult
     func eraseAllLocalData() -> Bool {
         authenticationEpoch &+= 1
-        vault.clear()
+        guard vault.clear() else {
+            message = "Datoteku trezora nije moguće izbrisati. Ključevi su zadržani kako biste mogli pokušati ponovno."
+            return false
+        }
         let verifierCleared = auth.clear()
         let keyCleared = KeychainVault.clear()
 
@@ -1630,6 +1657,7 @@ final class KeyraStore: ObservableObject {
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
         screen = .onboarding
+        SecureClipboard.clearIfOwned()
         message = "Podaci trezora i zaštitni ključevi su izbrisani."
         return true
     }

@@ -32,14 +32,47 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun vaultErasureNeverRemovesKeyUntilEncryptedDataIsDeleted() {
+        val stages = mutableListOf<String>()
+        assertFalse(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; false },
+            removeKey = { stages += "key"; true }
+        ))
+        assertEquals(listOf("blob"), stages)
+
+        stages.clear()
+        assertTrue(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; true },
+            removeKey = { stages += "key"; true }
+        ))
+        assertEquals(listOf("blob", "key"), stages)
+
+        stages.clear()
+        assertFalse(destroyVaultInOrder(
+            removeEncryptedData = { stages += "blob"; true },
+            removeKey = { stages += "key"; false }
+        ))
+        assertEquals(listOf("blob", "key"), stages)
+    }
+
+    @Test
     fun clipboardCleanupOnlyClearsTheKeyraCopiedText() {
-        assertTrue(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "Keyra"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "drugaciji sadržaj", "Keyra"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", "OtherApp"))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", "lozinka#2026", null))
-        assertFalse(shouldClearOwnedClipboard("lozinka#2026", null, "Keyra"))
-        assertFalse(shouldClearOwnedClipboard(null, "nečiji drugi tekst", "Keyra"))
+        val key = ByteArray(32) { it.toByte() }
+        val owned = clipboardOwnershipTag(key, "lozinka#2026")
+        val sameText = clipboardOwnershipTag(key, "lozinka#2026")
+        val changed = clipboardOwnershipTag(key, "drugaciji sadržaj")
+        val anotherKey = ByteArray(32) { (it + 7).toByte() }
+        val wrongKeyTag = clipboardOwnershipTag(anotherKey, "lozinka#2026")
+        assertTrue(shouldClearOwnedClipboard(owned, sameText, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, changed, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, wrongKeyTag, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(owned, sameText, "OtherApp"))
+        assertFalse(shouldClearOwnedClipboard(owned, sameText, null))
+        assertFalse(shouldClearOwnedClipboard(owned, null, "Keyra"))
+        assertFalse(shouldClearOwnedClipboard(null, sameText, "Keyra"))
         assertFalse(shouldClearOwnedClipboard(null, null, null))
+        assertEquals(32, owned.size)
+        assertFalse(owned.contentEquals("lozinka#2026".toByteArray(Charsets.UTF_8)))
     }
 
     @Test

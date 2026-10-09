@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.19"
+        default: "0.6.20"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.19 ispravlja kopiranje lozinki u druge aplikacije: Android više ne briše međuspremnik odmah pri napuštanju Keyre, kako bi korisnik stigao zalijepiti kopirani podatak. Zadržani su oznaka osjetljivog sadržaja i pokušaj brisanja nakon približno 30 sekundi, bez brisanja kopija koje je u međuvremenu postavila druga aplikacija. Na Androidu i iOS-u izvoz i uvoz Recovery Key datoteka iz Postavki koristi pozadinsko šifriranje odnosno PBKDF2 dešifriranje, prikazuje status rada i odbacuje rezultate ako je sesija u međuvremenu zaključana ili promijenjena. Očuvani su postojeći KEYRA1/KEYRA2/KEYRAREC1 formati. Testiranje dostupnosti Android međuspremnika ovisno o verziji sustava, fizički QA svih opcija i prijavljeno rušenje pri tipkanju (#25) ostaju otvoreni zadaci.
+          Keyra 0.6.20 ojačava provjeru trajnog brisanja trezora na Androidu i iOS-u. iOS više ne prešućuje pogrešku pri brisanju šifrirane vault datoteke: aplikacija neće potvrditi uspješno brisanje niti ukloniti zaštitne ključeve prije uspješnog uklanjanja datoteke. Android izvodi destruktivno brisanje u kontroliranim fazama i prekida postupak ako uklanjanje vault podataka ne uspije, umjesto nastavka na brisanje lozinke i postavki. Obje platforme nakon uspješnog brisanja trezora pokušavaju očistiti samo vlastiti trenutni sadržaj međuspremnika, ne korisnikov kasniji kopirani sadržaj iz druge aplikacije. Android timer međuspremnika dodatno pohranjuje samo privremeni HMAC identifikator umjesto dodatne običnotekstne kopije lozinke, uz JUnit regresijske testove. Šifriranje trezora, KEYRA1/KEYRA2/KEYRAREC1 kompatibilnost i korisničke postavke ostaju kompatibilni. Brisanje međuspremnika i reprodukcija issuea #25 i dalje zahtijevaju provjeru na fizičkim uređajima.
 
           ## Provjere
           - Android lint i unit testovi
