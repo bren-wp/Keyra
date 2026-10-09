@@ -1838,7 +1838,6 @@ private fun OnboardingScreen(model: KeyraViewModel) {
             Column(
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth()
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
