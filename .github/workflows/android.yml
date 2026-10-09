@@ -52,3 +52,20 @@ jobs:
             :app:assembleDebug \
             :app:assembleRelease \
             :app:bundleRelease
+
+      - name: Enable emulator hardware acceleration
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+      - name: Instrumented first-run master-password UI regression (Android emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect
+          script: gradle -p android :app:connectedDebugAndroidTest --no-daemon --stacktrace
