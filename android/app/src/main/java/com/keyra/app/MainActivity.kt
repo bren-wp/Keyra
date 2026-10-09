@@ -5239,6 +5239,25 @@ private fun SettingsScreen(
                     subtitle = "Sve važne opcije na jednom mjestu."
                 )
             }
+            if (model.isProcessingBackup) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Slate2)
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Cyan,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Obrada šifrirane sigurnosne kopije…", color = Color.White)
+                    }
+                }
+            }
 
             item { SectionTitle("ZAŠTITA") }
             item {
@@ -5290,7 +5309,10 @@ private fun SettingsScreen(
                     "Spremi sigurnosnu kopiju",
                     "Spremite šifriranu .keyra datoteku u Files ili odabrani cloud provider."
                 ) {
-                    IconButton(onClick = { exportFileLauncher.launch("Keyra-backup.keyra") }) {
+                    IconButton(
+                        onClick = { exportFileLauncher.launch("Keyra-backup.keyra") },
+                        enabled = !model.isProcessingBackup
+                    ) {
                         Icon(Icons.Outlined.SaveAlt, contentDescription = "Spremi sigurnosnu kopiju", tint = Cyan)
                     }
                 }
@@ -5301,11 +5323,14 @@ private fun SettingsScreen(
                     "Vrati sigurnosnu kopiju",
                     "Odaberite .keyra datoteku i vratite trezor tek nakon potvrde."
                 ) {
-                    IconButton(onClick = {
-                        importFileLauncher.launch(
-                            arrayOf("application/octet-stream", "text/plain", "application/*")
-                        )
-                    }) {
+                    IconButton(
+                        onClick = {
+                            importFileLauncher.launch(
+                                arrayOf("application/octet-stream", "text/plain", "application/*")
+                            )
+                        },
+                        enabled = !model.isProcessingBackup
+                    ) {
                         Icon(Icons.Outlined.FolderOpen, contentDescription = "Vrati sigurnosnu kopiju", tint = Cyan)
                     }
                 }
