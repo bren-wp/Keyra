@@ -1882,11 +1882,12 @@ final class KeyraStore: ObservableObject {
         let requestEpoch = authenticationEpoch
         isProcessingRecovery = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            var decryptedKey = try? RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
+            let decryptedKey = try? RecoveryKeyEnvelope.decrypt(payload, passphrase: passphrase)
             DispatchQueue.main.async { [weak self] in
+                var keyToClear = decryptedKey
                 defer {
-                    if let length = decryptedKey?.count {
-                        decryptedKey?.resetBytes(in: 0..<length)
+                    if let length = keyToClear?.count {
+                        keyToClear?.resetBytes(in: 0..<length)
                     }
                 }
                 guard let self else { return }
