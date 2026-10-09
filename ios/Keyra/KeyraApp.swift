@@ -1480,11 +1480,6 @@ final class KeyraStore: ObservableObject {
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
             return
         }
-        guard password.count <= 256 else {
-            message = "Glavna lozinka ne smije biti dulja od 256 znakova."
-            return
-        }
-
         isUnlockingVault = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
