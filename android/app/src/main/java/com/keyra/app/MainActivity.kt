@@ -512,7 +512,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun biometricRequestToken(): Long = authenticationEpoch
 
-    fun canCompleteBiometricRequest(requestEpoch: Long, expectedScreen: Screen, expectedItemId: java.util.UUID?): Boolean {
+    fun canCompleteBiometricRequest(requestEpoch: Long, expectedScreen: Screen, expectedItemId: String?): Boolean {
         if (!isSetup || screen != expectedScreen || selected?.id != expectedItemId) return false
         if (expectedScreen == Screen.UNLOCK) {
             return shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
