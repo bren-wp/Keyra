@@ -2654,8 +2654,8 @@ struct BottomBar: View {
     var body: some View {
         HStack(spacing: 4) {
             BottomItem(icon: "house.fill", title: "Trezor", screen: .vault)
-            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
             BottomItem(icon: "square.grid.2x2.fill", title: "Kolekcije", screen: .collections)
+            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
             BottomItem(icon: "gearshape.fill", title: "Postavke", screen: .settings)
         }
         .padding(6)
@@ -2767,19 +2767,15 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
-                Menu {
-                    Button(newestFirst ? "Poredaj A–Ž" : "Poredaj po nedavnim") {
-                        newestFirst.toggle()
-                    }
-                    Button("Prikaži sve") {
-                        filter = "Sve"
+                if !search.isEmpty {
+                    Button {
                         search = ""
-                        store.clearVaultCategoryFilter()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(muted)
                     }
-                } label: {
-                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Očisti pretragu")
                 }
-                .accessibilityLabel("Filtri i sortiranje")
             }
             .padding()
             .background(slate)
@@ -3181,45 +3177,30 @@ struct CollectionsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            BrandHeader(subtitle: "MOJ TREZOR")
+            BrandHeader(subtitle: "KOLEKCIJE")
 
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Kolekcije")
-                        .font(.system(size: 42, weight: .black))
-                        .foregroundStyle(.white)
-                    Text("Organizirajte podatke. Pronađite ih odmah.")
-                        .foregroundStyle(muted)
-                }
+                Text("Organizirajte trezor po vrsti i kategoriji.")
+                    .font(.subheadline)
+                    .foregroundStyle(muted)
                 Spacer()
             }
             .padding(.horizontal, 18)
+            .padding(.vertical, 4)
 
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
-                Menu {
-                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti"], id: \.self) { value in
-                        Button({
-                            switch value {
-                            case "Prijava": return "Lozinke"
-                            case "Bilješka": return "Bilješke"
-                            case "Kartica": return "Kartice"
-                            case "Autentifikator": return "2FA"
-                            default: return value
-                            }
-                        }()) {
-                            selectedType = value
-                        }
-                    }
-                    Button("Očisti pretragu") {
+                if !search.isEmpty {
+                    Button {
                         search = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(muted)
                     }
-                } label: {
-                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Očisti pretragu")
                 }
-                .accessibilityLabel("Filtriraj kolekcije")
             }
             .padding()
             .background(slate)
