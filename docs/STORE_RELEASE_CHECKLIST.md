@@ -250,3 +250,17 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] Oba main CI-ja i release workflow uspješni, release v0.6.15 sa sedam artefakata provjeren.
 - [ ] Ručni testovi na fizičkim Android i iOS uređajima: typing, prikaz tipkovnice, izrada trezora, zaključavanje u pozadini tijekom PBKDF2, biometrija, stare KEYRA1/KEYRA2 kopije.
 - [ ] Potvrđena dostupnost vanjskih pravnih stranica na app.brendigo.com/keya.
+
+## 0.6.16 recovery responsiveness, bounded imports and English README
+
+- [x] Android: first-run recovery validation/decryption/key installation moved off the UI thread, with recovery-in-progress state, single-request guard, progress feedback, and lock-on-background completion.
+- [x] iOS: first-run recovery validation/decryption/key installation moved off the UI thread, with matching progress feedback, cancellation guard, and stale-session protection.
+- [x] iOS: five external document import paths read a bounded number of bytes before decoding UTF-8, rather than mapping a potentially oversized file.
+- [x] Android: malformed UTF-8 backup bytes are rejected; password input truncation does not split a UTF-16 surrogate pair.
+- [x] Android JUnit regression tests cover invalid UTF-8 and input boundaries.
+- [x] Main GitHub README rewritten in English, retaining verified Keyra visual assets and accurate unsigned-artifact guidance.
+- [ ] Android PR CI lint/unit/build/privacy success on final commit.
+- [ ] iOS PR CI build/analyze/simulator launch/privacy success on the same final commit.
+- [ ] Both main CI checks and release workflow success, seven v0.6.16 assets verified.
+- [ ] Physical Android/iOS interactive QA: initial password typing and keyboard, full recovery, imported older KEYRA1/KEYRA2 backups, auto-lock in background, TOTP and biometric access.
+- [ ] Legal URLs validated on a real device; store signing and distribution readiness independently verified.
