@@ -34,13 +34,31 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master.typeText(String(repeating: "A", count: 260))
         XCTAssertEqual((master.value as? String)?.count, 256,
                        "First-run field must cap long pasted/typed passwords at 256 characters")
-        master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256))
+        // A long sequence of 256 synthetic backspaces may race with iOS IME
+        // updates and leave the field nonempty. Test the 256-character boundary,
+        // then create a fresh first-run view before exercising vault creation.
+        // This keeps the keyboard stress test and the persistence test independent.
+        app.terminate()
+        app.launch()
+        let createAgain = app.buttons["keyra-first-run-create"]
+        XCTAssertTrue(createAgain.waitForExistence(timeout: 20),
+                      "Stress-test typing must not create or alter a vault")
+        createAgain.tap()
+
+        master = app.secureTextFields["keyra-master-password"]
+        XCTAssertTrue(master.waitForExistence(timeout: 15))
         let synthetic = "SafeDemo2026" // Exactly 12 characters
+        master.tap()
         master.typeText(synthetic)
+        XCTAssertEqual((master.value as? String)?.count, synthetic.count,
+                       "Master-password IME must accept the complete synthetic input")
+
         let confirmation = app.secureTextFields["keyra-confirm-master-password"]
-        XCTAssertTrue(confirmation.exists)
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
         confirmation.tap()
         confirmation.typeText(synthetic)
+        XCTAssertEqual((confirmation.value as? String)?.count, synthetic.count,
+                       "Confirmation input must match the complete master-password length")
         app.buttons["keyra-submit-master-password"].tap()
 
         let settings = app.buttons["keyra-nav-Postavke"]
