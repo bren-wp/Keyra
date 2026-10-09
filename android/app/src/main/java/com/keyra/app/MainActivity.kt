@@ -562,12 +562,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             .getOrNull()
     }
 
-    fun exportBackup(context: Context) {
-        val payload = makeBackupPayload() ?: return
-        copy(context, payload)
-        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
-    }
-
     fun exportBackupToUri(context: Context, uri: Uri) {
         val payload = makeBackupPayload() ?: return
         runCatching {
@@ -681,25 +675,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }.onFailure {
             message = "Sigurnosna kopija nije valjana ili je nije moguće spremiti."
         }.isSuccess
-    }
-
-    fun importBackup(context: Context) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
-        val text = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
-        } else {
-            ""
-        }
-        if (text.isBlank()) {
-            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
-            return
-        }
-
-        if (importBackupPayload(text)) {
-            clearClipboardIfMatches(context, text)
-            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
-        }
     }
 
     fun importBackupFromUri(context: Context, uri: Uri) {
@@ -2413,8 +2388,8 @@ private fun BottomNav(model: KeyraViewModel, active: Screen) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
-                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
                 NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
+                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
                 NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
             }
         }
@@ -2459,7 +2434,7 @@ private fun RowScope.NavItem(
             Text(
                 label,
                 color = if (selected) Cyan else Muted,
-                fontSize = if (compact) 8.sp else 10.sp,
+                fontSize = if (compact) 9.sp else 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1
             )
@@ -2491,7 +2466,6 @@ private fun VaultScreen(model: KeyraViewModel) {
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(model.vaultTypeFilter ?: "Sve") }
     var newestFirst by remember { mutableStateOf(true) }
-    var filterMenuExpanded by remember { mutableStateOf(false) }
 
     val displayed = model.items
         .filter {
@@ -2530,34 +2504,13 @@ private fun VaultScreen(model: KeyraViewModel) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = {
-                Box {
-                    IconButton(onClick = { filterMenuExpanded = true }) {
-                        Icon(Icons.Outlined.Tune, contentDescription = "Filtri i sortiranje", tint = Ice)
-                    }
-                    DropdownMenu(
-                        expanded = filterMenuExpanded,
-                        onDismissRequest = { filterMenuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (newestFirst) "Poredaj A–Ž" else "Poredaj po nedavnim") },
-                            onClick = {
-                                newestFirst = !newestFirst
-                                filterMenuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Prikaži sve") },
-                            onClick = {
-                                filter = "Sve"
-                                search = ""
-                                model.clearVaultCategoryFilter()
-                                filterMenuExpanded = false
-                            }
-                        )
+            trailingIcon = if (search.isNotBlank()) {
+                {
+                    IconButton(onClick = { search = "" }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu", tint = Ice)
                     }
                 }
-            },
+            } else null,
             colors = keyraFieldColors(),
             shape = RoundedCornerShape(24.dp)
         )
@@ -2910,12 +2863,12 @@ private fun CollectionsScreen(model: KeyraViewModel) {
         "Ostalo" to Muted
     )
     var search by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("Prijava") }
-    var filterMenuExpanded by remember { mutableStateOf(false) }
+    var type by remember { mutableStateOf("Sve") }
 
     val collectionItems = model.items
         .filter { item ->
             when (type) {
+                "Sve" -> true
                 "Favoriti" -> item.favorite
                 else -> item.type == type
             }
@@ -2932,31 +2885,18 @@ private fun CollectionsScreen(model: KeyraViewModel) {
             ).joinToString(" ").contains(search, true)
         }
 
-    val recentNotes = model.items
-        .filter { it.type == "Bilješka" && (search.isBlank() || it.title.contains(search, true) || it.notes.contains(search, true)) }
-        .sortedByDescending { it.updatedAt }
-        .take(3)
-
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val narrow = maxWidth < 370.dp
         val side = if (narrow) 14.dp else 18.dp
 
         Column(Modifier.fillMaxSize()) {
-            BrandHeader("MOJ TREZOR", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
+            BrandHeader("KOLEKCIJE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
             Text(
-                "Kolekcije",
-                Modifier.padding(horizontal = side),
-                color = Color.White,
-                fontSize = if (narrow) 34.sp else 42.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Text(
-                "Organizirajte podatke. Pronađite ih odmah.",
-                Modifier.padding(horizontal = side),
+                "Organizirajte trezor po vrsti i kategoriji.",
+                Modifier.padding(horizontal = side, vertical = 4.dp),
                 color = Muted,
-                fontSize = if (narrow) 14.sp else 16.sp
+                fontSize = if (narrow) 13.sp else 14.sp
             )
-            Spacer(Modifier.height(if (narrow) 8.dp else 12.dp))
 
             OutlinedTextField(
                 search,
@@ -2964,44 +2904,13 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = side),
                 placeholder = { Text("Pretražite trezor...") },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                trailingIcon = {
-                    Box {
-                        IconButton(onClick = { filterMenuExpanded = true }) {
-                            Icon(Icons.Outlined.Tune, contentDescription = "Filtriraj kolekcije", tint = Ice)
-                        }
-                        DropdownMenu(
-                            expanded = filterMenuExpanded,
-                            onDismissRequest = { filterMenuExpanded = false }
-                        ) {
-                            listOf("Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti").forEach { value ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            when (value) {
-                                                "Prijava" -> "Lozinke"
-                                                "Bilješka" -> "Bilješke"
-                                                "Kartica" -> "Kartice"
-                                                "Autentifikator" -> "2FA"
-                                                else -> value
-                                            }
-                                        )
-                                    },
-                                    onClick = {
-                                        type = value
-                                        filterMenuExpanded = false
-                                    }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Očisti pretragu") },
-                                onClick = {
-                                    search = ""
-                                    filterMenuExpanded = false
-                                }
-                            )
+                trailingIcon = if (search.isNotBlank()) {
+                    {
+                        IconButton(onClick = { search = "" }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu", tint = Ice)
                         }
                     }
-                },
+                } else null,
                 colors = keyraFieldColors(),
                 shape = RoundedCornerShape(24.dp),
                 singleLine = true
@@ -3014,7 +2923,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     .padding(horizontal = side, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
+                listOf("Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti").forEach { value ->
                     FilterChip(
                         selected = type == value,
                         onClick = { type = value },
@@ -3089,33 +2998,6 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     }
                 }
 
-                item {
-                    Spacer(Modifier.height(6.dp))
-                    Text("Nedavne bilješke", color = Color.White, fontSize = if (narrow) 22.sp else 25.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Vaše najnovije bilješke i sigurne informacije.", color = Muted, fontSize = if (narrow) 13.sp else 14.sp)
-                }
-
-                items(recentNotes) { noteItem ->
-                    Surface(
-                        Modifier.fillMaxWidth().clickable { model.select(noteItem) },
-                        shape = RoundedCornerShape(18.dp),
-                        color = Slate
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Description, null, tint = Indigo)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                                Text(noteItem.notes, color = Muted, maxLines = 1)
-                            }
-                            Icon(Icons.Outlined.MoreVert, null, tint = Muted)
-                        }
-                    }
-                }
-
-                if (recentNotes.isEmpty()) {
-                    item { Text("Još nema sigurnih bilješki.", color = Muted, modifier = Modifier.padding(vertical = 18.dp)) }
-                }
             }
         }
     }
@@ -3217,29 +3099,38 @@ private fun GeneratorScreen(model: KeyraViewModel) {
             }
             item {
                 GlassCard {
-                    Text("Zadana jačina", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Postavke lozinke", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Odaberite preset ili prilagodite duljinu i vrste znakova.", color = Muted, fontSize = 13.sp)
+
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Jednostavna", "Snažna", "Maksimalna", "Prilagodi").forEach { name ->
+                        listOf("Jednostavna", "Snažna", "Maksimalna").forEach { name ->
                             FilterChip(
                                 selected = preset == name,
-                                onClick = {
-                                    if (name == "Prilagodi") preset = name else applyPreset(name)
-                                },
+                                onClick = { applyPreset(name) },
                                 label = { Text(name) }
                             )
                         }
                     }
-                }
-            }
-            item {
-                GlassCard {
+
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Duljina lozinke", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text(length.toInt().toString(), color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Duljina", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Cyan.copy(alpha = .12f)
+                        ) {
+                            Text(
+                                length.toInt().toString(),
+                                color = Cyan,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                     Slider(
                         value = length,
@@ -3251,11 +3142,10 @@ private fun GeneratorScreen(model: KeyraViewModel) {
                         valueRange = 8f..64f,
                         steps = 55
                     )
-                }
-            }
-            item {
-                GlassCard {
-                    Text("Vrste znakova", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+
+                    Text("Vrste znakova", color = Color.White, fontWeight = FontWeight.SemiBold)
                     GeneratorToggle("Velika slova (A–Z)", upper) {
                         updateCharacterSet(upper, it) { value -> upper = value }
                     }
@@ -4768,8 +4658,6 @@ private fun SettingsScreen(
     requestBiometric: (String, () -> Unit) -> Unit
 ) {
     val context = LocalContext.current
-    var search by remember { mutableStateOf("") }
-    var confirmImport by remember { mutableStateOf(false) }
     var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
     var pendingRecoveryExport by remember { mutableStateOf<Uri?>(null) }
@@ -4812,46 +4700,6 @@ private fun SettingsScreen(
         recoveryImportPassphrase = ""
         pendingRecoveryImport = uri
     }
-
-    fun runProtectedImport() {
-        if (model.criticalReauthAvailable()) {
-            requestBiometric("Potvrdite identitet za uvoz sigurnosne kopije.") {
-                model.importBackup(context)
-            }
-        } else {
-            model.importBackup(context)
-        }
-    }
-
-    fun matches(vararg values: String): Boolean =
-        search.isBlank() || values.any { it.contains(search, ignoreCase = true) }
-
-    val accountVisible = matches(
-        "Biometrijsko otključavanje",
-        "Potvrda prije prikaza tajni",
-        "Automatsko zaključavanje",
-        "Provjera sigurnosti"
-    )
-    val dataVisible = matches(
-        "Kopiraj sigurnosnu kopiju",
-        "Uvezi sigurnosnu kopiju",
-        "Spremi šifriranu kopiju",
-        "Privatni cloud",
-        "Proton Drive",
-        "Files",
-        "Recovery Key",
-        "oporavak",
-        "sigurnosna kopija"
-    )
-    val preferenceVisible = matches("Tamni način", "tamni izgled")
-    val privacyVisible = matches(
-        "O aplikaciji Keyra",
-        "Pravila privatnosti",
-        "Privatnost",
-        "Izbriši sve lokalne podatke",
-        "Zaključaj trezor",
-        "sigurnost privatnost"
-    )
 
     Column(Modifier.fillMaxSize()) {
         pendingRecoveryExport?.let { uri ->
@@ -5072,78 +4920,35 @@ private fun SettingsScreen(
             )
         }
 
-        if (confirmImport) {
-            AlertDialog(
-                onDismissRequest = { confirmImport = false },
-                icon = {
-                    Icon(
-                        Icons.Outlined.Warning,
-                        contentDescription = null,
-                        tint = Warn
-                    )
-                },
-                title = { Text("Uvesti sigurnosnu kopiju?") },
-                text = {
-                    Text(
-                        "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
-                            "Prije nastavka provjerite da je kopija ispravna."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            confirmImport = false
-                            runProtectedImport()
-                        }
-                    ) {
-                        Text("Uvezi i zamijeni", color = Warn)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmImport = false }) {
-                        Text("Odustani")
-                    }
-                },
-                containerColor = Slate
-            )
-        }
+        BrandHeader("POSTAVKE", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
 
-        BrandHeader("POSTAVKE I SIGURNOST", securityIssueCount(model.items)) { model.open(Screen.SECURITY) }
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 4.dp),
-            placeholder = { Text("Pretražite postavke...") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            trailingIcon = if (search.isNotBlank()) {
-                {
-                    IconButton(onClick = { search = "" }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Očisti pretragu")
-                    }
-                }
-            } else null,
-            singleLine = true,
-            colors = keyraFieldColors(),
-            shape = RoundedCornerShape(24.dp)
-        )
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 20.dp)
+            contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
         ) {
-            if (accountVisible) item { SectionTitle("RAČUN I SIGURNOST") }
-            if (matches("Biometrijsko otključavanje", "biometrija")) item {
-                SettingRow(Icons.Outlined.Fingerprint, "Biometrijsko otključavanje", "Brz i siguran pristup trezoru.") {
+            item {
+                SettingsIntroCard(
+                    title = "Jednostavno. Lokalno. Zaštićeno.",
+                    subtitle = "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                )
+            }
+
+            item { SectionTitle("ZAŠTITA") }
+            item {
+                SettingRow(
+                    Icons.Outlined.Fingerprint,
+                    "Biometrijsko otključavanje",
+                    "Brže otključajte trezor biometrijom ili zaključavanjem uređaja."
+                ) {
                     Switch(model.biometricEnabled, model::toggleBiometric)
                 }
             }
-            if (matches("Potvrda prije prikaza tajni", "osjetljive vrijednosti", "potvrda identiteta")) item {
+            item {
                 SettingRow(
                     Icons.Outlined.Visibility,
-                    "Potvrda prije prikaza tajni",
-                    "Tražite biometriju ili zaključavanje uređaja prije prikaza i kopiranja osjetljivih podataka."
+                    "Potvrda za osjetljive podatke",
+                    "Zatražite dodatnu potvrdu prije prikaza ili kopiranja tajni."
                 ) {
                     Switch(
                         checked = model.sensitiveReauthEnabled,
@@ -5152,154 +4957,94 @@ private fun SettingsScreen(
                     )
                 }
             }
-            if (matches("Automatsko zaključavanje", "zaključavanje")) item {
+            item {
                 SettingRow(
                     Icons.Outlined.Timer,
                     "Automatsko zaključavanje",
                     "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
                 ) {
                     TextButton(onClick = model::cycleAutoLock) {
-                        Text(model.autoLockLabel(), color = Cyan)
+                        Text(model.autoLockLabel(), color = Cyan, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
-            if (matches("Provjera sigurnosti", "slabe lozinke", "ponovljene lozinke")) item {
+            item {
                 SettingRow(
                     Icons.Outlined.Security,
                     "Provjera sigurnosti",
-                    "Pronađite slabe i ponovljene lozinke.",
+                    "Pregledajte slabe i ponovljene lozinke.",
                     onClick = { model.open(Screen.SECURITY) }
                 )
             }
 
-            if (dataVisible) item { SectionTitle("UPRAVLJANJE PODACIMA") }
-            if (matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz")) item {
+            item { SectionTitle("SIGURNOSNE KOPIJE") }
+            item {
                 SettingRow(
                     Icons.Outlined.CloudUpload,
-                    "Spremi šifriranu kopiju",
-                    "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
+                    "Spremi sigurnosnu kopiju",
+                    "Spremite šifriranu .keyra datoteku u Files ili odabrani cloud provider."
                 ) {
-                    IconButton(onClick = {
-                        exportFileLauncher.launch("Keyra-backup.keyra")
-                    }) {
-                        Icon(
-                            Icons.Outlined.SaveAlt,
-                            contentDescription = "Spremi šifriranu kopiju",
-                            tint = Cyan
-                        )
+                    IconButton(onClick = { exportFileLauncher.launch("Keyra-backup.keyra") }) {
+                        Icon(Icons.Outlined.SaveAlt, contentDescription = "Spremi sigurnosnu kopiju", tint = Cyan)
                     }
                 }
             }
-            if (matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz")) item {
+            item {
                 SettingRow(
                     Icons.Outlined.CloudDownload,
-                    "Uvezi šifriranu datoteku",
-                    "Odaberite šifriranu .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor tek nakon izričite potvrde."
+                    "Vrati sigurnosnu kopiju",
+                    "Odaberite .keyra datoteku i vratite trezor tek nakon potvrde."
                 ) {
                     IconButton(onClick = {
                         importFileLauncher.launch(
                             arrayOf("application/octet-stream", "text/plain", "application/*")
                         )
                     }) {
-                        Icon(
-                            Icons.Outlined.FolderOpen,
-                            contentDescription = "Uvezi šifriranu datoteku",
-                            tint = Cyan
-                        )
+                        Icon(Icons.Outlined.FolderOpen, contentDescription = "Vrati sigurnosnu kopiju", tint = Cyan)
                     }
                 }
             }
+            item {
+                SettingsHintCard(
+                    icon = Icons.Outlined.CloudDone,
+                    text = "Keyra šifrira backup prije spremanja. Nema Keyra računa ni vlastitog cloud trezora."
+                )
+            }
 
-            if (matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+            item { SectionTitle("OPORAVAK") }
+            item {
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Izvezi Recovery Key",
-                    "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
+                    "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
                 ) {
-                    IconButton(onClick = {
-                        exportRecoveryLauncher.launch("Keyra-Recovery.keyra")
-                    }) {
-                        Icon(
-                            Icons.Outlined.SaveAlt,
-                            contentDescription = "Izvezi Recovery Key",
-                            tint = Cyan
-                        )
+                    IconButton(onClick = { exportRecoveryLauncher.launch("Keyra-Recovery.keyra") }) {
+                        Icon(Icons.Outlined.SaveAlt, contentDescription = "Izvezi Recovery Key", tint = Cyan)
                     }
                 }
             }
-
-            if (matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery")) item {
+            item {
                 SettingRow(
                     Icons.Outlined.VpnKey,
                     "Uvezi Recovery Key",
-                    "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
+                    "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
                 ) {
                     IconButton(onClick = {
                         importRecoveryLauncher.launch(
                             arrayOf("application/octet-stream", "text/plain", "application/*")
                         )
                     }) {
-                        Icon(
-                            Icons.Outlined.FolderOpen,
-                            contentDescription = "Uvezi Recovery Key",
-                            tint = Cyan
-                        )
+                        Icon(Icons.Outlined.FolderOpen, contentDescription = "Uvezi Recovery Key", tint = Cyan)
                     }
                 }
             }
 
-            if (matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud")) item {
-                SettingRow(
-                    Icons.Outlined.CloudSync,
-                    "Privatni cloud bez Keyra računa",
-                    "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka preko sistemskog odabira lokacije; sinkronizaciju zatim obavlja odabrani provider."
-                )
-            }
-            if (matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija")) item {
-                SettingRow(Icons.Outlined.Upload, "Kopiraj sigurnosnu kopiju", "Stvorite šifriranu kopiju trezora.") {
-                    IconButton(onClick = {
-                        if (model.criticalReauthAvailable()) {
-                            requestBiometric("Potvrdite identitet za izradu sigurnosne kopije.") {
-                                model.exportBackup(context)
-                            }
-                        } else {
-                            model.exportBackup(context)
-                        }
-                    }) { Icon(Icons.Outlined.ContentCopy, null, tint = Cyan) }
-                }
-            }
-            if (matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija")) item {
-                SettingRow(
-                    Icons.Outlined.Download,
-                    "Uvezi sigurnosnu kopiju",
-                    "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
-                ) {
-                    IconButton(onClick = { confirmImport = true }) {
-                        Icon(
-                            Icons.Outlined.Download,
-                            contentDescription = "Uvezi sigurnosnu kopiju",
-                            tint = Cyan
-                        )
-                    }
-                }
-            }
-
-            if (preferenceVisible) item { SectionTitle("PREFERENCIJE") }
-            if (matches("Tamni način", "tamni izgled")) item {
-                SettingRow(Icons.Outlined.DarkMode, "Tamni način", "Čistije i ugodnije iskustvo za oči.") {
-                    Text("Uvijek uključen", color = Cyan, fontSize = 12.sp)
-                }
-            }
-
-            if (privacyVisible) item { SectionTitle("SIGURNOST I PRIVATNOST") }
-            if (matches("O aplikaciji Keyra", "verzija")) item {
-                SettingRow(Icons.Outlined.Info, "O aplikaciji Keyra", "Verzija 0.6.3 • Vaši ključevi. Vaši podaci. Uvijek vaši.")
-            }
-            if (matches("Pravila privatnosti", "privatnost", "privacy")) item {
+            item { SectionTitle("PRIVATNOST I APLIKACIJA") }
+            item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
                     "Pravila privatnosti",
-                    "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru.",
+                    "Saznajte kako Keyra štiti podatke i što ne prikuplja.",
                     onClick = {
                         if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
                             model.message = "Pravila privatnosti trenutno nije moguće otvoriti."
@@ -5307,31 +5052,80 @@ private fun SettingsScreen(
                     }
                 )
             }
-            if (matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset")) item {
+            item {
+                SettingRow(
+                    Icons.Outlined.Info,
+                    "O aplikaciji Keyra",
+                    "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                )
+            }
+            item {
                 SettingRow(
                     Icons.Outlined.DeleteForever,
                     "Izbriši sve lokalne podatke",
-                    "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja.",
+                    "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja.",
                     onClick = { confirmErase = true }
                 )
             }
-            if (matches("Zaključaj trezor", "zaključavanje")) item {
-                OutlinedButton(onClick = model::lock, modifier = Modifier.fillMaxWidth()) {
+            item {
+                OutlinedButton(
+                    onClick = model::lock,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
                     Icon(Icons.AutoMirrored.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Zaključaj trezor")
+                    Text("Zaključaj trezor", fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+    }
+}
 
-            if (search.isNotBlank() && !accountVisible && !dataVisible && !preferenceVisible && !privacyVisible) {
-                item {
-                    GlassCard {
-                        Icon(Icons.Outlined.SearchOff, contentDescription = null, tint = Cyan)
-                        Text("Nema rezultata", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("Pokušajte s drugim pojmom za pretragu postavki.", color = Muted)
-                    }
-                }
+@Composable
+private fun SettingsIntroCard(title: String, subtitle: String) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Slate2.copy(alpha = .96f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Cyan.copy(alpha = .24f)),
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(Brush.linearGradient(listOf(Cyan.copy(alpha = .18f), Indigo.copy(alpha = .14f)))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Outlined.Tune, contentDescription = null, tint = Cyan)
             }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(subtitle, color = Muted, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsHintCard(icon: ImageVector, text: String) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Good.copy(alpha = .07f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha = .22f))
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = Good, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(text, color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
         }
     }
 }

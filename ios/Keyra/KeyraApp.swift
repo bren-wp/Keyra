@@ -1602,12 +1602,6 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func copyBackup() {
-        guard let payload = makeBackupPayload() else { return }
-        SecureClipboard.copy(payload)
-        message = "Šifrirana sigurnosna kopija kopirana je u međuspremnik i automatski će se ukloniti."
-    }
-
     func makeRecoveryKeyPayload(passphrase: String) -> String? {
         guard isStrongRecoveryPassphrase(passphrase) else {
             message = "Recovery lozinka mora imati najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi."
@@ -1669,17 +1663,6 @@ final class KeyraStore: ObservableObject {
         } catch {
             message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
             return false
-        }
-    }
-
-    func importBackup() {
-        guard let text = UIPasteboard.general.string else {
-            message = "Međuspremnik ne sadrži sigurnosnu kopiju."
-            return
-        }
-        if importBackupPayload(text), UIPasteboard.general.string == text {
-            UIPasteboard.general.items = []
-            message = "Sigurnosna kopija uspješno je uvezena. Sadržaj kopije uklonjen je iz međuspremnika."
         }
     }
 
@@ -2671,8 +2654,8 @@ struct BottomBar: View {
     var body: some View {
         HStack(spacing: 4) {
             BottomItem(icon: "house.fill", title: "Trezor", screen: .vault)
-            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
             BottomItem(icon: "square.grid.2x2.fill", title: "Kolekcije", screen: .collections)
+            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
             BottomItem(icon: "gearshape.fill", title: "Postavke", screen: .settings)
         }
         .padding(6)
@@ -2784,19 +2767,15 @@ struct VaultView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite svoj trezor...", text: $search)
                     .foregroundStyle(.white)
-                Menu {
-                    Button(newestFirst ? "Poredaj A–Ž" : "Poredaj po nedavnim") {
-                        newestFirst.toggle()
-                    }
-                    Button("Prikaži sve") {
-                        filter = "Sve"
+                if !search.isEmpty {
+                    Button {
                         search = ""
-                        store.clearVaultCategoryFilter()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(muted)
                     }
-                } label: {
-                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Očisti pretragu")
                 }
-                .accessibilityLabel("Filtri i sortiranje")
             }
             .padding()
             .background(slate)
@@ -3155,7 +3134,7 @@ struct VaultRow: View {
 struct CollectionsView: View {
     @EnvironmentObject var store: KeyraStore
     @State private var search = ""
-    @State private var selectedType = "Prijava"
+    @State private var selectedType = "Sve"
 
     let categories: [(String, Color, String)] = [
         ("Osobno", Color(hex: 0x00AEE8), "person.fill"),
@@ -3170,7 +3149,12 @@ struct CollectionsView: View {
 
     private var collectionItems: [VaultItem] {
         store.items.filter { item in
-            let typeMatch = selectedType == "Favoriti" ? item.favorite : item.kind == selectedType
+            let typeMatch: Bool
+            switch selectedType {
+            case "Sve": typeMatch = true
+            case "Favoriti": typeMatch = item.favorite
+            default: typeMatch = item.kind == selectedType
+            }
             let haystack = [
                 item.title,
                 item.username,
@@ -3184,59 +3168,32 @@ struct CollectionsView: View {
         }
     }
 
-    private var recentNotes: [VaultItem] {
-        Array(
-            store.items
-                .filter {
-                    $0.kind == "Bilješka" &&
-                    (search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) || $0.notes.localizedCaseInsensitiveContains(search))
-                }
-                .sorted { $0.updatedAt > $1.updatedAt }
-                .prefix(3)
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            BrandHeader(subtitle: "MOJ TREZOR")
+            BrandHeader(subtitle: "KOLEKCIJE")
 
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Kolekcije")
-                        .font(.system(size: 42, weight: .black))
-                        .foregroundStyle(.white)
-                    Text("Organizirajte podatke. Pronađite ih odmah.")
-                        .foregroundStyle(muted)
-                }
+                Text("Organizirajte trezor po vrsti i kategoriji.")
+                    .font(.subheadline)
+                    .foregroundStyle(muted)
                 Spacer()
             }
             .padding(.horizontal, 18)
+            .padding(.vertical, 4)
 
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(ice)
                 TextField("Pretražite lozinke, bilješke, kartice...", text: $search)
                     .foregroundStyle(.white)
-                Menu {
-                    ForEach(["Prijava", "Bilješka", "Kartica", "Identitet", "Wi-Fi", "Autentifikator", "Favoriti"], id: \.self) { value in
-                        Button({
-                            switch value {
-                            case "Prijava": return "Lozinke"
-                            case "Bilješka": return "Bilješke"
-                            case "Kartica": return "Kartice"
-                            case "Autentifikator": return "2FA"
-                            default: return value
-                            }
-                        }()) {
-                            selectedType = value
-                        }
-                    }
-                    Button("Očisti pretragu") {
+                if !search.isEmpty {
+                    Button {
                         search = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(muted)
                     }
-                } label: {
-                    Image(systemName: "slider.horizontal.3").foregroundStyle(ice)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Očisti pretragu")
                 }
-                .accessibilityLabel("Filtriraj kolekcije")
             }
             .padding()
             .background(slate)
@@ -3247,7 +3204,7 @@ struct CollectionsView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
-                    ForEach(["Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
+                    ForEach(["Sve","Prijava","Bilješka","Kartica","Identitet","Wi-Fi","Autentifikator","Favoriti"], id: \.self) { value in
                         Button {
                             selectedType = value
                         } label: {
@@ -3307,45 +3264,10 @@ struct CollectionsView: View {
                 }
                 .padding(.horizontal, 18)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Nedavne bilješke")
-                        .font(.title2.bold())
-                        .foregroundStyle(.white)
-                    Text("Vaše najnovije bilješke i sigurne informacije.")
-                        .foregroundStyle(muted)
-
-                    ForEach(recentNotes) { item in
-                        Button {
-                            store.select(item)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "doc.text.fill")
-                                    .foregroundStyle(indigo)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.title).fontWeight(.bold).foregroundStyle(.white)
-                                    Text(item.notes).lineLimit(1).foregroundStyle(muted)
-                                }
-                                Spacer()
-                                Image(systemName: "ellipsis").foregroundStyle(muted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .background(slate)
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if recentNotes.isEmpty {
-                        Text("Još nema sigurnih bilješki.")
-                            .foregroundStyle(muted)
-                            .padding(.vertical, 18)
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 12)
-                .padding(.bottom, 100)
+                Spacer(minLength: 18)
+                    .frame(height: 18)
             }
+            .padding(.bottom, 100)
         }
     }
 }
@@ -3470,17 +3392,18 @@ struct GeneratorView: View {
                     }
 
                     GlassCard {
-                        Text("Zadana jačina")
+                        Text("Postavke lozinke")
                             .font(.headline)
                             .foregroundStyle(.white)
+                        Text("Odaberite preset ili prilagodite duljinu i vrste znakova.")
+                            .font(.subheadline)
+                            .foregroundStyle(muted)
 
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach(["Jednostavna", "Snažna", "Maksimalna", "Prilagodi"], id: \.self) { name in
+                                ForEach(["Jednostavna", "Snažna", "Maksimalna"], id: \.self) { name in
                                     Button(name) {
-                                        if name != "Prilagodi" {
-                                            applyPreset(name)
-                                        }
+                                        applyPreset(name)
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(presetName == name ? midnight : .white)
@@ -3492,20 +3415,30 @@ struct GeneratorView: View {
                                 }
                             }
                         }
-                    }
 
-                    GlassCard {
+                        Divider().overlay(ice.opacity(0.14))
+
                         HStack {
-                            Text("Duljina lozinke").font(.headline).foregroundStyle(.white)
+                            Text("Duljina")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
                             Spacer()
-                            Text("\(Int(length))").font(.title3.bold()).foregroundStyle(cyan)
+                            Text("\(Int(length))")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(cyan)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(cyan.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         Slider(value: $length, in: 8...64, step: 1) { _ in refresh() }
                             .tint(cyan)
-                    }
 
-                    GlassCard {
-                        Text("Vrste znakova").font(.headline).foregroundStyle(.white)
+                        Divider().overlay(ice.opacity(0.14))
+
+                        Text("Vrste znakova")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
                         GeneratorToggle(title: "Velika slova (A–Z)", value: upper) {
                             updateCharacterSet("upper", enabled: $0)
                         }
@@ -4822,8 +4755,6 @@ struct DetailRow: View {
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.openURL) private var openURL
-    @State private var search = ""
-    @State private var confirmImport = false
     @State private var confirmErase = false
     @State private var backupDocument = KeyraBackupDocument()
     @State private var exportBackupFile = false
@@ -4837,12 +4768,6 @@ struct SettingsView: View {
     @State private var recoveryExportConfirm = ""
     @State private var pendingRecoveryImportPayload: String?
     @State private var recoveryImportPassphrase = ""
-
-    private func runProtectedImport() {
-        store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
-            store.importBackup()
-        }
-    }
 
     private func runProtectedFileImport(_ payload: String) {
         store.authorizeCritical(reason: "Potvrdite identitet za uvoz sigurnosne kopije.") {
@@ -4884,336 +4809,200 @@ struct SettingsView: View {
         }
     }
 
-    private func matches(_ values: String...) -> Bool {
-        search.isEmpty || values.contains { $0.localizedCaseInsensitiveContains(search) }
-    }
-
-    private var accountVisible: Bool {
-        matches(
-            "Biometrijsko otključavanje",
-            "Potvrda prije prikaza tajni",
-            "Automatsko zaključavanje",
-            "Provjera sigurnosti"
-        )
-    }
-
-    private var dataVisible: Bool {
-        matches(
-            "Kopiraj sigurnosnu kopiju",
-            "Uvezi sigurnosnu kopiju",
-            "Spremi šifriranu kopiju",
-            "Uvezi šifriranu datoteku",
-            "Proton Drive",
-            "privatni cloud",
-            "Files",
-            "Recovery Key",
-            "oporavak",
-            "sigurnosna kopija"
-        )
-    }
-
-    private var preferenceVisible: Bool {
-        matches("Tamni način", "tamni izgled")
-    }
-
-    private var privacyVisible: Bool {
-        matches(
-            "O aplikaciji Keyra",
-            "Pravila privatnosti",
-            "Privatnost",
-            "Izbriši sve lokalne podatke",
-            "Zaključaj trezor",
-            "sigurnost privatnost"
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            BrandHeader(subtitle: "POSTAVKE I SIGURNOST")
-
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(ice)
-                TextField("Pretražite postavke...", text: $search)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .foregroundStyle(.white)
-                if !search.isEmpty {
-                    Button {
-                        search = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(muted)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Očisti pretragu")
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 54)
-            .background(slate)
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(ice.opacity(0.35), lineWidth: 1))
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 4)
+            BrandHeader(subtitle: "POSTAVKE")
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if accountVisible {
-                        SectionLabel("RAČUN I SIGURNOST")
-                    }
+                VStack(spacing: 10) {
+                    SettingsIntroCard(
+                        title: "Jednostavno. Lokalno. Zaštićeno.",
+                        subtitle: "Najvažnije postavke na jednom mjestu, bez dupliciranih načina rada."
+                    )
 
-                    if matches("Biometrijsko otključavanje", "biometrija") {
-                        SettingRow(icon: "fingerprint", title: "Biometrijsko otključavanje", subtitle: "Brz i siguran pristup trezoru.") {
-                            Toggle("", isOn: Binding(get: { store.biometricEnabled }, set: { store.toggleBiometric($0) }))
-                                .labelsHidden()
-                                .tint(cyan)
-                        }
-                    }
+                    SectionLabel("ZAŠTITA")
 
-                    if matches("Potvrda prije prikaza tajni", "osjetljive vrijednosti", "potvrda identiteta") {
-                        SettingRow(
-                            icon: "eye",
-                            title: "Potvrda prije prikaza tajni",
-                            subtitle: "Tražite biometriju ili šifru uređaja prije prikaza i kopiranja osjetljivih podataka."
-                        ) {
-                            Toggle(
-                                "",
-                                isOn: Binding(
-                                    get: { store.sensitiveReauthEnabled },
-                                    set: { store.toggleSensitiveReauth($0) }
-                                )
+                    SettingRow(
+                        icon: "faceid",
+                        title: "Biometrijsko otključavanje",
+                        subtitle: "Brže otključajte trezor biometrijom ili zaključavanjem uređaja."
+                    ) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { store.biometricEnabled },
+                                set: { store.toggleBiometric($0) }
                             )
-                            .labelsHidden()
-                            .tint(cyan)
-                            .disabled(!store.biometricEnabled)
-                        }
-                    }
-
-                    if matches("Automatsko zaključavanje", "zaključavanje") {
-                        SettingRow(
-                            icon: "timer",
-                            title: "Automatsko zaključavanje",
-                            subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
-                        ) {
-                            Button {
-                                store.cycleAutoLock()
-                            } label: {
-                                Text(store.autoLockLabel)
-                                    .foregroundStyle(cyan)
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if matches("Provjera sigurnosti", "slabe lozinke", "ponovljene lozinke") {
-                        Button {
-                            store.open(.security)
-                        } label: {
-                            SettingRow(
-                                icon: "shield.checkered",
-                                title: "Provjera sigurnosti",
-                                subtitle: "Pronađite slabe i ponovljene lozinke."
-                            ) {
-                                Image(systemName: "chevron.right").foregroundStyle(ice)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if dataVisible {
-                        SectionLabel("UPRAVLJANJE PODACIMA")
-                    }
-
-                    if matches("Spremi šifriranu kopiju", "Proton Drive", "privatni cloud", "Files", "izvoz") {
-                        SettingRow(
-                            icon: "externaldrive.badge.plus",
-                            title: "Spremi šifriranu kopiju",
-                            subtitle: "Spremite već šifriranu .keyra datoteku u sistemski odabranu lokaciju, uključujući podržane privatne cloud providere poput Proton Drivea. Keyra ne traži njihove vjerodajnice niti pristupa vašem cloud računu."
-                        ) {
-                            Button {
-                                prepareBackupExport()
-                            } label: {
-                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Spremi šifriranu kopiju")
-                        }
-                    }
-
-                    if matches("Uvezi šifriranu datoteku", "Proton Drive", "privatni cloud", "Files", "uvoz") {
-                        SettingRow(
-                            icon: "externaldrive.badge.checkmark",
-                            title: "Uvezi šifriranu datoteku",
-                            subtitle: "Odaberite .keyra kopiju iz sistemskog odabira datoteka ili podržanog cloud providera i vratite trezor nakon potvrde."
-                        ) {
-                            Button {
-                                importBackupFile = true
-                            } label: {
-                                Image(systemName: "folder").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Uvezi šifriranu datoteku")
-                        }
-                    }
-
-                    if matches("Izvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
-                        SettingRow(
-                            icon: "key.fill",
-                            title: "Izvezi Recovery Key",
-                            subtitle: "Izvezite zasebnu šifriranu Keyra-Recovery.keyra datoteku. Ona štiti vault ključ, ali ne sadrži podatke trezora."
-                        ) {
-                            Button {
-                                recoveryExportPassphrase = ""
-                                recoveryExportConfirm = ""
-                                showRecoveryExportPrompt = true
-                            } label: {
-                                Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Izvezi Recovery Key")
-                        }
-                    }
-
-                    if matches("Uvezi Recovery Key", "Recovery Key", "oporavak", "recovery") {
-                        SettingRow(
-                            icon: "key.fill",
-                            title: "Uvezi Recovery Key",
-                            subtitle: "Verificirajte KEYRAREC1 datoteku i sigurno ponovno zaštitite prijenosni vault ključ na ovom uređaju."
-                        ) {
-                            Button {
-                                importRecoveryFile = true
-                            } label: {
-                                Image(systemName: "folder").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Uvezi Recovery Key")
-                        }
-                    }
-
-                    if matches("Privatni cloud", "Proton Drive", "sinkronizacija", "cloud") {
-                        SettingRow(
-                            icon: "icloud.and.arrow.up",
-                            title: "Privatni cloud bez Keyra računa",
-                            subtitle: "Keyra nema vlastiti cloud račun ni udaljeni trezor. Prenosi se samo već šifrirana .keyra datoteka kroz sistemski odabir lokacije; sinkronizaciju zatim obavlja odabrani provider."
                         )
+                        .labelsHidden()
+                        .tint(cyan)
                     }
 
-                    if matches("Kopiraj sigurnosnu kopiju", "izvoz", "sigurnosna kopija") {
-                        SettingRow(icon: "square.and.arrow.up", title: "Kopiraj sigurnosnu kopiju", subtitle: "Stvorite šifriranu kopiju trezora.") {
-                            Button {
-                                store.authorizeCritical(reason: "Potvrdite identitet za izradu sigurnosne kopije.") {
-                                    store.copyBackup()
-                                }
-                            } label: {
-                                Image(systemName: "doc.on.doc").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    if matches("Uvezi sigurnosnu kopiju", "uvoz", "sigurnosna kopija") {
-                        SettingRow(
-                            icon: "square.and.arrow.down",
-                            title: "Uvezi sigurnosnu kopiju",
-                            subtitle: "Zamijenite trenutačni trezor šifriranom kopijom iz međuspremnika."
-                        ) {
-                            Button {
-                                confirmImport = true
-                            } label: {
-                                Image(systemName: "arrow.down.doc").foregroundStyle(cyan)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Uvezi sigurnosnu kopiju")
-                        }
-                    }
-
-                    if preferenceVisible {
-                        SectionLabel("PREFERENCIJE")
-                    }
-
-                    if matches("Tamni način", "tamni izgled") {
-                        SettingRow(icon: "moon", title: "Tamni način", subtitle: "Čistije i ugodnije iskustvo za oči.") {
-                            Text("Uvijek uključen")
-                                .font(.caption)
-                                .foregroundStyle(cyan)
-                        }
-                    }
-
-                    if privacyVisible {
-                        SectionLabel("SIGURNOST I PRIVATNOST")
-                    }
-
-                    if matches("O aplikaciji Keyra", "verzija") {
-                        SettingRow(
-                            icon: "info.circle",
-                            title: "O aplikaciji Keyra",
-                            subtitle: "Verzija 0.6.3 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    SettingRow(
+                        icon: "eye.fill",
+                        title: "Potvrda za osjetljive podatke",
+                        subtitle: "Zatražite dodatnu potvrdu prije prikaza ili kopiranja tajni."
+                    ) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { store.sensitiveReauthEnabled },
+                                set: { store.toggleSensitiveReauth($0) }
+                            )
                         )
+                        .labelsHidden()
+                        .tint(cyan)
+                        .disabled(!store.biometricEnabled)
                     }
 
-                    if matches("Pravila privatnosti", "privatnost", "privacy") {
+                    SettingRow(
+                        icon: "timer",
+                        title: "Automatsko zaključavanje",
+                        subtitle: "Odredite kada se trezor zaključava nakon napuštanja aplikacije."
+                    ) {
                         Button {
-                            if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
-                                openURL(url)
-                            }
+                            store.cycleAutoLock()
                         } label: {
-                            SettingRow(
-                                icon: "hand.raised.fill",
-                                title: "Pravila privatnosti",
-                                subtitle: "Pročitajte kako Keyra štiti podatke; sadržaj trezora ne šalje se razvojnom programeru."
-                            ) {
-                                Image(systemName: "arrow.up.right").foregroundStyle(ice)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if matches("Izbriši sve lokalne podatke", "brisanje", "privatnost", "reset") {
-                        Button {
-                            confirmErase = true
-                        } label: {
-                            SettingRow(
-                                icon: "trash.slash.fill",
-                                title: "Izbriši sve lokalne podatke",
-                                subtitle: "Trajno izbrišite trezor, glavnu lozinku, postavke i uređajni ključ s ovog uređaja."
-                            ) {
-                                Image(systemName: "chevron.right").foregroundStyle(danger)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    if matches("Zaključaj trezor", "zaključavanje") {
-                        Button {
-                            store.lock()
-                        } label: {
-                            Label("Zaključaj trezor", systemImage: "lock")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                        .overlay(Capsule().stroke(ice.opacity(0.4), lineWidth: 1))
-                    }
-
-                    if !search.isEmpty && !accountVisible && !dataVisible && !preferenceVisible && !privacyVisible {
-                        GlassCard {
-                            Image(systemName: "magnifyingglass")
+                            Text(store.autoLockLabel)
                                 .foregroundStyle(cyan)
-                            Text("Nema rezultata")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            Text("Pokušajte s drugim pojmom za pretragu postavki.")
-                                .foregroundStyle(muted)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Button {
+                        store.open(.security)
+                    } label: {
+                        SettingRow(
+                            icon: "shield.checkered",
+                            title: "Provjera sigurnosti",
+                            subtitle: "Pregledajte slabe i ponovljene lozinke."
+                        ) {
+                            Image(systemName: "chevron.right").foregroundStyle(ice)
                         }
                     }
+                    .buttonStyle(.plain)
+
+                    SectionLabel("SIGURNOSNE KOPIJE")
+
+                    SettingRow(
+                        icon: "externaldrive.badge.plus",
+                        title: "Spremi sigurnosnu kopiju",
+                        subtitle: "Spremite šifriranu .keyra datoteku u Files ili odabrani cloud provider."
+                    ) {
+                        Button {
+                            prepareBackupExport()
+                        } label: {
+                            Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Spremi sigurnosnu kopiju")
+                    }
+
+                    SettingRow(
+                        icon: "externaldrive.badge.checkmark",
+                        title: "Vrati sigurnosnu kopiju",
+                        subtitle: "Odaberite .keyra datoteku i vratite trezor tek nakon potvrde."
+                    ) {
+                        Button {
+                            importBackupFile = true
+                        } label: {
+                            Image(systemName: "folder").foregroundStyle(cyan)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Vrati sigurnosnu kopiju")
+                    }
+
+                    SettingsHintCard(
+                        icon: "checkmark.icloud.fill",
+                        text: "Keyra šifrira backup prije spremanja. Nema Keyra računa ni vlastitog cloud trezora."
+                    )
+
+                    SectionLabel("OPORAVAK")
+
+                    SettingRow(
+                        icon: "key.fill",
+                        title: "Izvezi Recovery Key",
+                        subtitle: "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
+                    ) {
+                        Button {
+                            recoveryExportPassphrase = ""
+                            recoveryExportConfirm = ""
+                            showRecoveryExportPrompt = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Izvezi Recovery Key")
+                    }
+
+                    SettingRow(
+                        icon: "key.fill",
+                        title: "Uvezi Recovery Key",
+                        subtitle: "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
+                    ) {
+                        Button {
+                            importRecoveryFile = true
+                        } label: {
+                            Image(systemName: "folder").foregroundStyle(cyan)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Uvezi Recovery Key")
+                    }
+
+                    SectionLabel("PRIVATNOST I APLIKACIJA")
+
+                    Button {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "hand.raised.fill",
+                            title: "Pravila privatnosti",
+                            subtitle: "Saznajte kako Keyra štiti podatke i što ne prikuplja."
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    SettingRow(
+                        icon: "info.circle",
+                        title: "O aplikaciji Keyra",
+                        subtitle: "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    )
+
+                    Button {
+                        confirmErase = true
+                    } label: {
+                        SettingRow(
+                            icon: "trash.slash.fill",
+                            title: "Izbriši sve lokalne podatke",
+                            subtitle: "Trajno uklonite trezor, postavke i uređajni ključ s ovog uređaja."
+                        ) {
+                            Image(systemName: "chevron.right").foregroundStyle(danger)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        store.lock()
+                    } label: {
+                        Label("Zaključaj trezor", systemImage: "lock.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(slate2)
+                            .overlay(RoundedRectangle(cornerRadius: 18).stroke(ice.opacity(0.28), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
                 }
                 .padding(18)
                 .padding(.bottom, 100)
             }
-            .scrollDismissesKeyboard(.interactively)
         }
         .confirmationDialog(
             "Izbrisati sve lokalne podatke?",
@@ -5230,21 +5019,6 @@ struct SettingsView: View {
             Text(
                 "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
                 "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
-            )
-        }
-        .confirmationDialog(
-            "Uvesti sigurnosnu kopiju?",
-            isPresented: $confirmImport,
-            titleVisibility: .visible
-        ) {
-            Button("Uvezi i zamijeni", role: .destructive) {
-                runProtectedImport()
-            }
-            Button("Odustani", role: .cancel) {}
-        } message: {
-            Text(
-                "Trenutni sadržaj trezora bit će zamijenjen sadržajem iz sigurnosne kopije. " +
-                "Prije nastavka provjerite da je kopija ispravna."
             )
         }
         .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
@@ -5625,6 +5399,65 @@ struct SectionLabel: View {
         }
         .padding(.top, 10)
         .padding(.bottom, 2)
+    }
+}
+
+struct SettingsIntroCard: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(cyan)
+                .frame(width: 46, height: 46)
+                .background(
+                    LinearGradient(
+                        colors: [cyan.opacity(0.18), indigo.opacity(0.14)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 15))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(muted)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(slate2.opacity(0.96))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(cyan.opacity(0.24), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.14), radius: 5, y: 2)
+    }
+}
+
+struct SettingsHintCard: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(good)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(muted)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(good.opacity(0.07))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(good.opacity(0.22), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }
 

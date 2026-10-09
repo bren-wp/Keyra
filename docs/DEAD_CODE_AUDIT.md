@@ -60,7 +60,7 @@ Posebno su potvrđeni kao aktivni:
 - card validation helperi
 - sigurnosne metrike i security-center putanje
 - backup/recovery file picker tokovi
-- clipboard backup/import tokovi koji su još korisnički dostupni u Settingsu
+- clipboard backup/import tokovi uklonjeni su iz Settingsa u 0.6.4 jer dupliciraju sigurniji sistemski file-picker tok; clipboard ostaje samo za kratkotrajno kopiranje osjetljivih vrijednosti
 
 ### Legacy kompatibilnost
 
