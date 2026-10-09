@@ -1274,8 +1274,15 @@ internal fun readUtf8Limited(context: Context, uri: Uri, maxBytes: Int): String 
             output.write(buffer, 0, read)
         }
     } ?: error("Odabranu datoteku nije moguće otvoriti.")
-    return output.toString(Charsets.UTF_8.name())
+    return decodeUtf8Strict(output.toByteArray())
 }
+
+internal fun decodeUtf8Strict(bytes: ByteArray): String =
+    Charsets.UTF_8.newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        .decode(java.nio.ByteBuffer.wrap(bytes))
+        .toString()
 
 internal object PortableBackup {
     private const val ITERATIONS = 600_000
@@ -2171,7 +2178,11 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
     }
 }
 
-internal fun boundedNewMasterPasswordInput(value: String): String = value.take(256)
+internal fun boundedNewMasterPasswordInput(value: String): String {
+    if (value.length <= 256) return value
+    val truncated = value.take(256)
+    return if (truncated.last().isHighSurrogate()) truncated.dropLast(1) else truncated
+}
 
 @Composable
 private fun UnlockScreen(
