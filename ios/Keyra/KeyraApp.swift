@@ -2716,6 +2716,7 @@ struct BottomBar: View {
 
 struct VaultView: View {
     @EnvironmentObject var store: KeyraStore
+    @State private var search = ""
     @State private var filter = "Sve"
     @State private var newestFirst = true
 
@@ -4804,7 +4805,6 @@ struct DetailRow: View {
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.openURL) private var openURL
-    @State private var search = ""
     @State private var confirmErase = false
     @State private var backupDocument = KeyraBackupDocument()
     @State private var exportBackupFile = false
