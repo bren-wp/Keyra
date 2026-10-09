@@ -59,7 +59,37 @@ final class MasterPasswordEntryUITests: XCTestCase {
         confirmation.typeText(synthetic)
         XCTAssertEqual((confirmation.value as? String)?.count, synthetic.count,
                        "Confirmation input must match the complete master-password length")
+
+        // Equal lengths do not establish that the iOS keyboard entered equal
+        // text. Reveal synthetic credentials only inside the test process to
+        // compare exact values without printing them to CI logs.
+        let toggle = app.buttons["keyra-toggle-Glavna lozinka"]
+        toggle.tap()
+        let visibleMaster = app.textFields["keyra-master-password"]
+        let visibleConfirm = app.textFields["keyra-confirm-master-password"]
+        XCTAssertTrue(visibleMaster.waitForExistence(timeout: 10))
+        XCTAssertTrue(visibleConfirm.waitForExistence(timeout: 10))
+        XCTAssertTrue((visibleMaster.value as? String) == synthetic,
+                      "Master-password input differs from synthetic keyboard sequence")
+        XCTAssertTrue((visibleConfirm.value as? String) == synthetic,
+                      "Confirmation input differs from synthetic keyboard sequence")
+        toggle.tap()
+
         app.buttons["keyra-submit-master-password"].tap()
+        let failureMessages = [
+            "Zaštitu glavne lozinke nije moguće spremiti u Keychain.",
+            "Šifriranu datoteku trezora nije moguće spremiti na uređaj.",
+            "Lozinke se ne podudaraju.",
+            "Glavna lozinka mora imati između 12 i 256 znakova."
+        ]
+        let failure = app.staticTexts.matching(
+            NSPredicate(format: "label IN %@", failureMessages)
+        ).firstMatch
+        if failure.waitForExistence(timeout: 5) {
+            // These messages describe a safe failure category, never a secret.
+            XCTFail("Vault creation rejected a synthetic first-run input: " + failure.label)
+            return
+        }
 
         let settings = app.buttons["keyra-nav-Postavke"]
         XCTAssertTrue(settings.waitForExistence(timeout: 55), "Vault creation must complete")
