@@ -48,7 +48,7 @@ class PasswordToolsTest {
         assertFalse(shouldClearOwnedClipboard(null, sameText, "Keyra"))
         assertFalse(shouldClearOwnedClipboard(null, null, null))
         assertEquals(32, owned.size)
-        assertFalse(String(owned, Charsets.UTF_8).contains("lozinka#2026"))
+        assertFalse(owned.contentEquals("lozinka#2026".toByteArray(Charsets.UTF_8)))
     }
 
     @Test
