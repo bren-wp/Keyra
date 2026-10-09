@@ -30,7 +30,7 @@ class MasterPasswordEntryInstrumentedTest {
             compose.waitUntil(timeout) {
                 compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
             }
-        } catch (timeoutFailure: AssertionError) {
+        } catch (timeoutFailure: Throwable) {
             // Print only stage and non-secret state. Never dump Compose semantics,
             // screenshots, typed passwords, clipboard contents or vault items.
             val safeState = compose.runOnIdle {
