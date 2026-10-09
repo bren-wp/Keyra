@@ -513,13 +513,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     fun biometricRequestToken(): Long = authenticationEpoch
 
     fun canCompleteBiometricRequest(requestEpoch: Long, expectedScreen: Screen, expectedItemId: String?): Boolean {
-        if (!isSetup || screen != expectedScreen || selected?.id != expectedItemId) return false
+        if (!isSetup) return false
+        val sameScreen = screen == expectedScreen
+        val sameItem = selected?.id == expectedItemId
         if (expectedScreen == Screen.UNLOCK) {
-            return shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
+            return sameScreen && sameItem &&
+                shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
         }
+        if (expectedScreen == Screen.ONBOARDING || expectedScreen == Screen.RECOVERY) return false
         return shouldAcceptProtectedCompletion(
             requestEpoch, authenticationEpoch, appInForeground,
-            unlocked, sameScreen = true, sameItem = true
+            unlocked, sameScreen, sameItem
         )
     }
 
