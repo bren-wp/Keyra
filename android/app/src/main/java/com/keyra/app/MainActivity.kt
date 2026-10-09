@@ -3620,6 +3620,11 @@ private fun AddScreen(model: KeyraViewModel) {
         }
     }
 
+    val categoryOptions = listOf(
+        "Osobno", "Posao", "Financije", "Društvene mreže",
+        "Kupovina", "Putovanja", "Zdravlje", "Ostalo"
+    ).let { standard -> if (category in standard) standard else standard + category }
+
     val itemLabel = when (type) {
         "Bilješka" -> "bilješku"
         "Kartica" -> "karticu"
@@ -3856,8 +3861,7 @@ private fun AddScreen(model: KeyraViewModel) {
             item {
                 Text("Mapa / kategorija", color = Ice, fontSize = 12.sp, letterSpacing = 2.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo") +
-                        listOf(category).filter { it !in listOf("Osobno","Posao","Financije","Društvene mreže","Kupovina","Putovanja","Zdravlje","Ostalo") }).forEach {
+                    categoryOptions.forEach {
                         FilterChip(selected = category == it, onClick = { category = it }, label = { Text(it.ifBlank { "Bez kategorije" }) })
                     }
                 }
