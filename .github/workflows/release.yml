@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.11"
+        default: "0.6.12"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.11 pojačava obradu TOTP autentifikatora na Androidu i iOS-u. otpauth://totp URI-ji s ponovljenim parametrima (uključujući različita velika/mala slova), neispravnim kodiranjem ili neočekivanim dijelovima adrese više se ne prihvaćaju kao dvosmislene konfiguracije. Base32 tajne i ulazne URI adrese imaju jasne gornje granice duljine kako ne bi nepotrebno opteretile uređaj. Generiranje koda sigurno odbija neispravan interval, broj znamenki, algoritam ili vrijeme, bez dijeljenja nulom i prešutne zamjene algoritma. Oba sustava ostaju lokalna, bez mrežnih zahtjeva ili vanjskih servisa. Android regresijski testovi pokrivaju zlonamjerne URI-je, velike unose, pogrešne postavke i ispravan RFC 6238 kod. Enkripcija trezora, KEYRA1/KEYRA2 backup i KEYRAREC1 Recovery Key nisu promijenjeni.
+          Keyra 0.6.12 dodaje upozorenja za istekle i neispravno datirane kartice na Androidu i iOS-u. Stavke kartica s upisanim isteklim ili nevažećim datumom sada se u trezoru jasno označavaju oznakom Provjeri istek, prikazuju u Sigurnosnom centru i uključuju u ukupan broj rizičnih zapisa. Kartice bez upisanog datuma nisu automatski označene kao istekle. Postotni rezultat ostaje isključivo ocjena lozinki, pa valjana jedinstvena lozinka ne gubi bodove zbog kartice. Korisnik može otvoriti upozorenje i urediti karticu bez automatske izmjene uvezenih podataka. Android regresijski testovi provjeravaju prošli, trenutačni i budući mjesec, neispravan i prazan datum te neovisnost ocjene lozinki. Lokalni AES-GCM trezor, KEYRA1/KEYRA2 i KEYRAREC1 ostaju nepromijenjeni.
 
           ## Provjere
           - Android lint i unit testovi
