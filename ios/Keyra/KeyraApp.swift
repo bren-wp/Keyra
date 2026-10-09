@@ -3434,17 +3434,18 @@ struct GeneratorView: View {
                     }
 
                     GlassCard {
-                        Text("Zadana jačina")
+                        Text("Postavke lozinke")
                             .font(.headline)
                             .foregroundStyle(.white)
+                        Text("Odaberite preset ili prilagodite duljinu i vrste znakova.")
+                            .font(.subheadline)
+                            .foregroundStyle(muted)
 
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                ForEach(["Jednostavna", "Snažna", "Maksimalna", "Prilagodi"], id: \.self) { name in
+                                ForEach(["Jednostavna", "Snažna", "Maksimalna"], id: \.self) { name in
                                     Button(name) {
-                                        if name != "Prilagodi" {
-                                            applyPreset(name)
-                                        }
+                                        applyPreset(name)
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(presetName == name ? midnight : .white)
@@ -3456,20 +3457,30 @@ struct GeneratorView: View {
                                 }
                             }
                         }
-                    }
 
-                    GlassCard {
+                        Divider().overlay(ice.opacity(0.14))
+
                         HStack {
-                            Text("Duljina lozinke").font(.headline).foregroundStyle(.white)
+                            Text("Duljina")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
                             Spacer()
-                            Text("\(Int(length))").font(.title3.bold()).foregroundStyle(cyan)
+                            Text("\(Int(length))")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(cyan)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(cyan.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         Slider(value: $length, in: 8...64, step: 1) { _ in refresh() }
                             .tint(cyan)
-                    }
 
-                    GlassCard {
-                        Text("Vrste znakova").font(.headline).foregroundStyle(.white)
+                        Divider().overlay(ice.opacity(0.14))
+
+                        Text("Vrste znakova")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
                         GeneratorToggle(title: "Velika slova (A–Z)", value: upper) {
                             updateCharacterSet("upper", enabled: $0)
                         }
