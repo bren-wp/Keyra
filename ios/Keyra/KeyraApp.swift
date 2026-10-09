@@ -1252,6 +1252,7 @@ final class KeyraStore: ObservableObject {
     @Published var importingNewVault = false
     @Published private(set) var isCreatingVault = false
     @Published private(set) var isUnlockingVault = false
+    @Published private(set) var isImportingVault = false
 
     private var sessionPassword: String?
 
@@ -1285,6 +1286,7 @@ final class KeyraStore: ObservableObject {
     }
 
     func cancelSetup() {
+        guard !isCreatingVault, !isImportingVault, !isUnlockingVault else { return }
         importingNewVault = false
         if !isSetup { screen = .onboarding }
     }
@@ -1342,38 +1344,47 @@ final class KeyraStore: ObservableObject {
         }
     }
 
-    func importNewVault(payload: String, password: String) -> Bool {
-        guard password.count >= 12 else {
-            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
-            return false
+    func importNewVault(payload: String, password: String) {
+        guard !isSetup, !isCreatingVault, !isImportingVault else { return }
+        guard (12...256).contains(password.count) else {
+            message = "Lozinka mora imati između 12 i 256 znakova."
+            return
         }
         guard !payload.isEmpty else {
             message = "Odaberite .keyra sigurnosnu kopiju."
-            return false
+            return
         }
         guard payload.utf8.count <= 2_500_000 else {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
+            message = "Sigurnosna kopija je prevelika."
+            return
         }
 
-        let imported: [VaultItem]
-        do {
-            imported = try PortableBackup.decrypt(payload, password: password)
-            try vault.save(imported)
-        } catch {
-            message = "Sigurnosna kopija nije valjana, lozinka nije odgovarajuća ili spremanje nije uspjelo."
-            return false
+        isImportingVault = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let imported: [VaultItem]?
+            do {
+                let decoded = try PortableBackup.decrypt(payload, password: password)
+                try self.vault.save(decoded)
+                if self.auth.create(password: password) {
+                    imported = decoded
+                } else {
+                    self.vault.clear()
+                    imported = nil
+                }
+            } catch {
+                imported = nil
+            }
+            DispatchQueue.main.async {
+                self.isImportingVault = false
+                if let imported {
+                    self.finishInitialSetup(password: password, initialItems: imported)
+                    self.message = "Keyra trezor uspješno je uvezen."
+                } else {
+                    self.message = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
+                }
+            }
         }
-
-        guard auth.create(password: password) else {
-            vault.clear()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
-            return false
-        }
-
-        finishInitialSetup(password: password, initialItems: imported)
-        message = "Keyra trezor uspješno je uvezen."
-        return true
     }
 
     func recoverInitialVault(
@@ -2629,7 +2640,7 @@ struct UnlockView: View {
                     Button {
                         if importing {
                             if let importPayload {
-                                _ = store.importNewVault(payload: importPayload, password: password)
+                                store.importNewVault(payload: importPayload, password: password)
                             }
                         } else if creating {
                             if password != confirm { store.message = "Lozinke se ne podudaraju." }
@@ -2640,7 +2651,7 @@ struct UnlockView: View {
                     } label: {
                         HStack {
                             Image(systemName: "lock.fill")
-                            Text(importing ? "Uvezi trezor" : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : (store.isUnlockingVault ? "Otključavanje…" : "Otključaj"))).fontWeight(.bold)
+                            Text(importing ? (store.isImportingVault ? "Uvoz trezora…" : "Uvezi trezor") : (creating ? (store.isCreatingVault ? "Izrada trezora…" : "Izradi trezor") : (store.isUnlockingVault ? "Otključavanje…" : "Otključaj"))).fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -2649,7 +2660,7 @@ struct UnlockView: View {
                     .foregroundStyle(midnight)
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
-                    .disabled(store.isCreatingVault || store.isUnlockingVault || (importing && importPayload == nil))
+                    .disabled(store.isCreatingVault || store.isImportingVault || store.isUnlockingVault || (importing && importPayload == nil))
 
                     if creating {
                         Button {
