@@ -1389,14 +1389,17 @@ final class KeyraStore: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let saved: Bool
+            let failureMessage: String?
             do {
                 try self.vault.save([])
                 saved = self.auth.create(password: password)
+                failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
             } catch {
                 saved = false
+                failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
             }
             if !saved {
-                self.vault.clear()
+                _ = self.vault.clear()
             }
             DispatchQueue.main.async {
                 self.isCreatingVault = false
@@ -1406,7 +1409,9 @@ final class KeyraStore: ObservableObject {
                         allowUnlock: self.canFinishAuthentication(requestEpoch)
                     )
                 } else {
-                    self.message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+                    // Distinguish storage vs. verifier failures without exposing
+                    // any password, Keychain secret, ciphertext or exception text.
+                    self.message = failureMessage ?? "Trezor nije moguće izraditi."
                 }
             }
         }
