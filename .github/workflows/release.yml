@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.13"
+        default: "0.6.14"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.13 donosi pregledniji početni zaslon bez pomicanja na Androidu i iOS-u. Uklonjene su tri suvišne promotivne kartice i tehničke oznake iz zaglavlja, dok profil otvara postavke, a zvonce sigurnosna upozorenja. Pravila privatnosti, Uvjeti korištenja i O aplikaciji vode na tražene stranice domene app.brendigo.com/keya. Izrada trezora, provjera glavne lozinke i uvoz sigurnosne kopije izvršavaju se izvan glavne UI niti uz status i zaštitu od dvostrukih zahtjeva kako bi se smanjili zastoji i rušenja. Pojednostavljene su postavke i korisničke poruke, bez promjene šifriranja, formata trezora, KEYRA1/KEYRA2 sigurnosnih kopija ili KEYRAREC1 ključa. Produkcijske trgovine i ručni QA stvarnih uređaja zahtijevaju zasebne provjere.
+          Keyra 0.6.14 dodatno učvršćuje zaštitu i stabilnost Android i iOS aplikacije. Potpuno brisanje trezora sada na Androidu uklanja i Keystore ključ kojim se štiti provjera glavne lozinke, a na iOS-u provjerava je li zasebni Keychain zapis provjere lozinke doista uklonjen. Ako neki korak čišćenja ne uspije, aplikacija više ne tvrdi da je sve izbrisano. Pri izradi novog trezora duljina glavne lozinke i potvrde ograničena je na 256 znakova, uz jednostavnu uputu o minimalnih 12 znakova; postojeće lozinke za otključavanje i uvoz kopije time se ne skraćuju. Dodani su Android regresijski testovi za granicu unosa. Početni zaslon, poveznice na app.brendigo.com/keya, rad zvonca i profila iz prethodnog izdanja ostaju zadržani. Enkripcija i KEYRA1/KEYRA2/KEYRAREC1 formati ostaju nepromijenjeni. Fizički Android/iOS uređaji i produkcijsko potpisivanje zahtijevaju dodatni QA.
 
           ## Provjere
           - Android lint i unit testovi

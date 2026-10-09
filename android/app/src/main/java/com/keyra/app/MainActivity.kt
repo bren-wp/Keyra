@@ -495,10 +495,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun eraseAllLocalData(): Boolean {
-        val vaultDestroyed = store.destroy()
+        val vaultDestroyed = runCatching { store.destroy() }.getOrDefault(false)
+        val authCleared = runCatching { auth.clear() }.getOrDefault(false)
         val preferencesCleared = prefs.edit().clear().commit()
-        if (!vaultDestroyed || !preferencesCleared) {
-            message = "Sve lokalne podatke nije moguće sigurno izbrisati. Pokušajte ponovno."
+        if (!vaultDestroyed || !authCleared || !preferencesCleared) {
+            message = "Brisanje nije potpuno uspjelo. Ponovite postupak."
             return false
         }
 
@@ -514,7 +515,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
         screen = Screen.ONBOARDING
-        message = "Svi lokalni Keyra podaci i uređajni ključ su izbrisani."
+        message = "Podaci trezora i zaštitni ključevi su izbrisani."
         return true
     }
 
@@ -2135,6 +2136,8 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
     }
 }
 
+internal fun boundedNewMasterPasswordInput(value: String): String = value.take(256)
+
 @Composable
 private fun UnlockScreen(
     model: KeyraViewModel,
@@ -2216,10 +2219,18 @@ private fun UnlockScreen(
                         fontSize = if (compact) 14.sp else 16.sp
                     )
                     Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
-                    KeyraPasswordField(password, { password = it }, show, { show = !show }, "Glavna lozinka")
+                    KeyraPasswordField(
+                        password,
+                        { password = if (creating && !importing) boundedNewMasterPasswordInput(it) else it },
+                        show, { show = !show }, "Glavna lozinka"
+                    )
                     if (creating && !importing) {
                         Spacer(Modifier.height(10.dp))
-                        KeyraPasswordField(confirm, { confirm = it }, show, { show = !show }, "Ponovite glavnu lozinku")
+                        KeyraPasswordField(
+                            confirm, { confirm = boundedNewMasterPasswordInput(it) },
+                            show, { show = !show }, "Ponovite glavnu lozinku"
+                        )
+                        Text("Glavna lozinka: najmanje 12 znakova.", color = Muted, fontSize = 12.sp)
                     }
                     if (importing) {
                         Spacer(Modifier.height(8.dp))
@@ -5232,7 +5243,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji",
-                    "Keyra 0.6.13",
+                    "Keyra 0.6.14",
                     onClick = {
                         if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
                             model.message = "Stranicu nije moguće otvoriti."

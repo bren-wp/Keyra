@@ -8,6 +8,16 @@ import org.junit.Test
 
 class PasswordToolsTest {
     @Test
+    fun newMasterPasswordInputIsBoundedWithoutChangingOrdinaryPasswords() {
+        assertEquals("", boundedNewMasterPasswordInput(""))
+        assertEquals("MojaLozinka#2026", boundedNewMasterPasswordInput("MojaLozinka#2026"))
+        val oversized = "A".repeat(300)
+        assertEquals(256, boundedNewMasterPasswordInput(oversized).length)
+        assertEquals("A".repeat(256), boundedNewMasterPasswordInput(oversized))
+        assertEquals("K".repeat(255) + "!", boundedNewMasterPasswordInput("K".repeat(255) + "!ostatak"))
+    }
+
+    @Test
     fun generatedPasswordUsesRequestedLengthAndCharacterSets() {
         val password = generatePassword(
             length = 64,
