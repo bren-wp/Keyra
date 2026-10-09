@@ -273,21 +273,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    fun importNewVault(context: Context, password: String): Boolean {
+    fun importNewVault(payload: String, password: String): Boolean {
         if (password.length < 12) {
             message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
             return false
         }
 
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
-        val payload = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
-        } else {
-            ""
-        }
         if (payload.isBlank()) {
-            message = "Međuspremnik ne sadrži Keyra sigurnosnu kopiju."
+            message = "Odaberite .keyra sigurnosnu kopiju."
             return false
         }
         if (payload.length > MAX_BACKUP_CHARS) {
@@ -313,7 +306,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
 
-        clearClipboardIfMatches(context, payload)
         finishInitialSetup(password, imported)
         message = "Keyra trezor uspješno je uvezen."
         return true
@@ -2149,9 +2141,23 @@ private fun UnlockScreen(
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var show by remember { mutableStateOf(false) }
+    var importPayload by remember { mutableStateOf<String?>(null) }
     val creating = !model.isSetup
     val importing = creating && model.importingNewVault
     val context = LocalContext.current
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { readUtf8Limited(context, uri, MAX_BACKUP_CHARS) }
+                .onSuccess {
+                    importPayload = it
+                    model.message = "Šifrirana sigurnosna kopija je učitana."
+                }
+                .onFailure {
+                    importPayload = null
+                    model.message = "Sigurnosnu kopiju nije moguće pročitati ili je prevelika."
+                }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 700.dp || maxWidth < 360.dp
@@ -2200,7 +2206,7 @@ private fun UnlockScreen(
                     )
                     Text(
                         when {
-                            importing -> "Kopirajte šifriranu Keyra sigurnosnu kopiju u međuspremnik i unesite njezinu glavnu lozinku."
+                            importing -> "Odaberite šifriranu .keyra datoteku i unesite lozinku sigurnosne kopije."
                             creating -> "Postavite glavnu lozinku kojom ćete otključavati svoj trezor."
                             else -> "Unesite glavnu lozinku kako biste pristupili svom sigurnom trezoru."
                         },
@@ -2215,6 +2221,14 @@ private fun UnlockScreen(
                     }
                     if (importing) {
                         Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.FolderOpen, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (importPayload == null) "Odaberi .keyra datoteku" else "Sigurnosna kopija odabrana")
+                        }
                         Text(
                             "Uvoz prihvaća šifriranu Keyra sigurnosnu kopiju i neće zamijeniti podatke ako provjera ili spremanje ne uspiju.",
                             color = Muted,
@@ -2225,7 +2239,7 @@ private fun UnlockScreen(
                     Button(
                         onClick = {
                             when {
-                                importing -> model.importNewVault(context, password)
+                                importing -> model.importNewVault(importPayload.orEmpty(), password)
                                 creating -> {
                                     if (password != confirm) model.message = "Lozinke se ne podudaraju."
                                     else model.createVault(password)
@@ -2233,6 +2247,7 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
+                        enabled = !importing || importPayload != null,
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
