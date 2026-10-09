@@ -201,7 +201,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Base32 i otpauth ulazi imaju gornje granice duljine radi zaštite memorije i vremena parsiranja.
 - [x] Generiranje TOTP koda validira algoritam, interval, broj znamenki i vrijeme; neispravna konfiguracija ne ruši aplikaciju.
 - [x] Android JUnit regresijski testovi dodani za duplicirane URI parametre, velika polja, pogrešne periode i postojeći RFC 6238 vektor.
-- [ ] Android lint/unit/build/privacy na završnom PR SHA-u uspješni.
-- [ ] iOS build/analyze/simulator launch smoke/privacy na istom PR SHA-u uspješni.
-- [ ] Android/iOS main CI i release workflow uspješni, v0.6.11 objavljen sa svih 7 artefakata.
+- [x] Android lint/unit/build/privacy na završnom PR SHA-u `7f38cfd1bf4b05688379f1718373ac29b80ed390` uspješni.
+- [x] iOS build/analyze/simulator launch smoke/privacy na istom PR SHA-u uspješni.
+- [x] Android/iOS main CI i release workflow uspješni na `e9732842267622a07a3cdb55bcc55dd640168e2d`; v0.6.11 objavljen sa svih 7 artefakata.
 - [ ] Ručni testovi na stvarnim Android/iOS uređajima i povrat KEYRA1/KEYRA2 kopija.
+
+## 0.6.12 upozorenja za istekle kartice
+- [x] Android/iOS: valjan datum kartice u aktualnom ili budućem mjesecu ne stvara upozorenje, a prošli ili neispravan datum stvara.
+- [x] Kartice bez upisanog datuma ne označavaju se kao istekle.
+- [x] Trezor i detalji kartice prikazuju „Provjeri istek”, a Sigurnosni centar navodi konkretne kartice koje treba ažurirati.
+- [x] Brojač rizičnih stavki uključuje istekle kartice; ocjena 0–100 ostaje ograničena na lozinke.
+- [x] Android regresijski testovi pokrivaju prethodni/aktualni/budući mjesec, loše i prazne datume, broj upozorenja i ocjenu lozinki.
+- [ ] Android lint/unit/build/privacy 0.6.12 uspješni na završnom PR SHA-u.
+- [ ] iOS build/analyze/simulator smoke/privacy 0.6.12 uspješni na istom SHA-u.
+- [ ] Oba main CI-ja i release workflow uspješni te GitHub release v0.6.12 ima svih 7 paketa.
+- [ ] Fizički Android/iOS QA i obnove KEYRA1/KEYRA2 sigurnosnih kopija.
