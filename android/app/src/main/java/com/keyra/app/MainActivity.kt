@@ -1251,9 +1251,10 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     fun clear(): Boolean = prefs.edit().remove("vault_blob").commit()
 
     fun destroy(): Boolean {
-        val blobCleared = clear()
-        val keyCleared = crypto.clearKey()
-        return blobCleared && keyCleared
+        // Stop if storage deletion fails: deleting its key would strand the
+        // encrypted blob and prevent the user from retrying a safe wipe.
+        if (!clear()) return false
+        return crypto.clearKey()
     }
 
     fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
