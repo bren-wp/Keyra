@@ -1445,7 +1445,7 @@ final class KeyraStore: ObservableObject {
         }
 
         finishInitialSetup(password: newPassword, initialItems: imported)
-        message = "Recovery je dovršen. Vault ključ je ponovno zaštićen ovim uređajem i KEYRA2 podaci su vraćeni."
+        message = "Trezor je uspješno obnovljen."
         return true
     }
 
@@ -2371,7 +2371,7 @@ struct RecoverySetupView: View {
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
 
-                    Text("Recovery Key obnavlja prijenosni vault ključ. KEYRA2 sigurnosna kopija zasebno vraća vaše zapise.")
+                    Text("Za obnovu trezora trebaju vam Recovery Key i odgovarajuća sigurnosna kopija.")
                         .font(compact ? .footnote : .subheadline)
                         .foregroundStyle(muted)
                         .multilineTextAlignment(.center)
@@ -4650,10 +4650,10 @@ struct DetailView: View {
                                         return "Lozinka je prekratka, predvidljiva ili nema dovoljno različitih vrsta znakova."
                                     }
                                     if isPasswordItem {
-                                        return "Lozinka zadovoljava lokalnu provjeru duljine, raznolikosti i poznatih predvidljivih uzoraka."
+                                        return "Lozinka zadovoljava preporučene sigurnosne uvjete."
                                     }
                                     if item.kind == "Autentifikator", totpConfig != nil {
-                                        return "TOTP je aktivan. Kod se generira lokalno i automatski mijenja prema vremenu uređaja."
+                                        return "Kod se automatski osvježava prema vremenu uređaja."
                                     }
                                     if item.kind == "Autentifikator" {
                                         return "TOTP konfiguracija nije valjana i treba je urediti."
@@ -4817,7 +4817,7 @@ struct TotpCodeCard: View {
                 .font(.caption)
                 .foregroundStyle(muted)
 
-            Text("Kod se generira lokalno bez slanja TOTP tajne. Ako kod ne prolazi, provjerite automatsko vrijeme uređaja.")
+            Text("Ako kod ne radi, provjerite jesu li datum i vrijeme uređaja točni.")
                 .font(.caption)
                 .foregroundStyle(muted)
         }
@@ -5149,7 +5149,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "key.fill",
                         title: "Izvezi Recovery Key",
-                        subtitle: "Spremite zasebnu šifriranu datoteku koja štiti vault ključ."
+                        subtitle: "Spremite ključ za obnovu na sigurno mjesto."
                     ) {
                         Button {
                             recoveryExportPassphrase = ""
@@ -5165,7 +5165,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "key.fill",
                         title: "Uvezi Recovery Key",
-                        subtitle: "Verificirajte Recovery Key i ponovno zaštitite vault ključ na ovom uređaju."
+                        subtitle: "Provjerite ključ za obnovu i potvrdite novu zaštitu trezora."
                     ) {
                         Button {
                             importRecoveryFile = true
@@ -5255,19 +5255,19 @@ struct SettingsView: View {
             }
         }
         .confirmationDialog(
-            "Izbrisati sve lokalne podatke?",
+            "Izbrisati sve podatke?",
             isPresented: $confirmErase,
             titleVisibility: .visible
         ) {
             Button("Trajno izbriši", role: .destructive) {
-                store.authorizeCritical(reason: "Potvrdite identitet za trajno brisanje svih lokalnih podataka.") {
+                store.authorizeCritical(reason: "Potvrdite brisanje podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }
             Button("Odustani", role: .cancel) {}
         } message: {
             Text(
-                "Trezor, glavna lozinka, lokalne postavke i uređajni ključ bit će trajno izbrisani s ovog uređaja. " +
+                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
                 "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
             )
         }
@@ -5291,7 +5291,7 @@ struct SettingsView: View {
             }
         } message: {
             Text(
-                "Recovery Key štiti prijenosni vault ključ, ne podatke trezora. " +
+                "Ključ za obnovu i njegovu lozinku čuvajte na dva odvojena mjesta. " +
                 "Koristite najmanje 16 znakova i dovoljnu složenost ili najmanje četiri riječi; datoteku i lozinku čuvajte odvojeno."
             )
         }
@@ -5486,7 +5486,7 @@ struct SecurityCenterView: View {
                                     : "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             }
                             return issues.isEmpty
-                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
+                                ? "Nisu pronađeni sigurnosni problemi."
                                 : "Pregledajte stavke koje zahtijevaju pažnju."
                         }())
                         .foregroundStyle(muted)
@@ -5529,7 +5529,7 @@ struct SecurityCenterView: View {
                             SecurityProtectionRow(
                                 icon: "doc.on.doc.fill",
                                 title: "Privremeni međuspremnik",
-                                subtitle: "Osjetljivi sadržaj je local-only i istječe nakon 30 sekundi."
+                                subtitle: "Osjetljivi sadržaj uklanja se nakon 30 sekundi."
                             )
                             Divider().overlay(ice.opacity(0.14))
                             SecurityProtectionRow(
