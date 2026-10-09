@@ -1566,6 +1566,26 @@ internal fun securityIssueIds(items: List<VaultItem>): Set<String> {
 
 internal fun securityIssueCount(items: List<VaultItem>): Int = securityIssueIds(items).size
 
+internal fun categoryChoices(
+    standard: List<String>,
+    existing: List<String>,
+    selected: String
+): List<String> {
+    val other = (existing + selected).distinct()
+        .filter { it !in standard }
+        .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    return standard + other
+}
+
+internal fun resolvedCategoryName(
+    selected: String,
+    original: String?,
+    existing: List<String> = emptyList()
+): String? {
+    if ((original != null && selected == original) || selected in existing) return selected
+    return selected.trim().take(40).takeIf { it.isNotEmpty() }
+}
+
 internal fun securityScore(items: List<VaultItem>): Int? {
     val passwordItems = items.filter { it.type == "Prijava" || it.type == "Wi-Fi" }
     if (passwordItems.isEmpty()) return null
@@ -3620,10 +3640,14 @@ private fun AddScreen(model: KeyraViewModel) {
         }
     }
 
-    val categoryOptions = listOf(
-        "Osobno", "Posao", "Financije", "Društvene mreže",
-        "Kupovina", "Putovanja", "Zdravlje", "Ostalo"
-    ).let { standard -> if (category in standard) standard else standard + category }
+    val categoryOptions = categoryChoices(
+        standard = listOf(
+            "Osobno", "Posao", "Financije", "Društvene mreže",
+            "Kupovina", "Putovanja", "Zdravlje", "Ostalo"
+        ),
+        existing = model.items.map { it.category },
+        selected = category
+    )
 
     val itemLabel = when (type) {
         "Bilješka" -> "bilješku"
@@ -3862,20 +3886,33 @@ private fun AddScreen(model: KeyraViewModel) {
                 Text("Mapa / kategorija", color = Ice, fontSize = 12.sp, letterSpacing = 2.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     categoryOptions.forEach {
-                        FilterChip(selected = category == it, onClick = { category = it }, label = { Text(it.ifBlank { "Bez kategorije" }) })
+                        FilterChip(
+                            selected = category == it,
+                            onClick = { category = it },
+                            label = { Text(it.ifBlank { "Bez kategorije" }) }
+                        )
                     }
                 }
+                KeyraTextField(
+                    category,
+                    { category = it.take(40) },
+                    "Ili upišite vlastitu kategoriju",
+                    Icons.Outlined.Folder
+                )
+                Text("Naziv kategorije • najviše 40 znakova", color = Muted, fontSize = 12.sp)
             }
 
             item {
                 Button(
                     onClick = {
                         val cleanTitle = title.trim()
+                        val savedCategory = resolvedCategoryName(category, original?.category, model.items.map { it.category })
                         val now = Calendar.getInstance()
                         val currentYear = now.get(Calendar.YEAR)
                         val currentMonth = now.get(Calendar.MONTH) + 1
                         val validationMessage = when {
                             cleanTitle.isBlank() -> "Unesite naslov stavke."
+                            savedCategory == null -> "Unesite naziv kategorije."
                             type == "Prijava" && website.isNotBlank() && normalizedWebsiteUri(website) == null ->
                                 "Web-adresa nije valjana. Unesite ispravnu HTTP ili HTTPS adresu."
                             type == "Wi-Fi" && field1.isBlank() ->
@@ -3937,7 +3974,7 @@ private fun AddScreen(model: KeyraViewModel) {
                                     username = if (type == "Prijava" || type == "Wi-Fi") username.trim() else "",
                                     password = if (type == "Prijava" || type == "Wi-Fi") password else "",
                                     notes = notes.trim(),
-                                    category = category,
+                                    category = requireNotNull(savedCategory),
                                     favorite = favorite,
                                     type = type,
                                     fields = extra
@@ -4005,7 +4042,11 @@ private fun DetailScreen(
     val isPasswordItem = current.type == "Prijava" || current.type == "Wi-Fi"
     val duplicatedPassword = isPasswordItem &&
         current.password.isNotBlank() &&
-        model.items.any { it.id != current.id && it.password == current.password }
+        model.items.any {
+            it.id != current.id &&
+                (it.type == "Prijava" || it.type == "Wi-Fi") &&
+                it.password == current.password
+        }
     val securityLabel = when {
         current.type == "Autentifikator" && totpConfig != null -> "TOTP aktivan"
         current.type == "Autentifikator" -> "TOTP greška"
@@ -5125,7 +5166,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.7 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.8 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {

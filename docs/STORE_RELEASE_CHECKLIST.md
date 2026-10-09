@@ -156,7 +156,18 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [x] Ispravni RFC4648 padded/unpadded TOTP zapisi ostaju prihvaćeni; Android ima regresijske testove.
 - [x] iOS generator odmah osvježava lozinku kada korisnik promijeni duljinu klizačem.
 - [x] Uvezene kategorije dostupne su u uređivaču; prazan naziv se korisniku prikazuje kao „Bez kategorije”, bez izmjene vrijednosti u trezoru.
-- [ ] Android 0.6.7 lint, unit, build i privacy gate zeleni na završnom PR SHA-u.
-- [ ] iOS 0.6.7 build/analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
-- [ ] Oba main CI-ja zelena i GitHub release v0.6.7 s 7 artefakata objavljen.
+- [x] Android 0.6.7 lint, unit, build i privacy gate zeleni na završnom PR SHA-u `53a4223c21a0c08756900800821adbbca5c07f24`.
+- [x] iOS 0.6.7 build/analyze, simulator smoke i privacy gate zeleni na istom PR SHA-u.
+- [x] Oba main CI-ja zelena i GitHub release v0.6.7 s 7 artefakata objavljen na `0520546e8d1fdda0c953fb6d9663fe9c68f501c7`.
 - [ ] Ručni testovi na fizičkim Android/iOS uređajima uključujući stare KEYRA1/KEYRA2 kopije.
+
+## 0.6.8 vlastite kategorije i precizan sigurnosni prikaz
+- [x] Android/iOS: unos do 40 znakova omogućuje korisničke kategorije bez poslužitelja ili novog formata trezora.
+- [x] Uređivač nudi standardne kategorije te sve postojeće u trezoru, uključujući uvezene.
+- [x] Novi unos se trimma i prazan se odbija. Nepromijenjene ili odabrane postojeće uvezene vrijednosti, uključujući duge i prazne nazive, ostaju netaknute.
+- [x] Android JUnit testovi pokrivaju ponovne odabire, nazive i očuvanje uvezenih kategorija.
+- [x] Detalji prijave uspoređuju ponovno korištenje lozinke samo s prijavama i Wi-Fi stavkama.
+- [ ] Android 0.6.8 lint, unit, build, privacy uspješni na završnom PR commitu.
+- [ ] iOS 0.6.8 build/analyze, simulator launch smoke, privacy uspješni na istom SHA-u.
+- [ ] Android i iOS main CI te GitHub release workflow uspješni nakon mergea; 7 artefakata potvrđeno.
+- [ ] Ručni QA fizičkih Android/iOS uređaja i KEYRA1/KEYRA2 povrata.

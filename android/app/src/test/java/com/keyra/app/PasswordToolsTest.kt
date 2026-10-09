@@ -135,6 +135,31 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun savedCategoriesAreReusableAndPreserveImportedValues() {
+        val standard = listOf("Osobno", "Posao", "Ostalo")
+        val options = categoryChoices(
+            standard = standard,
+            existing = listOf("Posao", "Klijenti", "Projekt", "Klijenti", ""),
+            selected = "Novo"
+        )
+
+        assertEquals(listOf("Osobno", "Posao", "Ostalo", "", "Klijenti", "Novo", "Projekt"), options)
+        assertEquals("Klijenti", resolvedCategoryName("  Klijenti  ", original = null))
+        assertEquals("Posebno", resolvedCategoryName("Posebno", original = "Posao"))
+        assertEquals(null, resolvedCategoryName("  ", original = null))
+        assertEquals("", resolvedCategoryName("", original = ""))
+        assertEquals("", resolvedCategoryName("", original = null, existing = listOf("")))
+    }
+
+    @Test
+    fun customCategoryNamesAreBoundedWithoutChangingUntouchedImportedNames() {
+        val oversized = "K".repeat(60)
+        assertEquals(40, resolvedCategoryName(oversized, original = null)?.length)
+        assertEquals(oversized, resolvedCategoryName(oversized, original = oversized))
+        assertEquals(oversized, resolvedCategoryName(oversized, original = null, existing = listOf(oversized)))
+    }
+
+    @Test
     fun portableTimestampKeepsUnixMilliseconds() {
         val timestamp = 1_796_675_123_000.0
         assertEquals(timestamp.toLong(), normalizePortableUpdatedAt(timestamp, fallback = 1L))
