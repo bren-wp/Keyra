@@ -214,6 +214,8 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var importingNewVault by mutableStateOf(false)
     var isCreatingVault by mutableStateOf(false)
         private set
+    var isImportingVault by mutableStateOf(false)
+        private set
     private var sessionPassword: String? = null
     private var backgroundAt: Long? = null
 
@@ -233,6 +235,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelSetup() {
+        if (isCreatingVault || isImportingVault || isUnlockingVault) return
         importingNewVault = false
         if (!isSetup) screen = Screen.ONBOARDING
     }
@@ -281,42 +284,54 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun importNewVault(payload: String, password: String): Boolean {
-        if (password.length < 12) {
-            message = "Glavna lozinka sigurnosne kopije mora imati najmanje 12 znakova."
-            return false
+    fun importNewVault(payload: String, password: String) {
+        if (isSetup || isCreatingVault || isImportingVault) return
+        if (password.length !in 12..256) {
+            message = "Lozinka mora imati između 12 i 256 znakova."
+            return
         }
-
         if (payload.isBlank()) {
             message = "Odaberite .keyra sigurnosnu kopiju."
-            return false
+            return
         }
         if (payload.length > MAX_BACKUP_CHARS) {
-            message = "Sigurnosna kopija je prevelika za siguran uvoz."
-            return false
+            message = "Sigurnosna kopija je prevelika."
+            return
         }
 
-        val imported = runCatching {
-            val json = PortableBackup.decrypt(payload, password)
-            store.fromJson(json)
-        }.getOrElse {
-            message = "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
-            return false
+        isImportingVault = true
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                val imported = runCatching {
+                    val json = PortableBackup.decrypt(payload, password)
+                    store.fromJson(json)
+                }.getOrElse {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Sigurnosna kopija nije valjana ili lozinka nije odgovarajuća."
+                    )
+                }
+                if (runCatching { store.save(imported) }.isFailure) {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Trezor nije moguće spremiti. Provjerite slobodan prostor."
+                    )
+                }
+                if (!runCatching { auth.create(password) }.getOrDefault(false)) {
+                    runCatching { store.destroy() }
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Zaštitu glavne lozinke nije moguće spremiti."
+                    )
+                }
+                Pair<List<VaultItem>?, String>(imported, "")
+            }
+            isImportingVault = false
+            val imported = result.first
+            if (imported == null) {
+                message = result.second
+            } else {
+                finishInitialSetup(password, imported)
+                message = "Keyra trezor uspješno je uvezen."
+            }
         }
-
-        if (runCatching { store.save(imported) }.isFailure) {
-            message = "Uvezeni trezor nije moguće trajno spremiti. Postojeći podaci nisu promijenjeni."
-            return false
-        }
-        if (!auth.create(password)) {
-            store.destroy()
-            message = "Zaštitu glavne lozinke nije moguće trajno spremiti. Uvoz je poništen."
-            return false
-        }
-
-        finishInitialSetup(password, imported)
-        message = "Keyra trezor uspješno je uvezen."
-        return true
     }
 
     fun recoverInitialVault(
@@ -2239,7 +2254,7 @@ private fun UnlockScreen(
                                 else -> model.unlock(password)
                             }
                         },
-                        enabled = !model.isCreatingVault && !model.isUnlockingVault &&
+                        enabled = !model.isCreatingVault && !model.isImportingVault && !model.isUnlockingVault &&
                             (!importing || importPayload != null),
                         modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
@@ -2249,7 +2264,7 @@ private fun UnlockScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when {
-                                importing -> "Uvezi trezor"
+                                importing -> if (model.isImportingVault) "Uvoz trezora…" else "Uvezi trezor"
                                 creating -> if (model.isCreatingVault) "Izrada trezora…" else "Izradi trezor"
                                 else -> if (model.isUnlockingVault) "Otključavanje…" else "Otključaj"
                             },
