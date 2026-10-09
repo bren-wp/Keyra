@@ -5508,6 +5508,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
+                    .accessibilityIdentifier("keyra-lock-vault")
                 }
                 .padding(18)
                 .padding(.bottom, 100)
