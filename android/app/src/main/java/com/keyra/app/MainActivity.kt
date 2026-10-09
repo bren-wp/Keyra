@@ -3130,29 +3130,38 @@ private fun GeneratorScreen(model: KeyraViewModel) {
             }
             item {
                 GlassCard {
-                    Text("Zadana jačina", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Postavke lozinke", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Odaberite preset ili prilagodite duljinu i vrste znakova.", color = Muted, fontSize = 13.sp)
+
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Jednostavna", "Snažna", "Maksimalna", "Prilagodi").forEach { name ->
+                        listOf("Jednostavna", "Snažna", "Maksimalna").forEach { name ->
                             FilterChip(
                                 selected = preset == name,
-                                onClick = {
-                                    if (name == "Prilagodi") preset = name else applyPreset(name)
-                                },
+                                onClick = { applyPreset(name) },
                                 label = { Text(name) }
                             )
                         }
                     }
-                }
-            }
-            item {
-                GlassCard {
+
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Duljina lozinke", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text(length.toInt().toString(), color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Duljina", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Cyan.copy(alpha = .12f)
+                        ) {
+                            Text(
+                                length.toInt().toString(),
+                                color = Cyan,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                     Slider(
                         value = length,
@@ -3164,11 +3173,10 @@ private fun GeneratorScreen(model: KeyraViewModel) {
                         valueRange = 8f..64f,
                         steps = 55
                     )
-                }
-            }
-            item {
-                GlassCard {
-                    Text("Vrste znakova", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+                    HorizontalDivider(color = Ice.copy(alpha = .14f))
+
+                    Text("Vrste znakova", color = Color.White, fontWeight = FontWeight.SemiBold)
                     GeneratorToggle("Velika slova (A–Z)", upper) {
                         updateCharacterSet(upper, it) { value -> upper = value }
                     }
