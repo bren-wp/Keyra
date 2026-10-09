@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.8"
+        default: "0.6.9"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.8 omogućuje jednostavno stvaranje i ponovno korištenje vlastitih kategorija u Android i iOS trezoru. Uređivač nudi postojeće, uvezene i standardne kategorije te polje za vlastiti naziv (najviše 40 znakova). Novi nazivi se obrezuju, prazan unos se odbija, a nepromijenjeni povijesni nazivi, uključujući prazne i dulje nazive, čuvaju se bez prisilnog prepisivanja. Kartice Kolekcija automatski prikazuju nove kategorije. Sigurnosni prikaz pojedine prijave više ne uspoređuje lozinke s drugim vrstama zapisa. Dodani su Android regresijski testovi. Lokalna enkripcija, KEYRA1/KEYRA2 sigurnosne kopije i Recovery Key nisu mijenjani.
+          Keyra 0.6.9 poboljšava lokalne sigurnosne procjene za Android i iOS. Sigurnosni centar sada upozorava na neispravne TOTP zapise iz uvezenih trezora, uključujući neispravne algoritme, broj znamenki i intervale, umjesto da pogrešno prikazuje status 2FA aktivan. Neispravni parametri u otpauth URI-jevima više se ne zamjenjuju prešutno zadanim postavkama. Provjera lozinki prepoznaje dodatne predvidljive uzorke i ponavljanje znakova; ne koristi mrežne zahtjeve ni bazu kompromitiranih lozinki. Postotak je jasno označen kao ocjena lozinki, dok ukupna upozorenja obuhvaćaju i neispravne autentifikatore. Dodani su Android regresijski testovi. AES-256-GCM, KEYRA1/KEYRA2 i KEYRAREC1 ostaju nepromijenjeni.
 
           ## Provjere
           - Android lint i unit testovi
