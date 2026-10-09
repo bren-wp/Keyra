@@ -1811,7 +1811,8 @@ private fun OnboardingVaultHero(compact: Boolean) {
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val compact = maxHeight < 720.dp || maxWidth < 360.dp
+        val compact = maxHeight < 800.dp || maxWidth < 360.dp
+        val short = maxHeight < 590.dp
         val horizontal = if (maxWidth >= 600.dp) 72.dp else 20.dp
 
         Column(
@@ -1825,11 +1826,12 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
-                KeyraMark(if (compact) 66.dp else 84.dp)
+                Spacer(Modifier.height(if (compact) 6.dp else 16.dp))
+                KeyraMark(if (short) 50.dp else if (compact) 66.dp else 84.dp)
                 Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
                 Text(
                     "Keyra",
@@ -1846,9 +1848,9 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     maxLines = 1
                 )
 
-                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-                OnboardingVaultHero(compact)
-                Spacer(Modifier.height(if (compact) 14.dp else 22.dp))
+                Spacer(Modifier.height(if (compact) 7.dp else 12.dp))
+                if (!short) OnboardingVaultHero(compact)
+                Spacer(Modifier.height(if (compact) 9.dp else 18.dp))
                 Text(
                     "Sigurniji način upravljanja lozinkama",
                     modifier = Modifier.fillMaxWidth(),
@@ -1863,26 +1865,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     fontSize = if (compact) 14.sp else 16.sp
                 )
 
-                Spacer(Modifier.height(if (compact) 12.dp else 18.dp))
-                FeatureCard(
-                    Icons.Outlined.Lock,
-                    "Potpuno šifrirano",
-                    "Vaši podaci ostaju na vašem uređaju.",
-                    compact
-                )
-                FeatureCard(
-                    Icons.Outlined.Fingerprint,
-                    "Privatnost u osnovi",
-                    "Stvoreno za vaš mir.",
-                    compact
-                )
-                FeatureCard(
-                    Icons.Outlined.PhoneAndroid,
-                    "Radi svugdje",
-                    "Pregledno na Androidu i iOS-u.",
-                    compact
-                )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
             }
 
             Column(
