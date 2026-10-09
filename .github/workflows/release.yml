@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.15"
+        default: "0.6.16"
 
 permissions:
   contents: write
@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.15 sprječava dovršetak zastarjelih zahtjeva za otključavanje nakon što aplikacija ode u pozadinu ili korisnik zaključa trezor. Android i iOS provjeravaju valjanost asinkronih rezultata provjere glavne lozinke, izrade i uvoza trezora prije otvaranja sesije. iOS dodatno provjerava rezultate biometrijske autentifikacije, a Android veže biometrijski povratni poziv uz istu sesiju. Uspješno stvoren ili uvezen trezor čuva se šifriran, ali ne otvara automatski ako je aplikacija u međuvremenu napustila aktivnu sesiju. Android JUnit regresijski test pokriva pozadinski i zastarjeli povratni rezultat. KEYRA1/KEYRA2/KEYRAREC1, algoritmi šifriranja i postojeće kopije ostaju nepromijenjeni. CI build i simulator launch smoke nisu zamjena za ručni test unosa lozinke i biometrije na fizičkom uređaju.
+          Keyra 0.6.16 donosi sigurniji i brži postupak prve obnove trezora na Androidu i iOS-u. Kriptografski zahtjevna provjera Recovery Key i KEYRA2 sigurnosne kopije više ne blokira glavnu korisničku nit, prikaz obnove ima jasan status, a višestruki zahtjevi su onemogućeni. iOS sada čita vanjske datoteke ograničenim nizom bajtova prije dekodiranja, pa preveliki dokument ne mora biti učitan u cijelosti. Android strogo odbija neispravan UTF-8 pri uvozu te ne prekida Unicode surrogate par pri ograničavanju nove glavne lozinke. Dodani su Android regresijski testovi, a README je potpuno redizajniran na engleskom uz postojeće stvarne Keyra ilustracije, marketinški pregled, instalacijske upute i transparentne informacije o privatnosti. Format šifriranja i KEYRA1/KEYRA2/KEYRAREC1 ostaju nepromijenjeni; fizički uređaji, prijavljeno rušenje pri tipkanju i produkcijski potpisani paketi zahtijevaju zasebnu potvrdu.
 
           ## Provjere
           - Android lint i unit testovi
