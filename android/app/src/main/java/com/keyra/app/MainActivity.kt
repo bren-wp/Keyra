@@ -2503,6 +2503,7 @@ private fun VaultScreen(model: KeyraViewModel) {
             search, { search = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
             placeholder = { Text("Pretražite svoj trezor...") },
+            singleLine = true,
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = if (search.isNotBlank()) {
                 {
@@ -2628,7 +2629,7 @@ private fun VaultScreen(model: KeyraViewModel) {
             FilledIconButton(
                 onClick = model::addNew,
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Cyan, contentColor = Midnight)
-            ) { Icon(Icons.Outlined.Add, null) }
+            ) { Icon(Icons.Outlined.Add, contentDescription = "Dodaj stavku") }
         }
 
         LazyColumn(
@@ -2671,6 +2672,12 @@ private fun VaultScreen(model: KeyraViewModel) {
                                 Spacer(Modifier.width(6.dp))
                                 Text("Dodaj prvu stavku", fontWeight = FontWeight.Bold)
                             }
+                        } else {
+                            Button(
+                                onClick = { search = ""; filter = "Sve"; model.clearVaultCategoryFilter() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
+                                shape = RoundedCornerShape(24.dp)
+                            ) { Text("Očisti filtre", fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
@@ -2724,11 +2731,13 @@ private fun VaultRow(item: VaultItem, duplicated: Boolean, onClick: () -> Unit) 
     val isPasswordItem = item.type == "Prijava" || item.type == "Wi-Fi"
     val stateColor = when {
         duplicated -> Danger
+        isPasswordItem && item.password.isBlank() -> Warn
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> Warn
         else -> Good
     }
     val state = when {
         duplicated -> "Ponovno korištena"
+        isPasswordItem && item.password.isBlank() -> "Bez lozinke"
         isPasswordItem && item.password.isNotBlank() && !isStrongPassword(item.password) -> "Potrebno ažuriranje"
         item.type == "Bilješka" -> "Zaštićena"
         item.type == "Kartica" -> "Zaštićena"
@@ -2947,7 +2956,19 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 18.dp)
             ) {
-                items(categories.chunked(if (narrow) 1 else 2)) { group ->
+                if (collectionItems.isEmpty() && (search.isNotBlank() || type != "Sve")) {
+                    item {
+                        GlassCard {
+                            Text("Nema rezultata", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Promijenite pretragu ili odaberite drugi tip.", color = Muted)
+                            Button(
+                                onClick = { search = ""; type = "Sve" },
+                                colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight)
+                            ) { Text("Očisti filtre") }
+                        }
+                    }
+                } else {
+                    items(categories.chunked(if (narrow) 1 else 2)) { group ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         group.forEach { (name, accent) ->
                             val count = collectionItems.count { it.category == name }
@@ -2995,6 +3016,7 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                             }
                         }
                         if (!narrow && group.size == 1) Spacer(Modifier.weight(1f))
+                    }
                     }
                 }
 
@@ -5056,7 +5078,7 @@ private fun SettingsScreen(
                 SettingRow(
                     Icons.Outlined.Info,
                     "O aplikaciji Keyra",
-                    "Verzija 0.6.4 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                    "Verzija 0.6.5 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                 )
             }
             item {
@@ -5370,13 +5392,18 @@ private fun SecurityScreen(model: KeyraViewModel) {
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = Good.copy(alpha=.10f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Good.copy(alpha=.55f))
+                        color = if (passwordItems.isEmpty()) Slate2 else Good.copy(alpha=.10f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, (if (passwordItems.isEmpty()) Ice else Good).copy(alpha=.45f))
                     ) {
                         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.VerifiedUser, null, tint = Good)
+                            Icon(if (passwordItems.isEmpty()) Icons.Outlined.Info else Icons.Outlined.VerifiedUser, null,
+                                tint = if (passwordItems.isEmpty()) Ice else Good)
                             Spacer(Modifier.width(12.dp))
-                            Text("Nisu pronađene slabe ili ponovljene lozinke.", color = Color.White)
+                            Text(
+                                if (passwordItems.isEmpty()) "Nema spremljenih lozinki za provjeru."
+                                else "Nisu pronađene slabe ili ponovljene lozinke.",
+                                color = Color.White
+                            )
                         }
                     }
                 }
