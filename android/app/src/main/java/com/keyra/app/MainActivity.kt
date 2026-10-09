@@ -433,11 +433,6 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             message = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
             return
         }
-        if (password.length > 256) {
-            message = "Glavna lozinka ne smije biti dulja od 256 znakova."
-            return
-        }
-
         isUnlockingVault = true
         viewModelScope.launch {
             val verified = withContext(Dispatchers.IO) {
