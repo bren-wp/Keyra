@@ -2463,6 +2463,7 @@ internal fun isStrongPassword(password: String): Boolean {
 
 @Composable
 private fun VaultScreen(model: KeyraViewModel) {
+    var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(model.vaultTypeFilter ?: "Sve") }
     var newestFirst by remember { mutableStateOf(true) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
@@ -4742,7 +4743,6 @@ private fun SettingsScreen(
     requestBiometric: (String, () -> Unit) -> Unit
 ) {
     val context = LocalContext.current
-    var search by remember { mutableStateOf("") }
     var confirmErase by remember { mutableStateOf(false) }
     var pendingFileImport by remember { mutableStateOf<Uri?>(null) }
     var pendingRecoveryExport by remember { mutableStateOf<Uri?>(null) }
