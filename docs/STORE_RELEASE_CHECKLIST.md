@@ -308,10 +308,10 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 ## 0.6.20 verified local wipe and clipboard ownership
 
 - [x] iOS: encrypted vault file removal now returns a verified result; failure is reported and Keychain keys are kept for retry rather than reporting a successful complete erase.
-- [x] Android: stage vault removal, verifier cleanup and preference cleanup; stop at the first failed stage and preserve later credentials/settings for retry.
+- [x] Android: stage vault removal, verifier cleanup and preference cleanup; encrypted vault removal **short-circuits** key deletion on failure, preserving later credentials/settings for retry.
 - [x] Both apps: after a successful complete local wipe, attempt to clear only clipboard contents still owned by Keyra; never erase another app's newer clipboard write.
 - [x] Android: clipboard expiry retains an ephemeral random HMAC-SHA256 key/tag rather than an additional plaintext password in a process-static variable, and zeroes those bytes after use.
-- [x] Android JUnit tests cover same content, changed contents, foreign clipboard source, altered ownership key and absent clips.
+- [x] Android JUnit tests cover same content, changed contents, foreign clipboard source, altered ownership key and absent clips, plus vault-before-key erasure order and failure short-circuiting.
 - [ ] PR Android lint/JUnit/build/privacy CI succeeds on final v0.6.20 HEAD SHA.
 - [ ] PR iOS build/analyze/simulator/privacy CI succeeds on same final HEAD SHA.
 - [ ] Both main CI runs, release workflow and seven published v0.6.20 files are verified.
