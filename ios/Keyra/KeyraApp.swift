@@ -2517,6 +2517,12 @@ struct RecoverySetupView: View {
                         }
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .onChange(of: newPassword) { _, value in
+                            if value.count > 256 { newPassword = String(value.prefix(256)) }
+                        }
+                        .onChange(of: confirmPassword) { _, value in
+                            if value.count > 256 { confirmPassword = String(value.prefix(256)) }
+                        }
                         .padding(14)
                         .background(slate2)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -2547,7 +2553,11 @@ struct RecoverySetupView: View {
                             )
                         } label: {
                             HStack {
-                                Image(systemName: "arrow.clockwise.circle.fill")
+                                if store.isRecoveringVault {
+                                    ProgressView().tint(midnight)
+                                } else {
+                                    Image(systemName: "arrow.clockwise.circle.fill")
+                                }
                                 Text(store.isRecoveringVault ? "Obnova trezora…" : "Obnovi trezor").fontWeight(.bold)
                             }
                             .frame(maxWidth: .infinity)
