@@ -334,7 +334,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.17 dodatno štiti biometrijske potvrde: zakašnjeli pozivi ne mogu izvršiti osjetljivu radnju nakon zaključavanja trezora, pozadinskog rada, promjene zaslona ili promjene odabrane stavke. Android ima nove regresijske testove sigurnosti zahtjeva. Obje platforme prikazuju stvarnu instaliranu verziju u opciji O aplikaciji, poboljšani su indikatori napretka pri otključavanju i pristupačnost tipki za otkrivanje lozinke. Formati sigurnosnih kopija KEYRA1/KEYRA2 i Recovery Key KEYRAREC1 nisu mijenjani. Rušenje pri tipkanju glavne lozinke navedeno u issue #25 i dalje zahtijeva reprodukciju i provjeru na fizičkom uređaju.
+          Keyra 0.6.18 poboljšava odzivnost i pouzdanost opcija za šifrirane sigurnosne kopije: Android i iOS obavljaju PBKDF2 šifriranje, dešifriranje i čitanje sigurnosne kopije izvan glavne UI niti. Uvoz se primjenjuje samo u istoj aktivnoj i otključanoj sesiji, pa zakašnjela obrada nakon zaključavanja, brisanja ili promjene zaslona ne prepisuje trezor. Za vrijeme obrade prikazuju se indikatori napretka i sprječavaju višestruke paralelne radnje. Android dodatno pokušava odmah očistiti vlastiti osjetljivi međuspremnik pri napuštanju aktivnosti i nakon 30 sekundi, bez brisanja tuđeg kopiranog teksta; dodan je regresijski test. Format šifriranja i KEYRA1/KEYRA2/KEYRAREC1 kompatibilnost nisu mijenjani. Brisanje međuspremnika ovisi o pravilima sustava, a reprodukcija tipkovničkog pada #25 i ručno ispitivanje na stvarnim uređajima ostaju otvoreni QA zadaci.
 
           ## Provjere
           - Android lint i unit testovi
