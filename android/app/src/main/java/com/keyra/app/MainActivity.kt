@@ -2884,11 +2884,6 @@ private fun CollectionsScreen(model: KeyraViewModel) {
             ).joinToString(" ").contains(search, true)
         }
 
-    val recentNotes = model.items
-        .filter { it.type == "Bilješka" && (search.isBlank() || it.title.contains(search, true) || it.notes.contains(search, true)) }
-        .sortedByDescending { it.updatedAt }
-        .take(3)
-
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val narrow = maxWidth < 370.dp
         val side = if (narrow) 14.dp else 18.dp
@@ -3002,33 +2997,6 @@ private fun CollectionsScreen(model: KeyraViewModel) {
                     }
                 }
 
-                item {
-                    Spacer(Modifier.height(6.dp))
-                    Text("Nedavne bilješke", color = Color.White, fontSize = if (narrow) 22.sp else 25.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Vaše najnovije bilješke i sigurne informacije.", color = Muted, fontSize = if (narrow) 13.sp else 14.sp)
-                }
-
-                items(recentNotes) { noteItem ->
-                    Surface(
-                        Modifier.fillMaxWidth().clickable { model.select(noteItem) },
-                        shape = RoundedCornerShape(18.dp),
-                        color = Slate
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Description, null, tint = Indigo)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(noteItem.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                                Text(noteItem.notes, color = Muted, maxLines = 1)
-                            }
-                            Icon(Icons.Outlined.MoreVert, null, tint = Muted)
-                        }
-                    }
-                }
-
-                if (recentNotes.isEmpty()) {
-                    item { Text("Još nema sigurnih bilješki.", color = Muted, modifier = Modifier.padding(vertical = 18.dp)) }
-                }
             }
         }
     }
