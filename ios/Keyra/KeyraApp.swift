@@ -2253,13 +2253,13 @@ struct OnboardingView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let compact = proxy.size.height < 720 || proxy.size.width < 360
+            let compact = proxy.size.height < 800 || proxy.size.width < 360
+            let short = proxy.size.height < 590
 
             VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: compact ? 7 : 11) {
-                        KeyraMark(size: compact ? 64 : 82)
-                            .padding(.top, compact ? 8 : 18)
+                VStack(spacing: compact ? 7 : 11) {
+                        KeyraMark(size: short ? 50 : (compact ? 64 : 82))
+                            .padding(.top, compact ? 6 : 14)
 
                         Text("Keyra")
                             .font(.system(size: compact ? 34 : 42, weight: .black, design: .rounded))
@@ -2273,8 +2273,10 @@ struct OnboardingView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
 
-                        OnboardingVaultHero(compact: compact)
-                            .padding(.top, compact ? 3 : 7)
+                        if !short {
+                            OnboardingVaultHero(compact: compact)
+                                .padding(.top, compact ? 3 : 7)
+                        }
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
                             Text("Sigurniji način upravljanja lozinkama")
@@ -2288,28 +2290,10 @@ struct OnboardingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, compact ? 6 : 12)
 
-                        FeatureCard(
-                            icon: "lock.fill",
-                            title: "Potpuno šifrirano",
-                            subtitle: "Vaši podaci ostaju na vašem uređaju.",
-                            compact: compact
-                        )
-                        FeatureCard(
-                            icon: "faceid",
-                            title: "Privatnost u osnovi",
-                            subtitle: "Stvoreno za vaš mir.",
-                            compact: compact
-                        )
-                        FeatureCard(
-                            icon: "rectangle.on.rectangle",
-                            title: "Radi svugdje",
-                            subtitle: "Pregledno na Androidu i iOS-u.",
-                            compact: compact
-                        )
+
                     }
-                    .padding(.horizontal, compact ? 16 : 22)
-                    .padding(.bottom, 8)
-                }
+                .padding(.horizontal, compact ? 16 : 22)
+                .frame(maxHeight: .infinity)
 
                 VStack(spacing: 8) {
                     Button {
