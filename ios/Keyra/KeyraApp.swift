@@ -1184,6 +1184,17 @@ struct KeyraBackupDocument: FileDocument {
     }
 }
 
+func cardExpiryNeedsAttention(_ expiry: String, now: Date = Date()) -> Bool {
+    !expiry.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !isCardExpiryNotPast(expiry, now: now)
+}
+
+func expiredCardIssueIDs(_ items: [VaultItem], now: Date = Date()) -> Set<UUID> {
+    Set(items.filter {
+        $0.kind == "Kartica" && cardExpiryNeedsAttention($0.extraFields["Vrijedi do"] ?? "", now: now)
+    }.map(\.id))
+}
+
 func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
     let passwordItems = items.filter { $0.kind == "Prijava" || $0.kind == "Wi-Fi" }
     let duplicateIDs = Set(
@@ -1196,7 +1207,7 @@ func securityIssueIDs(_ items: [VaultItem]) -> Set<UUID> {
     let invalidTotpIDs = Set(items.filter {
         $0.kind == "Autentifikator" && totpConfigFromFields($0.extraFields) == nil
     }.map(\.id))
-    return duplicateIDs.union(weakIDs).union(invalidTotpIDs)
+    return duplicateIDs.union(weakIDs).union(invalidTotpIDs).union(expiredCardIssueIDs(items))
 }
 
 func securityIssueCount(_ items: [VaultItem]) -> Int {
@@ -3164,6 +3175,9 @@ struct VaultRow: View {
     private var isPasswordItem: Bool { item.kind == "Prijava" || item.kind == "Wi-Fi" }
 
     private var state: (String, Color) {
+        if item.kind == "Kartica" && cardExpiryNeedsAttention(item.extraFields["Vrijedi do"] ?? "") {
+            return ("Provjeri istek", warn)
+        }
         if item.kind == "Autentifikator" && totpConfigFromFields(item.extraFields) == nil {
             return ("TOTP greška", danger)
         }
@@ -4266,7 +4280,10 @@ struct DetailView: View {
                     ($0.kind == "Prijava" || $0.kind == "Wi-Fi") &&
                     $0.password == item.password
                 }
+            let expiryAttention = item.kind == "Kartica" &&
+                cardExpiryNeedsAttention(item.extraFields["Vrijedi do"] ?? "")
             let securityLabel: String = {
+                if expiryAttention { return "Provjeri istek" }
                 if item.kind == "Autentifikator", totpConfig != nil { return "TOTP aktivan" }
                 if item.kind == "Autentifikator" { return "TOTP greška" }
                 if isPasswordItem && item.password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Bez lozinke" }
@@ -4279,7 +4296,7 @@ struct DetailView: View {
                 switch securityLabel {
                 case "Snažna", "Zaštićena", "TOTP aktivan": return good
                 case "Ponovno korištena", "TOTP greška": return danger
-                case "Potrebno ažuriranje": return warn
+                case "Potrebno ažuriranje", "Provjeri istek": return warn
                 default: return muted
                 }
             }()
@@ -4657,6 +4674,9 @@ struct DetailView: View {
                                     .font(.title2.bold())
                                     .foregroundStyle(securityColor)
                                 Text({
+                                    if expiryAttention {
+                                        return "Datum isteka kartice je prošao ili je neispravan. Provjerite karticu i ažurirajte podatke."
+                                    }
                                     if duplicatedPassword {
                                         return "Ova se lozinka koristi i na drugoj stavci. Preporučujemo jedinstvenu lozinku."
                                     }
@@ -5213,7 +5233,7 @@ struct SettingsView: View {
                     SettingRow(
                         icon: "info.circle",
                         title: "O aplikaciji Keyra",
-                        subtitle: "Verzija 0.6.11 • Vaši ključevi. Vaši podaci. Uvijek vaši."
+                        subtitle: "Verzija 0.6.12 • Vaši ključevi. Vaši podaci. Uvijek vaši."
                     )
 
                     Button {
@@ -5438,13 +5458,18 @@ struct SecurityCenterView: View {
         store.items.filter { $0.kind == "Autentifikator" && totpConfigFromFields($0.extraFields) == nil }
     }
 
+    private var expiredCardItems: [VaultItem] {
+        let ids = expiredCardIssueIDs(store.items)
+        return store.items.filter { ids.contains($0.id) }
+    }
+
     private var score: Int? {
         securityScore(store.items)
     }
 
     private var issues: [VaultItem] {
         Array(Dictionary(uniqueKeysWithValues:
-            (weakItems + store.items.filter { duplicateIDs.contains($0.id) } + invalidTotpItems).map { ($0.id, $0) }
+            (weakItems + store.items.filter { duplicateIDs.contains($0.id) } + invalidTotpItems + expiredCardItems).map { ($0.id, $0) }
         ).values)
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
@@ -5460,21 +5485,21 @@ struct SecurityCenterView: View {
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
                             Text(score.map(String.init) ?? "—")
                                 .font(.system(size: 54, weight: .black))
-                                .foregroundStyle(score == nil ? muted : (issues.isEmpty ? good : warn))
+                                .foregroundStyle(score == nil ? muted : (score == 100 ? good : warn))
                             Text("/100")
                                 .font(.headline)
                                 .foregroundStyle(muted)
                         }
                         ProgressView(value: Double(score ?? 0), total: 100)
-                            .tint(score == nil ? muted : (issues.isEmpty ? good : warn))
+                            .tint(score == nil ? muted : (score == 100 ? good : warn))
                         Text({
                             guard let score else {
                                 return issues.isEmpty
                                     ? "Dodajte barem jednu lozinku kako bi Keyra mogla izračunati ocjenu."
-                                    : "Nema lozinki za ocjenu. Provjerite neispravne 2FA stavke."
+                                    : "Nema lozinki za ocjenu. Provjerite upozorenja za 2FA i kartice."
                             }
                             return issues.isEmpty
-                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke ni 2FA pogreške."
+                                ? "Prema lokalnoj provjeri nisu pronađene rizične lozinke, 2FA pogreške ni istekle kartice."
                                 : "Pregledajte stavke koje zahtijevaju pažnju."
                         }())
                         .foregroundStyle(muted)
@@ -5540,6 +5565,9 @@ struct SecurityCenterView: View {
                                         Text({
                                             let duplicate = duplicateIDs.contains(item.id)
                                             let weak = !isStrongPassword(item.password)
+                                            if item.kind == "Kartica" {
+                                                return "Datum isteka kartice je prošao ili je neispravan. Uredite karticu."
+                                            }
                                             if item.kind == "Autentifikator" {
                                                 return "Neispravna 2FA tajna ili postavke. Uredite autentifikator."
                                             }
