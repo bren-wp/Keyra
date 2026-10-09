@@ -2487,6 +2487,7 @@ struct OnboardingView: View {
                     .foregroundStyle(midnight)
                     .background(cyan)
                     .clipShape(Capsule())
+                    .accessibilityIdentifier("keyra-first-run-create")
 
                     Button {
                         store.startImport()
@@ -2809,14 +2810,14 @@ struct UnlockView: View {
                     )
                     .foregroundStyle(muted)
 
-                    SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal)
+                    SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal, testIdentifier: "keyra-master-password")
                         .onChange(of: password) { _, value in
                             if creating && !importing && value.count > 256 {
                                 password = String(value.prefix(256))
                             }
                         }
                     if creating && !importing {
-                        SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal)
+                        SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
                             .onChange(of: confirm) { _, value in
                                 if value.count > 256 { confirm = String(value.prefix(256)) }
                             }
@@ -2873,6 +2874,7 @@ struct UnlockView: View {
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
                     .disabled(store.isCreatingVault || store.isImportingVault || store.isUnlockingVault || (importing && importPayload == nil))
+                    .accessibilityIdentifier("keyra-submit-master-password")
 
                     if creating {
                         Button {
@@ -2935,6 +2937,8 @@ struct SecretField: View {
     let title: String
     @Binding var text: String
     @Binding var reveal: Bool
+    var testIdentifier: String? = nil
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -2951,8 +2955,17 @@ struct SecretField: View {
             }
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .textContentType(.password)
+            .focused($isFocused)
+            .accessibilityIdentifier(testIdentifier ?? "keyra-secret-field")
 
-            Button { reveal.toggle() } label: {
+            Button {
+                let restoreFocus = isFocused
+                reveal.toggle()
+                if restoreFocus {
+                    DispatchQueue.main.async { isFocused = true }
+                }
+            } label: {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
                     .frame(width: 32, height: 32)
@@ -2961,6 +2974,7 @@ struct SecretField: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(reveal ? "Sakrij \(title)" : "Prikaži \(title)")
+            .accessibilityIdentifier("keyra-toggle-" + title)
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 56)
@@ -3040,6 +3054,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("keyra-nav-" + title)
     }
 }
 
