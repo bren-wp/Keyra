@@ -14,8 +14,9 @@ android {
         applicationId = "com.keyra.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.6.20"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 27
+        versionName = "0.6.21"
     }
 
     buildFeatures { compose = true }
@@ -48,4 +49,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.biometric:biometric:1.1.0")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.01.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

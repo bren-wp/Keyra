@@ -54,6 +54,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -2033,7 +2034,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
             ) {
                 Button(
                     onClick = model::startCreate,
-                    modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 58.dp),
+                    modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 58.dp).testTag("keyra-first-run-create"),
                     colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                     shape = RoundedCornerShape(28.dp)
                 ) {
@@ -2367,13 +2368,15 @@ private fun UnlockScreen(
                     KeyraPasswordField(
                         password,
                         { password = if (creating && !importing) boundedNewMasterPasswordInput(it) else it },
-                        show, { show = !show }, "Glavna lozinka"
+                        show, { show = !show }, "Glavna lozinka",
+                        testTag = "keyra-master-password"
                     )
                     if (creating && !importing) {
                         Spacer(Modifier.height(10.dp))
                         KeyraPasswordField(
                             confirm, { confirm = boundedNewMasterPasswordInput(it) },
-                            show, { show = !show }, "Ponovite glavnu lozinku"
+                            show, { show = !show }, "Ponovite glavnu lozinku",
+                            testTag = "keyra-confirm-master-password"
                         )
                         Text("Glavna lozinka: najmanje 12 znakova.", color = Muted, fontSize = 12.sp)
                     }
@@ -2407,7 +2410,8 @@ private fun UnlockScreen(
                         },
                         enabled = !model.isCreatingVault && !model.isImportingVault && !model.isUnlockingVault &&
                             (!importing || importPayload != null),
-                        modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp),
+                        modifier = Modifier.fillMaxWidth().height(if (compact) 52.dp else 56.dp)
+                            .testTag("keyra-submit-master-password"),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(28.dp)
                     ) {
@@ -2472,16 +2476,22 @@ private fun KeyraPasswordField(
     show: Boolean,
     toggle: () -> Unit,
     label: String,
-    numeric: Boolean = false
+    numeric: Boolean = false,
+    testTag: String? = null
 ) {
+    // Preserve a stable transformation between keystrokes to avoid needless IME
+    // restarts while the first-run password field is recomposed.
+    val masked = remember { PasswordVisualTransformation() }
+    val fieldModifier = if (testTag == null) Modifier.fillMaxWidth()
+        else Modifier.fillMaxWidth().testTag(testTag)
     OutlinedTextField(
         value = value,
         onValueChange = onValue,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = fieldModifier,
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.NumberPassword else KeyboardType.Password),
-        visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+        visualTransformation = if (show) VisualTransformation.None else masked,
         trailingIcon = {
             IconButton(onClick = toggle) {
                 Icon(
@@ -2607,7 +2617,8 @@ private fun RowScope.NavItem(
                 color = if (selected) Cyan.copy(alpha = .38f) else Color.Transparent,
                 shape = RoundedCornerShape(18.dp)
             )
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .testTag("keyra-nav-" + label),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -5259,7 +5270,7 @@ private fun SettingsScreen(
         BrandHeader("POSTAVKE", securityIssueCount(model.items), { model.open(Screen.SECURITY) }, { model.open(Screen.SETTINGS) })
 
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            Modifier.fillMaxSize().padding(horizontal = 18.dp).testTag("keyra-settings-list"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
         ) {
@@ -5448,7 +5459,7 @@ private fun SettingsScreen(
             item {
                 OutlinedButton(
                     onClick = model::lock,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("keyra-lock-vault"),
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Outlined.Logout, null)

@@ -445,6 +445,8 @@ struct VaultItem: Identifiable, Codable, Equatable {
 enum KeyraError: Error {
     case invalidData
     case keyUnavailable
+    // OSStatus is safe to show only in DEBUG diagnostics; never log Keychain data.
+    case keychainStatus(OSStatus)
     case invalidBackup
 }
 
@@ -587,7 +589,7 @@ enum KeychainVault {
             return
         }
         guard updateStatus == errSecItemNotFound, allowInsert else {
-            throw KeyraError.keyUnavailable
+            throw KeyraError.keychainStatus(updateStatus)
         }
 
         var add = query
@@ -595,7 +597,7 @@ enum KeychainVault {
         add[kSecValueData as String] = data
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
-            throw KeyraError.keyUnavailable
+            throw KeyraError.keychainStatus(addStatus)
         }
     }
 
@@ -1389,14 +1391,35 @@ final class KeyraStore: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let saved: Bool
+            let failureMessage: String?
             do {
                 try self.vault.save([])
                 saved = self.auth.create(password: password)
+                failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
             } catch {
                 saved = false
+                // Distinguish a Keychain entitlement/protection failure from
+                // filesystem write failures without disclosing any secrets.
+                switch error {
+                case KeyraError.keychainStatus(let status):
+                    #if DEBUG
+                    failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain. [OSStatus:\(status)]"
+                    #else
+                    failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain."
+                    #endif
+                case KeyraError.keyUnavailable:
+                    failureMessage = "Zaštitni ključ trezora trenutno nije dostupan."
+                default:
+                    #if DEBUG
+                    let diagnostic = error as NSError
+                    failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj. [\(diagnostic.domain):\(diagnostic.code)]"
+                    #else
+                    failureMessage = "Šifriranu datoteku trezora nije moguće spremiti na uređaj."
+                    #endif
+                }
             }
             if !saved {
-                self.vault.clear()
+                _ = self.vault.clear()
             }
             DispatchQueue.main.async {
                 self.isCreatingVault = false
@@ -1406,7 +1429,9 @@ final class KeyraStore: ObservableObject {
                         allowUnlock: self.canFinishAuthentication(requestEpoch)
                     )
                 } else {
-                    self.message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+                    // Distinguish storage vs. verifier failures without exposing
+                    // any password, Keychain secret, ciphertext or exception text.
+                    self.message = failureMessage ?? "Trezor nije moguće izraditi."
                 }
             }
         }
@@ -2487,6 +2512,7 @@ struct OnboardingView: View {
                     .foregroundStyle(midnight)
                     .background(cyan)
                     .clipShape(Capsule())
+                    .accessibilityIdentifier("keyra-first-run-create")
 
                     Button {
                         store.startImport()
@@ -2809,14 +2835,14 @@ struct UnlockView: View {
                     )
                     .foregroundStyle(muted)
 
-                    SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal)
+                    SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal, testIdentifier: "keyra-master-password")
                         .onChange(of: password) { _, value in
                             if creating && !importing && value.count > 256 {
                                 password = String(value.prefix(256))
                             }
                         }
                     if creating && !importing {
-                        SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal)
+                        SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
                             .onChange(of: confirm) { _, value in
                                 if value.count > 256 { confirm = String(value.prefix(256)) }
                             }
@@ -2873,6 +2899,7 @@ struct UnlockView: View {
                     .background(importing && importPayload == nil ? cyan.opacity(0.35) : cyan)
                     .clipShape(Capsule())
                     .disabled(store.isCreatingVault || store.isImportingVault || store.isUnlockingVault || (importing && importPayload == nil))
+                    .accessibilityIdentifier("keyra-submit-master-password")
 
                     if creating {
                         Button {
@@ -2935,6 +2962,8 @@ struct SecretField: View {
     let title: String
     @Binding var text: String
     @Binding var reveal: Bool
+    var testIdentifier: String? = nil
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -2951,8 +2980,17 @@ struct SecretField: View {
             }
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .textContentType(.password)
+            .focused($isFocused)
+            .accessibilityIdentifier(testIdentifier ?? "keyra-secret-field")
 
-            Button { reveal.toggle() } label: {
+            Button {
+                let restoreFocus = isFocused
+                reveal.toggle()
+                if restoreFocus {
+                    DispatchQueue.main.async { isFocused = true }
+                }
+            } label: {
                 Image(systemName: reveal ? "eye.slash" : "eye")
                     .foregroundStyle(ice)
                     .frame(width: 32, height: 32)
@@ -2961,6 +2999,7 @@ struct SecretField: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(reveal ? "Sakrij \(title)" : "Prikaži \(title)")
+            .accessibilityIdentifier("keyra-toggle-" + title)
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 56)
@@ -3040,6 +3079,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("keyra-nav-" + title)
     }
 }
 
@@ -5493,6 +5533,7 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
+                    .accessibilityIdentifier("keyra-lock-vault")
                 }
                 .padding(18)
                 .padding(.bottom, 100)
