@@ -1285,7 +1285,12 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
     }
 
     fun load(): List<VaultItem>? {
-        val blob = prefs.getString("vault_blob", null) ?: return emptyList()
+        // A persisted password verifier is not proof the encrypted vault blob
+        // still exists. Never display a fabricated empty vault on unlock: a
+        // subsequent save could mask storage loss. New empty vaults persist "[]"
+        // as an encrypted blob during createVault().
+        val blob = prefs.getString("vault_blob", null)?.takeIf { it.isNotBlank() }
+            ?: return null
         return runCatching {
             if (crypto.hasPortableKey()) {
                 fromJson(crypto.decrypt(blob))
