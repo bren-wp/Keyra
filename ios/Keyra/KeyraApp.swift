@@ -1518,10 +1518,14 @@ final class KeyraStore: ObservableObject {
                     throw KeyraDocumentError.invalidOrOversized
                 }
 
+                var beganInstalling = false
                 do {
+                    // Do not delete the verifier or Keychain encryption key
+                    // while an old encrypted vault file may still exist.
+                    guard self.vault.clear() else { throw KeyraDocumentError.invalidOrOversized }
                     guard self.auth.clear() else { throw KeyraDocumentError.invalidOrOversized }
-                    self.vault.clear()
                     guard KeychainVault.clear() else { throw KeyraDocumentError.invalidOrOversized }
+                    beganInstalling = true
                     _ = try self.vault.installRecoveryKey(rawKey)
                     try self.vault.save(imported)
                     guard self.auth.create(password: newPassword) else {
@@ -1529,9 +1533,12 @@ final class KeyraStore: ObservableObject {
                     }
                     outcome = (imported, "")
                 } catch {
-                    self.vault.clear()
-                    _ = KeychainVault.clear()
-                    _ = self.auth.clear()
+                    // Only clean up an installation we actually started; if
+                    // deletion fails, keep the encryption key for safe retry.
+                    if beganInstalling && self.vault.clear() {
+                        _ = self.auth.clear()
+                        _ = KeychainVault.clear()
+                    }
                     outcome = (nil, "Obnova nije dovršena. Provjerite zaštitu i slobodan prostor uređaja.")
                 }
             } catch {
