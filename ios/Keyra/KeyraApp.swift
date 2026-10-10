@@ -822,7 +822,10 @@ final class EncryptedVault {
             data = legacy
             migratedFromDefaults = true
         } else {
-            return []
+            // Empty new vaults are stored as encrypted [] during creation.
+            // Missing persisted ciphertext while a verifier exists indicates
+            // missing/corrupt storage, not a valid empty vault.
+            throw KeyraError.invalidData
         }
 
         let box = try AES.GCM.SealedBox(combined: data)
