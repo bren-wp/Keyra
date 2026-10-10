@@ -1,5 +1,6 @@
 package com.keyra.app
 
+import android.content.Context
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -14,6 +15,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.lifecycle.ViewModelProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,5 +106,34 @@ class MasterPasswordEntryInstrumentedTest {
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
         waitFor("keyra-nav-Postavke", 60_000)
         compose.onNodeWithTag("keyra-nav-Postavke").assertExists()
+
+        // Simulate the verifier surviving while the persisted encrypted blob
+        // is missing. This test only uses the fresh emulator's synthetic vault.
+        // Previously this scenario silently opened an empty vault.
+        compose.runOnIdle {
+            val prefs = compose.activity.getSharedPreferences("keyra", Context.MODE_PRIVATE)
+            assertTrue("Synthetic encrypted vault must exist before fault injection", prefs.contains("vault_blob"))
+            assertTrue("Fault injection must delete only the encrypted blob", prefs.edit().remove("vault_blob").commit())
+        }
+
+        compose.onNodeWithTag("keyra-nav-Postavke").performClick()
+        waitFor("keyra-settings-list")
+        compose.onNodeWithTag("keyra-settings-list")
+            .performScrollToNode(hasTestTag("keyra-lock-vault"))
+        compose.onNodeWithTag("keyra-lock-vault").performClick()
+        waitFor("keyra-master-password")
+        compose.onNodeWithTag("keyra-master-password").performTextInput(synthetic)
+        compose.onNodeWithTag("keyra-submit-master-password").performClick()
+
+        compose.waitUntil(25_000) {
+            compose.onAllNodesWithText("Trezor nije moguće otvoriti. Podaci nisu promijenjeni.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("keyra-master-password").assertExists()
+        compose.runOnIdle {
+            val model = ViewModelProvider(compose.activity)[KeyraViewModel::class.java]
+            assertFalse("Missing encrypted data must not unlock a fabricated vault", model.unlocked)
+            assertEquals(Screen.UNLOCK, model.screen)
+        }
     }
 }

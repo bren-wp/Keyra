@@ -77,7 +77,7 @@ Keyra's core vault operates without a user account or a Keyra-operated backend. 
 
 | Protection | Current implementation |
 | --- | --- |
-| Encrypted vault | AES-256-GCM |
+| Encrypted vault | AES-256-GCM; unlock fails safely if the encrypted vault is missing or unreadable rather than showing an invented empty vault |
 | Master-password verifier | PBKDF2-HMAC-SHA-256, 600,000 iterations for current records |
 | Protected device key | Android Keystore / Apple Keychain |
 | Access control | Supported biometric or device authentication |
@@ -92,7 +92,7 @@ Keyra's core vault operates without a user account or a Keyra-operated backend. 
 
 Export an encrypted `.keyra` document, then save it through your preferred system file provider, including compatible private cloud apps. This is **manual document export/import**, not automatic background cloud sync. Your Recovery Key is not a backup of your vault contents; the two files may both be needed for recovery.
 
-[Recovery guide](docs/RECOVERY_KEY.md) · [Recovery deletion & failure-injection QA](docs/RECOVERY_ERASURE_QA.md) · [Private document backup](docs/PRIVACY_CLOUD_BACKUP.md)
+[Recovery guide](docs/RECOVERY_KEY.md) · [Vault integrity & missing-data QA](docs/VAULT_INTEGRITY_QA.md) · [Recovery deletion & failure-injection QA](docs/RECOVERY_ERASURE_QA.md) · [Private document backup](docs/PRIVACY_CLOUD_BACKUP.md)
 
 ## Download & installation
 

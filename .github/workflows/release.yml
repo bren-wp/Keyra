@@ -334,18 +334,19 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.22 strengthens fail-closed initial Recovery Key restoration on Android and iOS. The previous encrypted vault must be removed successfully before its verifier and device encryption keys are discarded. On iOS a failed file deletion no longer silently proceeds to Keychain-key deletion; cleanup after a partially installed recovery is conditional on successfully deleting the encrypted vault. Android recovery now preserves the previous verifier until vault destruction succeeds, with a JUnit failure-injection regression for deletion order. The existing KEYRA1, KEYRA2 and KEYRAREC1 formats and vault encryption remain unchanged.
+          Keyra 0.6.23 prevents a missing encrypted vault from being silently treated as an empty vault after correct master-password verification. On Android, a missing or blank encrypted vault blob now fails unlock without clearing the existing verifier. On iOS, absence of both the encrypted vault file and legacy storage throws an integrity error, leaving the session locked. A real empty vault continues to work because it is explicitly encrypted and persisted at creation. No automatic repair, KEYRA1/KEYRA2/KEYRAREC1 format change, telemetry, account or cloud sync has been introduced.
 
           ## Verification
-          - Android lint, unit tests, privacy gates, debug/release APK and AAB builds
-          - iOS build, Xcode static analysis, privacy gates and simulator smoke tests
-          - SHA-256 checksums for all distribution artifacts
-          - Physical-device deletion failure injection and issue #25 crash reproduction remain outstanding; see docs/RECOVERY_ERASURE_QA.md
+          - Android lint, JVM unit tests and privacy gates
+          - Android emulator first-run password UI regression, including synthetic missing-encrypted-vault fault injection
+          - iOS build, static analysis, privacy gates and first-run simulator UI regression
+          - Android debug/unsigned APK and AAB; iOS simulator ZIP and unsigned IPA; SHA-256 checksum manifests
+          - iOS missing-file fault injection, physical-device QA, and issue #25 crash reproduction remain outstanding. See docs/VAULT_INTEGRITY_QA.md.
 
           ## Store signing
-          Public workflow outputs are not automatically signed for production release. Android AAB requires correct Google Play upload signing, and iOS unsigned IPA requires an appropriate Apple distribution identity and provisioning profile.
+          Public workflow outputs are not automatically production-signed. Android store upload requires an appropriately signed AAB and iOS store upload requires Apple distribution signing and provisioning.
 
-          Refer to docs/STORE_RELEASE_CHECKLIST.md before store submission.
+          Refer to docs/STORE_RELEASE_CHECKLIST.md before submission.
           EOF
 
       - name: Objavi ili ažuriraj GitHub izdanje
