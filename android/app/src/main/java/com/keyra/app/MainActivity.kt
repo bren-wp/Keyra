@@ -116,6 +116,14 @@ internal fun shouldAcceptProtectedCompletion(
 ): Boolean = shouldAcceptAuthCompletion(requestEpoch, currentEpoch, foreground) &&
     vaultUnlocked && sameScreen && sameItem
 
+// Recovery preflight is ordered: encrypted data and its key must be removed
+// successfully before discarding the password verifier. Failed preflight
+// leaves the verifier intact so the user can retry without an orphaned vault.
+internal fun eraseRecoveryPredecessors(
+    eraseVault: () -> Boolean,
+    eraseVerifier: () -> Boolean
+): Boolean = eraseVault() && eraseVerifier()
+
 enum class Screen { ONBOARDING, RECOVERY, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
@@ -407,18 +415,23 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                         return@withContext Pair(null, "Sigurnosna kopija nije valjana ili lozinka nije ispravna.")
                     }
 
+                    var beganInstalling = false
                     runCatching {
-                        check(auth.clear() && store.destroy()) {
+                        check(eraseRecoveryPredecessors(store::destroy, auth::clear)) {
                             "Prethodno nedovršeno stanje nije moguće sigurno ukloniti."
                         }
+                        beganInstalling = true
                         store.installRecoveryKey(rawKey)
                         store.save(imported)
                         check(auth.create(newPassword)) { "Novu glavnu lozinku nije moguće spremiti." }
                     }.fold(
                         onSuccess = { Pair(imported, "") },
                         onFailure = {
-                            runCatching { store.destroy() }
-                            runCatching { auth.clear() }
+                            // Never erase the verifier after a failed vault-delete
+                            // preflight. Cleanup is only for our own partial install.
+                            if (beganInstalling && runCatching { store.destroy() }.getOrDefault(false)) {
+                                runCatching { auth.clear() }
+                            }
                             Pair(null, "Obnova nije dovršena. Provjerite zaštitu i slobodan prostor uređaja.")
                         }
                     )

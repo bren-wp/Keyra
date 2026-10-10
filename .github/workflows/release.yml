@@ -334,19 +334,18 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.21 poboljšava stabilnost i testabilnost unosa glavne lozinke pri prvom otvaranju. Android prikriveno polje sada koristi stabilnu PasswordVisualTransformation tijekom rekompozicije, a iOS zadržava fokus pri prebacivanju između skrivenog i prikazanog unosa. Dodani su Android instrumentirani Compose UI test i iOS XCTest UI test povezani s GitHub Actions simulatorom/emulatorom: provjeravaju uzastopne znakove, Unicode/dijakritike, prikaz i skrivanje, premještanje fokusa, brisanje, granicu 256 i najmanje 12 znakova, izradu trezora, zaključavanje i ponovno otključavanje nakon ponovnog pokretanja aplikacije te odbijanje pogrešne lozinke. Koriste se isključivo sintetički testni podaci. GitHub CI ne zamjenjuje fizički uređaj: prijavljeno rušenje #25 i dalje zahtijeva fizičku reprodukciju ili redigirani crash report prije konačnog zatvaranja issuea. Nisu mijenjani postojeći podaci, kriptografija ni KEYRA1/KEYRA2/KEYRAREC1 formati.
+          Keyra 0.6.22 strengthens fail-closed initial Recovery Key restoration on Android and iOS. The previous encrypted vault must be removed successfully before its verifier and device encryption keys are discarded. On iOS a failed file deletion no longer silently proceeds to Keychain-key deletion; cleanup after a partially installed recovery is conditional on successfully deleting the encrypted vault. Android recovery now preserves the previous verifier until vault destruction succeeds, with a JUnit failure-injection regression for deletion order. The existing KEYRA1, KEYRA2 and KEYRAREC1 formats and vault encryption remain unchanged.
 
-          ## Provjere
-          - Android lint i unit testovi
-          - Android debug/release APK i release AAB
-          - iOS Release build i analyze na Xcode 26+ / iOS 26 SDK+
-          - iOS simulator launch smoke test
-          - SHA-256 kontrolne sume artefakata
+          ## Verification
+          - Android lint, unit tests, privacy gates, debug/release APK and AAB builds
+          - iOS build, Xcode static analysis, privacy gates and simulator smoke tests
+          - SHA-256 checksums for all distribution artifacts
+          - Physical-device deletion failure injection and issue #25 crash reproduction remain outstanding; see docs/RECOVERY_ERASURE_QA.md
 
-          ## Važno za trgovine
-          Android AAB i iOS IPA iz ovog javnog workflowa nisu zamjena za produkcijsko store potpisivanje. Google Play upload mora biti potpisan upload ključem/Play App Signingom, a App Store build odgovarajućim Apple distribucijskim identitetom i provisioning profilom.
+          ## Store signing
+          Public workflow outputs are not automatically signed for production release. Android AAB requires correct Google Play upload signing, and iOS unsigned IPA requires an appropriate Apple distribution identity and provisioning profile.
 
-          Pogledajte docs/STORE_RELEASE_CHECKLIST.md prije objave u trgovinama.
+          Refer to docs/STORE_RELEASE_CHECKLIST.md before store submission.
           EOF
 
       - name: Objavi ili ažuriraj GitHub izdanje

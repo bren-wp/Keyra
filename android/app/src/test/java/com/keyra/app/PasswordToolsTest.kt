@@ -32,6 +32,30 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun failedRecoveryPreflightPreservesVerifierAndDoesNotRunCleanup() {
+        val stages = mutableListOf<String>()
+        assertFalse(eraseRecoveryPredecessors(
+            eraseVault = { stages += "vault"; false },
+            eraseVerifier = { stages += "verifier"; true }
+        ))
+        assertEquals(listOf("vault"), stages)
+
+        stages.clear()
+        assertFalse(eraseRecoveryPredecessors(
+            eraseVault = { stages += "vault"; true },
+            eraseVerifier = { stages += "verifier"; false }
+        ))
+        assertEquals(listOf("vault", "verifier"), stages)
+
+        stages.clear()
+        assertTrue(eraseRecoveryPredecessors(
+            eraseVault = { stages += "vault"; true },
+            eraseVerifier = { stages += "verifier"; true }
+        ))
+        assertEquals(listOf("vault", "verifier"), stages)
+    }
+
+    @Test
     fun vaultErasureNeverRemovesKeyUntilEncryptedDataIsDeleted() {
         val stages = mutableListOf<String>()
         assertFalse(destroyVaultInOrder(
