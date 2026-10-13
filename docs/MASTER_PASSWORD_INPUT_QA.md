@@ -10,6 +10,12 @@ This checklist complements, but **does not replace**, a physical-device investig
 
 ## v0.6.25 additional hardening and remaining evidence
 
+- iOS XCTest: the iOS 26.5 simulator exposed a misleading masked
+  `SecureTextField.value` accessibility length of 1 while the test expected
+  256. The original app flow proceeded through creation and unlock; the
+  assertion was the test failure. The follow-up test checks length after
+  revealing only synthetic text instead of treating a masked accessibility
+  value as password length. This is a test fix, not evidence of an app crash.
 - iOS: the create-vault password/confirmation cap now lives in the synchronous
   `Binding<String>` setter. Previously an `onChange` observer wrote the
   updated password back into the same SwiftUI state while the IME was editing.
