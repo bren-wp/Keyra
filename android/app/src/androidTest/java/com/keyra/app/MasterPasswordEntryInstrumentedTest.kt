@@ -59,18 +59,23 @@ class MasterPasswordEntryInstrumentedTest {
         val confirm = compose.onNodeWithTag("keyra-confirm-master-password")
         val submit = compose.onNodeWithTag("keyra-submit-master-password")
         master.performClick()
-        // Injected system KeyEvents are not delivered consistently to an
-        // emulator's Compose password field when its software IME is active.
-        // Use the deterministic Compose editing API here and assert the
-        // visible editor state after each of the first two key steps.
-        // Real hardware/IME event delivery still requires physical-device QA.
+        // Exercise the first keystrokes while the password is masked.
+        // Compose exposes the visually transformed bullets via EditableText;
+        // comparing that value to a raw password is not a valid assertion.
+        // Only synthetic test text is revealed, never a user's credential.
         master.performTextInput("1")
         assertEquals(
-            "1", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+            1, master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
         )
         master.performTextInput("2")
         assertEquals(
-            "12", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+            2, master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
+        )
+        compose.onNodeWithContentDescription("Prikaži Glavna lozinka").performClick()
+        compose.waitForIdle()
+        assertTrue(
+            "Revealed synthetic input must preserve the first two typed digits",
+            master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == "12"
         )
         master.performTextInput("ČćžŠ😀")
         master.performTextClearance()
@@ -80,7 +85,7 @@ class MasterPasswordEntryInstrumentedTest {
         val bounded = master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
         assertEquals(256, bounded.length)
         master.performTextClearance()
-        compose.onNodeWithContentDescription("Prikaži Glavna lozinka").performClick()
+        // The synthetic editor is already visible after the two-digit check.
         master.performClick()
 
         val underlength = "Short123#26" // Exactly 11 UTF-16 code units
