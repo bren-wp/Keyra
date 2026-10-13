@@ -308,12 +308,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         val requestEpoch = authenticationEpoch
         isCreatingVault = true
         viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    store.save(emptyList())
-                    if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
-                }.isSuccess.also { success ->
+            val (saved, existingCiphertext) = withContext(Dispatchers.IO) {
+                if (!canCreateFreshVault(store.hasPersistedCiphertext())) {
+                    // No write or destructive rollback if an old encrypted vault exists.
+                    Pair(false, true)
+                } else {
+                    val success = runCatching {
+                        store.save(emptyList())
+                        if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
+                    }.isSuccess
                     if (!success) runCatching { store.destroy() }
+                    Pair(success, false)
                 }
             }
             isCreatingVault = false
@@ -321,7 +326,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                 password, emptyList(),
                 shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
             )
-            else message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            else message = if (existingCiphertext) {
+                "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+            } else {
+                "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            }
         }
     }
 
@@ -1270,8 +1279,13 @@ internal fun destroyVaultInOrder(removeEncryptedData: () -> Boolean, removeKey: 
 internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Boolean): Boolean =
     hasCiphertext || initialRecovery
 
+// An orphaned encrypted vault is never overwritten by first-run setup.
+internal fun canCreateFreshVault(hasCiphertext: Boolean): Boolean = !hasCiphertext
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
+
+    fun hasPersistedCiphertext(): Boolean = prefs.contains("vault_blob")
 
     fun save(items: List<VaultItem>) {
         val encrypted = crypto.encrypt(toJson(items))
