@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
@@ -56,6 +57,13 @@ class MasterPasswordEntryInstrumentedTest {
         assertTrue(keyraLanguageNames.size >= 21)
         assertTrue(keyraLanguageNames.containsKey("en"))
         assertTrue(keyraLanguageNames.containsKey("hr"))
+        assertEquals(keyraLanguageNames.keys - "en", keyraCoreTranslations.keys)
+        assertTrue(keyraCoreTranslations.values.all { it.size == keyraCoreKeys.size })
+        assertTrue(keyraCoreTranslations.values.flatten().all { it.isNotBlank() })
+        assertEquals("Einstellungen", keyraLocalized("de", "Settings", "Postavke"))
+        assertEquals("Postavke", keyraLocalized("hr", "Settings", "Postavke"))
+        assertEquals("Settings", keyraLocalized("en", "Settings", "Postavke"))
+        assertEquals("Other", keyraLocalized("ja", "Other", "Ostalo"))
         val arbitraryItemType = "SyntheticUserProvidedMarker"
         val archive = keyraPdfOverviewArchive(
             listOf("Prijava", "Prijava", "Bilješka", arbitraryItemType)
@@ -73,6 +81,15 @@ class MasterPasswordEntryInstrumentedTest {
     @Test
     fun firstRunTextEntryUnicodeVisibilityBoundsCreateLockAndUnlock() {
         waitFor("keyra-first-run-create")
+        waitFor("keyra-onboarding-language")
+        compose.onNodeWithTag("keyra-onboarding-language").performClick()
+        waitFor("keyra-language-de")
+        compose.onNodeWithTag("keyra-language-de").performClick()
+        compose.onNodeWithText("Tresor erstellen").assertExists()
+        compose.onNodeWithTag("keyra-onboarding-language").performClick()
+        waitFor("keyra-language-en")
+        compose.onNodeWithTag("keyra-language-en").performClick()
+        compose.onNodeWithText("Create my vault").assertExists()
         compose.onNodeWithTag("keyra-first-run-create").performClick()
         waitFor("keyra-master-password")
 
