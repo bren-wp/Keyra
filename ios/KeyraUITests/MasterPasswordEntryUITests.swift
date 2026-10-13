@@ -8,6 +8,10 @@ final class MasterPasswordEntryUITests: XCTestCase {
         app.launch()
         let create = app.buttons["keyra-first-run-create"]
         XCTAssertTrue(create.waitForExistence(timeout: 15), "Fresh simulator must show onboarding")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["keyra-onboarding-language"].exists,
+            "Users must be able to choose a language before creating the first vault"
+        )
         create.tap()
 
         var master = app.secureTextFields["keyra-master-password"]

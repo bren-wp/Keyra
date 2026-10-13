@@ -142,8 +142,43 @@ internal val keyraLanguageNames = linkedMapOf(
     "tr" to "Türkçe", "ar" to "العربية", "ja" to "日本語"
 )
 
-private fun keyraLocalized(code: String, english: String, croatian: String): String =
-    if (code == "hr") croatian else english
+// Compact curated translations for frequently used controls. Other screens
+// keep their established copy until their complete locale resources are ready.
+internal val keyraCoreKeys = listOf("Vault", "Collections", "Generator", "Settings", "Create my vault", "Import my vault", "App language")
+internal val keyraCoreTranslations: Map<String, List<String>> = mapOf(
+    "hr" to listOf("Trezor", "Kolekcije", "Generator", "Postavke", "Izradi trezor", "Uvezi Keyra trezor", "Jezik aplikacije"),
+    "de" to listOf("Tresor", "Sammlungen", "Generator", "Einstellungen", "Tresor erstellen", "Tresor importieren", "App-Sprache"),
+    "fr" to listOf("Coffre", "Collections", "Générateur", "Paramètres", "Créer mon coffre", "Importer mon coffre", "Langue de l’application"),
+    "es" to listOf("Bóveda", "Colecciones", "Generador", "Ajustes", "Crear mi bóveda", "Importar mi bóveda", "Idioma de la aplicación"),
+    "it" to listOf("Cassaforte", "Raccolte", "Generatore", "Impostazioni", "Crea la mia cassaforte", "Importa la mia cassaforte", "Lingua dell'app"),
+    "pt" to listOf("Cofre", "Coleções", "Gerador", "Definições", "Criar o meu cofre", "Importar o meu cofre", "Idioma da aplicação"),
+    "nl" to listOf("Kluis", "Collecties", "Generator", "Instellingen", "Mijn kluis maken", "Mijn kluis importeren", "App-taal"),
+    "pl" to listOf("Sejf", "Kolekcje", "Generator", "Ustawienia", "Utwórz sejf", "Importuj sejf", "Język aplikacji"),
+    "cs" to listOf("Trezor", "Kolekce", "Generátor", "Nastavení", "Vytvořit trezor", "Importovat trezor", "Jazyk aplikace"),
+    "sk" to listOf("Trezor", "Kolekcie", "Generátor", "Nastavenia", "Vytvoriť trezor", "Importovať trezor", "Jazyk aplikácie"),
+    "sl" to listOf("Trezor", "Zbirke", "Generator", "Nastavitve", "Ustvari trezor", "Uvozi trezor", "Jezik aplikacije"),
+    "hu" to listOf("Széf", "Gyűjtemények", "Generátor", "Beállítások", "Széf létrehozása", "Széf importálása", "Alkalmazás nyelve"),
+    "ro" to listOf("Seif", "Colecții", "Generator", "Setări", "Creează seiful", "Importă seiful", "Limba aplicației"),
+    "bg" to listOf("Сейф", "Колекции", "Генератор", "Настройки", "Създай сейф", "Импортирай сейф", "Език на приложението"),
+    "el" to listOf("Θησαυροφυλάκιο", "Συλλογές", "Γεννήτρια", "Ρυθμίσεις", "Δημιουργία θησαυροφυλακίου", "Εισαγωγή θησαυροφυλακίου", "Γλώσσα εφαρμογής"),
+    "sv" to listOf("Valv", "Samlingar", "Generator", "Inställningar", "Skapa valv", "Importera valv", "Appspråk"),
+    "da" to listOf("Boks", "Samlinger", "Generator", "Indstillinger", "Opret boks", "Importer boks", "Appsprog"),
+    "fi" to listOf("Holvi", "Kokoelmat", "Generaattori", "Asetukset", "Luo holvi", "Tuo holvi", "Sovelluksen kieli"),
+    "no" to listOf("Hvelv", "Samlinger", "Generator", "Innstillinger", "Opprett hvelv", "Importer hvelv", "Appspråk"),
+    "et" to listOf("Seif", "Kogud", "Generaator", "Seaded", "Loo seif", "Impordi seif", "Rakenduse keel"),
+    "lv" to listOf("Seifs", "Kolekcijas", "Ģenerators", "Iestatījumi", "Izveidot seifu", "Importēt seifu", "Lietotnes valoda"),
+    "lt" to listOf("Saugykla", "Kolekcijos", "Generatorius", "Nustatymai", "Sukurti saugyklą", "Importuoti saugyklą", "Programėlės kalba"),
+    "uk" to listOf("Сховище", "Колекції", "Генератор", "Налаштування", "Створити сховище", "Імпортувати сховище", "Мова застосунку"),
+    "tr" to listOf("Kasa", "Koleksiyonlar", "Oluşturucu", "Ayarlar", "Kasa oluştur", "Kasayı içe aktar", "Uygulama dili"),
+    "ar" to listOf("الخزنة", "المجموعات", "مولد كلمات المرور", "الإعدادات", "إنشاء خزنة", "استيراد خزنة", "لغة التطبيق"),
+    "ja" to listOf("保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語")
+)
+
+internal fun keyraLocalized(code: String, english: String, croatian: String): String {
+    if (code == "hr") return croatian
+    val index = keyraCoreKeys.indexOf(english)
+    return if (index >= 0) keyraCoreTranslations[code]?.getOrNull(index) ?: english else english
+}
 
 // Export deliberately excludes vault titles, usernames, passwords,
 // TOTP seeds, URLs, notes and all custom fields. The ZIP is NOT encrypted.
@@ -2125,6 +2160,7 @@ private fun OnboardingVaultHero(compact: Boolean) {
 
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
+    var showLanguages by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 800.dp || maxWidth < 360.dp
         val short = maxHeight < 590.dp
@@ -2218,6 +2254,22 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     Text(keyraLocalized(model.languageCode, "I have a Recovery Key", "Imam Recovery Key"), color = Ice, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+
+        // Available before creating a vault, including on compact devices.
+        IconButton(
+            onClick = { showLanguages = true },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
+                .size(44.dp).testTag("keyra-onboarding-language"),
+        ) {
+            Icon(
+                Icons.Outlined.Language,
+                contentDescription = keyraLocalized(model.languageCode, "App language", "Jezik aplikacije"),
+                tint = Cyan
+            )
+        }
+        if (showLanguages) {
+            KeyraLanguageDialog(model) { showLanguages = false }
         }
     }
 }
@@ -5154,6 +5206,40 @@ private fun DetailRow(icon: ImageVector, label: String, value: String, action: (
 }
 
 @Composable
+private fun KeyraLanguageDialog(model: KeyraViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(keyraLocalized(model.languageCode, "App language", "Jezik aplikacije")) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 430.dp)) {
+                keyraLanguageNames.forEach { (code, name) ->
+                    item(key = code) {
+                        TextButton(
+                            onClick = {
+                                model.setLanguage(code)
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("keyra-language-$code")
+                        ) {
+                            Text(name, modifier = Modifier.weight(1f), color = Color.White)
+                            if (model.languageCode == code) {
+                                Icon(Icons.Outlined.Check, null, tint = Cyan)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(keyraLocalized(model.languageCode, "Close", "Zatvori"))
+            }
+        },
+        containerColor = Slate
+    )
+}
+
+@Composable
 private fun SettingsScreen(
     model: KeyraViewModel,
     requestBiometric: (String, () -> Unit) -> Unit
@@ -5224,36 +5310,7 @@ private fun SettingsScreen(
 
     Column(Modifier.fillMaxSize()) {
         if (showLanguages) {
-            AlertDialog(
-                onDismissRequest = { showLanguages = false },
-                title = { Text(keyraLocalized(model.languageCode, "App language", "Jezik aplikacije")) },
-                text = {
-                    LazyColumn(Modifier.heightIn(max = 430.dp)) {
-                        keyraLanguageNames.forEach { (code, name) ->
-                            item(key = code) {
-                                TextButton(
-                                    onClick = {
-                                        model.setLanguage(code)
-                                        showLanguages = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth().testTag("keyra-language-$code")
-                                ) {
-                                    Text(name, modifier = Modifier.weight(1f), color = Color.White)
-                                    if (model.languageCode == code) {
-                                        Icon(Icons.Outlined.Check, null, tint = Cyan)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showLanguages = false }) {
-                        Text(keyraLocalized(model.languageCode, "Close", "Zatvori"))
-                    }
-                },
-                containerColor = Slate
-            )
+            KeyraLanguageDialog(model) { showLanguages = false }
         }
         if (confirmReport) {
             AlertDialog(

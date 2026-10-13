@@ -33,6 +33,7 @@ Your passwords should be easy to find and hard for anyone else to access. Keyra 
 | 👆 **Quick, protected access** | Use supported device authentication and automatic vault locking. |
 | 📦 **Your own encrypted backup** | Export and import protected files whenever you choose. |
 | 📄 **PDF vault overview** | Save an easy-to-read PDF report inside a ZIP, with item counts only and no secrets. |
+| 🌐 **Your language, your choice** | Choose from 27 languages, including English and Croatian; key navigation and onboarding actions are translated and additional translations are being expanded. |
 
 <div align="center">
 <img src="assets/brand/keyra-icon.svg" width="92" alt="Keyra app icon">
@@ -40,6 +41,8 @@ Your passwords should be easy to find and hard for anyone else to access. Keyra 
 **Thoughtful design. Meaningful protection.**
 
 </div>
+
+Keyra's first-run screen lets you choose your language before creating a vault. Your language choice is stored only on your device. Translation coverage is growing across the app; some existing screens have not yet been localized.
 
 ## Private by design
 

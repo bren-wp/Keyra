@@ -10,16 +10,22 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/validate_localizations.py"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/validate_localizations.py"
 
 jobs:
   build:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
+
+      - name: Verify Keyra language parity on Android and iOS
+        run: python3 .github/scripts/validate_localizations.py
+
 
       - name: Provjeri Xcode i iOS SDK
         run: |
