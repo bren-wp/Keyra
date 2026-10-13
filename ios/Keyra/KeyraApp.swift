@@ -1586,7 +1586,14 @@ final class KeyraStore: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let imported: [VaultItem]?
+            var failureMessage = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
             do {
+                // Preserve an orphaned ciphertext vault; recovery is an explicit flow.
+                guard RecoveryCiphertextPolicy.allowsFreshVaultCreation(
+                    hasCiphertext: try self.vault.hasPersistedCiphertext()
+                ) else {
+                    throw KeyraError.existingVaultData
+                }
                 let decoded = try PortableBackup.decrypt(payload, password: password)
                 try self.vault.save(decoded)
                 if self.auth.create(password: password) {
@@ -1597,7 +1604,11 @@ final class KeyraStore: ObservableObject {
                 }
             } catch {
                 imported = nil
+                if case KeyraError.existingVaultData = error {
+                    failureMessage = "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+                }
             }
+            let resolvedFailureMessage = failureMessage
             DispatchQueue.main.async {
                 self.isImportingVault = false
                 if let imported {
@@ -1607,7 +1618,7 @@ final class KeyraStore: ObservableObject {
                     )
                     self.message = "Keyra trezor uspješno je uvezen."
                 } else {
-                    self.message = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
+                    self.message = resolvedFailureMessage
                 }
             }
         }
