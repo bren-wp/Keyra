@@ -334,12 +334,12 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.24 adds a second fail-closed integrity gate: manually importing a Recovery Key into an existing vault now refuses to replace the device-wrapped key when encrypted vault data is missing. The explicit initial recovery workflow remains able to install the key after its ordered cleanup preflight and before writing a restored encrypted backup. The 0.6.23 missing-ciphertext unlock safeguard remains intact. KEYRA1/KEYRA2/KEYRAREC1 formats and existing privacy guarantees are unchanged.
+          Keyra 0.6.24 adds a second fail-closed integrity gate: manually importing a Recovery Key into an existing vault now refuses to replace the device-wrapped key when encrypted vault data is missing. The explicit initial recovery workflow remains able to install the key after its ordered cleanup preflight and before writing a restored encrypted backup. On iOS, transient Keychain read failures can no longer be interpreted as an absent key, and an existing encrypted vault cannot be silently re-encrypted using a generated replacement key. The 0.6.23 missing-ciphertext unlock safeguard remains intact. KEYRA1/KEYRA2/KEYRAREC1 formats and existing privacy guarantees are unchanged.
 
           ## Verification
           - Android lint, JVM unit tests (including recovery ciphertext policy) and privacy gates
           - Android emulator first-run password UI regression, including synthetic missing-encrypted-vault fault injection
-          - iOS build, static analysis, privacy gates, compiled Swift recovery policy assertions and first-run simulator UI regression
+          - iOS build, static analysis, privacy gates, compiled Swift recovery policy assertions, and first-run simulator UI regression including non-destructive missing-ciphertext and Keychain-unavailable simulations
           - Android debug/unsigned APK and AAB; iOS simulator ZIP and unsigned IPA; SHA-256 checksum manifests
           - Full iOS/Android filesystem fault injection, physical-device QA, and issue #25 crash reproduction remain outstanding. See docs/VAULT_INTEGRITY_QA.md.
 
