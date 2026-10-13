@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.24"
+        default: "0.6.25"
 
 permissions:
   contents: write
@@ -101,6 +101,23 @@ jobs:
             cd dist
             sha256sum * > SHA256SUMS-Android.txt
           )
+
+      - name: Omogući Android emulator akceleraciju
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+      - name: Provjeri master-password UI na Android emulatoru prije izdanja
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect
+          script: gradle -p android :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
@@ -215,8 +232,8 @@ jobs:
 
           ditto -c -k --sequesterRsrc --keepParent "$SIM_APP" "dist/Keyra-${VERSION}-iOS-Simulator.zip"
 
-      - name: iOS simulator launch smoke
-        timeout-minutes: 12
+      - name: iOS simulator launch and first-run password UI regression
+        timeout-minutes: 28
         run: |
           set -euo pipefail
 
@@ -300,6 +317,24 @@ jobs:
           sleep 3
           /bin/kill -0 "$PID"
 
+          # The release previously passed on simulator launch alone while its
+          # separate main iOS UI workflow failed. Gate publication on the
+          # actual synthetic first-run password-entry XCTest as well.
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+          xcodebuild \
+            -project ios/Keyra.xcodeproj \
+            -scheme Keyra \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath build/release-ios-ui-tests \
+            -parallel-testing-enabled NO \
+            -only-testing:KeyraUITests/MasterPasswordEntryUITests/testFirstRunTypingVisibilityUnicodeCreateLockAndUnlock \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            test
+
       - name: SHA-256 kontrolne sume
         run: |
           set -euo pipefail
@@ -334,14 +369,13 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.24 adds a second fail-closed integrity gate: manually importing a Recovery Key into an existing vault now refuses to replace the device-wrapped key when encrypted vault data is missing. The explicit initial recovery workflow remains able to install the key after its ordered cleanup preflight and before writing a restored encrypted backup. Both platforms refuse ordinary first-run vault creation when encrypted ciphertext persists without a password verifier. On iOS, transient Keychain read failures can no longer be interpreted as an absent key, and an existing encrypted vault cannot be silently re-encrypted using a generated replacement key. The 0.6.23 missing-ciphertext unlock safeguard remains intact. KEYRA1/KEYRA2/KEYRAREC1 formats and existing privacy guarantees are unchanged.
+          Keyra 0.6.25 hardens first-run master-password editing on iOS: the 256-character limit is enforced directly in the SwiftUI Binding setter instead of rewriting text state in an onChange callback during an active keyboard edit. Android and iOS first-run UI regressions now also check 11-character rejection followed by valid 12-character entry. Existing vault integrity, Recovery Key, Keychain safeguards, and KEYRA1/KEYRA2/KEYRAREC1 compatibility are preserved.
 
           ## Verification
-          - Android lint, JVM unit tests (including recovery ciphertext and verifier-migration cleanup policies) and privacy gates
-          - Android emulator first-run password UI regression, including synthetic missing-encrypted-vault fault injection
-          - iOS build, static analysis, privacy gates, compiled Swift recovery policy assertions, and first-run simulator UI regression including non-destructive missing-ciphertext and Keychain-unavailable simulations
+          - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
+          - iOS build, static analysis, privacy gates, Swift policy assertions, first-run simulator UI regression including 11/12/256-character boundaries, missing ciphertext and unavailable Keychain simulations
           - Android debug/unsigned APK and AAB; iOS simulator ZIP and unsigned IPA; SHA-256 checksum manifests
-          - Full iOS/Android filesystem fault injection, physical-device QA, and issue #25 crash reproduction remain outstanding. See docs/VAULT_INTEGRITY_QA.md.
+          - Issue #25: the original device crash remains unconfirmed without a reproducible device trace. Passing simulator tests alone do not establish a physical-device fix. See docs/MASTER_PASSWORD_INPUT_QA.md.
 
           ## Store signing
           Public workflow outputs are not automatically production-signed. Android store upload requires an appropriately signed AAB and iOS store upload requires Apple distribution signing and provisioning.

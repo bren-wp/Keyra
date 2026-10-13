@@ -237,6 +237,13 @@ jobs:
             exit 1
           fi
 
+          # A real screenshot of the empty first-run screen; no credentials
+          # or vault data exist at capture time. Upload as a CI artifact,
+          # never dump image data into logs.
+          SCREENSHOT="$RUNNER_TEMP/keyra-ios-onboarding.png"
+          xcrun simctl io "$UDID" screenshot "$SCREENSHOT"
+          test -s "$SCREENSHOT"
+
           # Run the actual first-run keyboard/visibility/create/relock XCTest flow
           # against this same freshly provisioned simulator. Synthetic data only.
           xcodebuild \
@@ -252,3 +259,12 @@ jobs:
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Preserve authentic iOS first-run screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyra-ios-onboarding-screenshot
+          if-no-files-found: ignore
+          retention-days: 7
+          path: ${{ runner.temp }}/keyra-ios-onboarding.png

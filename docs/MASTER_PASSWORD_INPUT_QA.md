@@ -8,6 +8,35 @@ This checklist complements, but **does not replace**, a physical-device investig
 - **iOS:** `MasterPasswordEntryUITests` runs as an XCTest UI test inside `ios.yml` against a fresh iPhone simulator. It enters several characters and diacritics, deletes them, toggles secure/visible input and focus, tests the 256-character cap, creates a vault with a synthetic 12-character password, locks, terminates and relaunches the app, rejects an incorrect password, then unlocks again.
 - Both tests use **synthetic, hard-coded, non-personal passwords only**. They do not access an existing user's vault.
 
+## v0.6.25 additional hardening and remaining evidence
+
+- iOS XCTest: the iOS 26.5 simulator exposed a misleading masked
+  `SecureTextField.value` accessibility length of 1 while the test expected
+  256. The original app flow proceeded through creation and unlock; the
+  assertion was the test failure. The follow-up test checks length after
+  revealing only synthetic text instead of treating a masked accessibility
+  value as password length. This is a test fix, not evidence of an app crash.
+- iOS: the create-vault password/confirmation cap now lives in the synchronous
+  `Binding<String>` setter. Previously an `onChange` observer wrote the
+  updated password back into the same SwiftUI state while the IME was editing.
+  This removes that re-entrant state-write pattern; it is **not** a confirmed
+  root-cause attribution for the originally reported crash.
+- Android: v0.6.25 CI initially attempted `UiAutomation.injectInputEvent(KeyEvent)` for the first two digits, followed by a test predicate that compared a Compose `AnnotatedString` to a Kotlin `String`. The predicate could not become true, resulting in a `ComposeTimeoutException` in [Android run #38463002897](https://github.com/bren-wp/Keyra/actions/runs/38463002897). That failure **does not establish** whether the system key event reached the text field. The mandatory regression now uses deterministic Compose editing actions and checks `EditableText.text.text` (the actual String) after each digit. Hardware keyboard/IME delivery remains a separate physical-device QA requirement.
+- Android and iOS: instrumented first-run test flows now submit an 11-character
+  synthetic password, confirm that it is rejected while the editing screen
+  remains accessible, then clear it and successfully enter the minimum valid
+  12-character synthetic password. Existing visibility, Unicode, 256-character,
+  relock and wrong-password scenarios remain.
+- Run the PR CI on its final commit on **both** platforms; earlier green runs
+  from a different SHA are insufficient. Release CI now also runs Android
+  instrumented UI tests and iOS first-run XCTest before artifact publication,
+  rather than relying only on production builds and an iOS launch smoke test.
+  Follow with actual hardware QA.
+- The source report did not identify a platform, keyboard, OS, device or
+  exception. Without a sanitized physical-device reproduction or evidence of
+  a specific fixed defect, maintain issue #25 as open rather than marking
+  the original crash resolved.
+
 ## Required physical QA
 
 Run the full flow separately on an Android device and an iPhone (including one device with a non-English keyboard):
