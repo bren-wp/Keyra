@@ -534,7 +534,7 @@ enum KeychainVault {
     private static let service = "com.keyra.app.vault"
     private static let account = "encryption-key"
 
-    private static func existingKeyData() -> Data? {
+    private static func existingKeyData() throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -544,15 +544,26 @@ enum KeychainVault {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var output: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &output) == errSecSuccess else {
-            return nil
+        let status = SecItemCopyMatching(query as CFDictionary, &output)
+        if status == errSecItemNotFound { return nil }
+        // Keychain access errors (e.g. locked device) are not missing keys.
+        // Replacing an unreadable existing key would orphan the encrypted vault.
+        guard status == errSecSuccess else { throw KeyraError.keychainStatus(status) }
+        guard let data = output as? Data, data.count == 32 else {
+            throw KeyraError.keyUnavailable
         }
-        return output as? Data
+        return data
+    }
+
+    static func existingKey() throws -> SymmetricKey {
+        guard let data = try existingKeyData() else {
+            throw KeyraError.keyUnavailable
+        }
+        return SymmetricKey(data: data)
     }
 
     static func rawKeyData() throws -> Data {
-        if let existing = existingKeyData() {
-            guard existing.count == 32 else { throw KeyraError.keyUnavailable }
+        if let existing = try existingKeyData() {
             return existing
         }
 
@@ -801,11 +812,19 @@ final class EncryptedVault {
     }
 
     func save(_ items: [VaultItem]) throws {
+        let url = try storageURL()
+        // Persisted ciphertext must never be re-encrypted under a newly
+        // generated key if its existing Keychain item is missing/unreadable.
+        // A brand-new vault may generate its first key.
+        let hasPersistedCiphertext = FileManager.default.fileExists(atPath: url.path) ||
+            defaults.data(forKey: legacyKey) != nil
+        let vaultKey = hasPersistedCiphertext
+            ? try KeychainVault.existingKey()
+            : try KeychainVault.key()
         let data = try JSONEncoder().encode(items)
-        let sealed = try AES.GCM.seal(data, using: KeychainVault.key())
+        let sealed = try AES.GCM.seal(data, using: vaultKey)
         guard let combined = sealed.combined else { throw KeyraError.invalidData }
 
-        let url = try storageURL()
         try combined.write(to: url, options: [.atomic, .completeFileProtection])
         defaults.removeObject(forKey: legacyKey)
     }
@@ -840,7 +859,7 @@ final class EncryptedVault {
         }
 
         let box = try AES.GCM.SealedBox(combined: data)
-        let clear = try AES.GCM.open(box, using: KeychainVault.key())
+        let clear = try AES.GCM.open(box, using: KeychainVault.existingKey())
         let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
 
         if migratedFromDefaults {
