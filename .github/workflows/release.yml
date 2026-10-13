@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.26"
+        default: "0.6.27"
 
 permissions:
   contents: write
@@ -369,7 +369,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.26 introduces an English-first onboarding experience and a persisted 27-language selection with English fallback for untranslated legacy screens. Android and iOS Settings can export an explicitly approved, unencrypted ZIP containing a PDF with aggregate vault-item counts only; passwords, names, notes, TOTP seeds and keys are never included. The existing encrypted .keyra backup and legacy KEYRA1/KEYRA2/KEYRAREC1 compatibility are unchanged. Brendigo privacy policy and terms remain publicly accessible.
+          Keyra 0.6.27 extends the existing English-first 27-language selection with translated navigation, vault creation, import and language controls on Android and iOS, plus a language picker available before creating a first vault. Existing untranslated screens use their prior text while broader localization continues. Encrypted backups, the safe aggregate-only PDF/ZIP report, strong device protection, and KEYRA1/KEYRA2/KEYRAREC1 compatibility remain unchanged.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
