@@ -5761,13 +5761,13 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/o-nama") {
+                        if let url = URL(string: "https://brendigo.com/o-nama/") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "info.circle",
-                            title: "O aplikaciji",
+                            title: keyraLocalized(store.preferredLanguage, "About Keyra", "O aplikaciji"),
                             subtitle: "Keyra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") • Brendigo"
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
