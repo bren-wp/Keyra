@@ -1,6 +1,8 @@
 package com.keyra.app
 
 import android.content.Context
+import java.io.ByteArrayInputStream
+import java.util.zip.ZipInputStream
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -46,6 +48,25 @@ class MasterPasswordEntryInstrumentedTest {
                     "; unlocking=" + model.isUnlockingVault
             }
             throw AssertionError("First-run UI step timed out: " + tag + "; " + safeState, timeoutFailure)
+        }
+    }
+
+    @Test
+    fun pdfZipReportContainsValidPdfAndOnlyAggregates() {
+        assertTrue(keyraLanguageNames.size >= 21)
+        assertTrue(keyraLanguageNames.containsKey("en"))
+        assertTrue(keyraLanguageNames.containsKey("hr"))
+        val arbitraryItemType = "SyntheticUserProvidedMarker"
+        val archive = keyraPdfOverviewArchive(
+            listOf("Prijava", "Prijava", "Bilješka", arbitraryItemType)
+        )
+        ZipInputStream(ByteArrayInputStream(archive)).use { zip ->
+            assertEquals("Keyra-Vault-Overview.pdf", zip.nextEntry?.name)
+            val pdf = zip.readBytes()
+            assertTrue(pdf.size > 100)
+            assertEquals("%PDF", pdf.copyOfRange(0, 4).toString(Charsets.US_ASCII))
+            assertFalse(pdf.toString(Charsets.ISO_8859_1).contains(arbitraryItemType))
+            assertEquals(null, zip.nextEntry)
         }
     }
 
