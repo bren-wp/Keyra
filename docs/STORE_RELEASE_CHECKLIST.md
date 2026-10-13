@@ -2,7 +2,30 @@
 
 Ovaj dokument prati tehničku spremnost Keyre za Google Play i Apple App Store. Konzole trgovina i njihova pravila mogu se mijenjati, pa prije svakog izdanja treba ponovno provjeriti aktualne obrasce i zahtjeve.
 
-**Posljednja provjera javnih store pravila: 9. listopada 2026.**
+**Posljednja provjera javnih store pravila: 13. listopada 2026.**
+
+## Verified official policy baseline (13 October 2026)
+
+- **Google Play:** new Android mobile app submissions and updates from
+  31 August 2026 must target Android 16/API 36 or newer:
+  https://developer.android.com/google/play/requirements/target-sdk
+  The current Keyra app declares `targetSdk = 36`; this confirms the target
+  *setting*, not approval by the Play Console.
+- **Apple:** App Store Connect uploads from 28 April 2026 require Xcode 26+
+  with the corresponding 26-series SDK:
+  https://developer.apple.com/news/upcoming-requirements/
+  Keyra CI checks these minimums, but unsigned GitHub IPA packages cannot
+  substitute for a signed archive and validated App Store Connect upload.
+- **Data disclosure:** developer declarations must reflect real app and
+  third-party SDK behavior, including privacy policy URLs:
+  https://support.google.com/googleplay/android-developer/answer/10144311
+  https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/
+- **Signing prerequisites:** keep upload signing keys, Apple certificates,
+  provisioning profiles, API credentials and recovery material outside the
+  source repository and CI logs. Verify signing identities, bundle IDs,
+  version codes, entitlements, export compliance and console metadata before
+  store submission. Public GitHub artifacts remain unsigned/debug testing
+  deliverables, not store-ready releases.
 
 ## Zajednički release gate
 
