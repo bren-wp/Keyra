@@ -2590,6 +2590,36 @@ struct OnboardingVaultHero: View {
     }
 }
 
+// One language selector is shared by first launch and Settings.
+struct KeyraLanguageMenu: View {
+    @EnvironmentObject var store: KeyraStore
+
+    var body: some View {
+        Menu {
+            ForEach(keyraLanguages.indices, id: \.self) { index in
+                let language = keyraLanguages[index]
+                Button {
+                    store.setPreferredLanguage(language.code)
+                } label: {
+                    if store.preferredLanguage == language.code {
+                        Label(language.name, systemImage: "checkmark")
+                    } else {
+                        Text(language.name)
+                    }
+                }
+                .accessibilityIdentifier("keyra-language-\(language.code)")
+            }
+        } label: {
+            Image(systemName: "globe")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(cyan)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(keyraLocalized(store.preferredLanguage, "App language", "Jezik aplikacije"))
+    }
+}
+
 struct OnboardingView: View {
     @EnvironmentObject var store: KeyraStore
 
@@ -2684,6 +2714,12 @@ struct OnboardingView: View {
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
+            }
+            .overlay(alignment: .topTrailing) {
+                KeyraLanguageMenu()
+                    .accessibilityIdentifier("keyra-onboarding-language")
+                    .padding(.top, 4)
+                    .padding(.trailing, 12)
             }
         }
     }
@@ -5598,23 +5634,7 @@ struct SettingsView: View {
                         title: keyraLocalized(store.preferredLanguage, "App language", "Jezik aplikacije"),
                         subtitle: keyraLanguages.first(where: { $0.code == store.preferredLanguage })?.name ?? "English"
                     ) {
-                        Menu {
-                            ForEach(keyraLanguages.indices, id: \.self) { index in
-                                let language = keyraLanguages[index]
-                                Button {
-                                    store.setPreferredLanguage(language.code)
-                                } label: {
-                                    if store.preferredLanguage == language.code {
-                                        Label(language.name, systemImage: "checkmark")
-                                    } else {
-                                        Text(language.name)
-                                    }
-                                }
-                                .accessibilityIdentifier("keyra-language-\(language.code)")
-                            }
-                        } label: {
-                            Image(systemName: "chevron.up.chevron.down").foregroundStyle(cyan)
-                        }
+                        KeyraLanguageMenu()
                     }
 
                     SectionLabel(keyraLocalized(store.preferredLanguage, "SECURITY", "ZAŠTITA"))
