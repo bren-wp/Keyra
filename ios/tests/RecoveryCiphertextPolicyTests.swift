@@ -29,6 +29,14 @@ struct RecoveryCiphertextPolicyTests {
             ),
             "Recovery with available ciphertext remains supported."
         )
-        print("Recovery ciphertext policy: 4 assertions passed")
+        precondition(
+            !RecoveryCiphertextPolicy.allowsFreshVaultCreation(hasCiphertext: true),
+            "First-run setup must not overwrite orphaned encrypted vault data."
+        )
+        precondition(
+            RecoveryCiphertextPolicy.allowsFreshVaultCreation(hasCiphertext: false),
+            "Brand-new vault creation must remain possible with empty storage."
+        )
+        print("Recovery ciphertext policy: 6 assertions passed")
     }
 }
