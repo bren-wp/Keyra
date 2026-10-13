@@ -391,7 +391,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.28 adds explicit Android 12+ cloud and device-to-device vault exclusion rules, prevents expired sessions from exporting PDF overview files, optimizes aggregate PDF/ZIP reports on both platforms, and includes a genuine iOS onboarding screenshot captured from the release simulator. Existing encrypted backups, multi-language onboarding, Keychain protections and KEYRA1/KEYRA2/KEYRAREC1 compatibility remain intact.
+          Keyra 0.6.29 protects your existing encrypted vault against accidental replacement during first-run backup import on Android and iOS. If encrypted storage survives but setup credentials are unavailable, Keyra preserves the original data and directs you to the explicit Recovery Key process. This update adds cross-platform import safety regression checks while retaining offline storage, private exports, and KEYRA1/KEYRA2/KEYRAREC1 compatibility. The genuine iOS onboarding screenshot is captured and verified as part of this release.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
