@@ -40,6 +40,7 @@ Sigurnosne tvrdnje odnose se na implementirani model zaštite i ne znače da je 
 
 - Manual Recovery Key installation into an existing vault fails closed when persisted encrypted data is missing; explicit initial recovery remains supported after the ordered deletion preflight.
 - Android retains the pre-existing master-password verifier when its replacement cannot be persisted during credential migration. First-time setup still cleans up partially initialized credentials as appropriate.
+- Both platforms refuse ordinary first-run creation when encrypted vault data remains but its master-password verifier is missing. Existing ciphertext is not erased or overwritten during this preflight.
 - iOS distinguishes a genuinely missing Keychain item from transient or denied Keychain reads. Existing encrypted vaults require an existing key for decryption and saving; no replacement key is generated during these failure cases.
 - Synthetic simulator-only fault flags exercise missing ciphertext and unavailable Keychain paths without deleting files or keys. This does not replace real filesystem/Keychain failure injection or physical-device QA.
 - KEYRA1, KEYRA2 and KEYRAREC1 formats have not changed.
