@@ -2741,10 +2741,10 @@ private fun BottomNav(model: KeyraViewModel, active: Screen) {
                     .padding(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
-                NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
-                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
-                NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
+                NavItem(Icons.Outlined.Home, keyraLocalized(model.languageCode, "Vault", "Trezor"), active == Screen.VAULT, compact, "Trezor") { model.open(Screen.VAULT) }
+                NavItem(Icons.Outlined.Folder, keyraLocalized(model.languageCode, "Collections", "Kolekcije"), active == Screen.COLLECTIONS, compact, "Kolekcije") { model.open(Screen.COLLECTIONS) }
+                NavItem(Icons.Outlined.Refresh, keyraLocalized(model.languageCode, "Generator", "Generator"), active == Screen.GENERATOR, compact, "Generator") { model.open(Screen.GENERATOR) }
+                NavItem(Icons.Outlined.Settings, keyraLocalized(model.languageCode, "Settings", "Postavke"), active == Screen.SETTINGS, compact, "Postavke") { model.open(Screen.SETTINGS) }
             }
         }
     }
@@ -2756,6 +2756,7 @@ private fun RowScope.NavItem(
     label: String,
     selected: Boolean,
     compact: Boolean,
+    testIdentifier: String = label,
     onClick: () -> Unit
 ) {
     Box(
@@ -2775,7 +2776,7 @@ private fun RowScope.NavItem(
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick)
-            .testTag("keyra-nav-" + label),
+            .testTag("keyra-nav-" + testIdentifier),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
