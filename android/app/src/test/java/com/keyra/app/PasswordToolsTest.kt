@@ -56,6 +56,14 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun recoveryKeyInstallRejectsMissingCiphertextUnlessInitialRecoveryWasExplicit() {
+        assertFalse(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = false))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = false))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = true))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = true))
+    }
+
+    @Test
     fun vaultErasureNeverRemovesKeyUntilEncryptedDataIsDeleted() {
         val stages = mutableListOf<String>()
         assertFalse(destroyVaultInOrder(
