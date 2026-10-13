@@ -188,8 +188,10 @@ internal fun keyraPdfOverviewArchive(itemTypes: List<String>): ByteArray {
         "Kartica" to "Payment cards", "Identitet" to "Identities",
         "Wi-Fi" to "Wi-Fi", "Autentifikator" to "Authenticators"
     )
-    val counts = groups.keys.associateWith { kind -> itemTypes.count { it == kind } }
-    val other = itemTypes.size - counts.values.sum()
+    // Count once, rather than rescan the vault for every category.
+    // Only fixed category names, never user-supplied kinds, reach the PDF.
+    val counts = itemTypes.groupingBy { it }.eachCount()
+    val other = itemTypes.size - groups.keys.sumOf { counts[it] ?: 0 }
     val document = PdfDocument()
     val pdfBytes = ByteArrayOutputStream()
     try {
@@ -205,7 +207,7 @@ internal fun keyraPdfOverviewArchive(itemTypes: List<String>): ByteArray {
         paint.textSize = 13f
         var y = 218f
         for ((kind, label) in groups) {
-            page.canvas.drawText("$label: ${counts.getValue(kind)}", 46f, y, paint)
+            page.canvas.drawText("$label: ${counts[kind] ?: 0}", 46f, y, paint)
             y += 29f
         }
         page.canvas.drawText("Other items: $other", 46f, y, paint)
