@@ -1776,7 +1776,7 @@ private fun KeyraRoot(
         splash = false
     }
     Box(Modifier.fillMaxSize().background(Midnight)) {
-        if (splash) SplashScreen()
+        if (splash) SplashScreen(model.languageCode)
         else when (model.screen) {
             Screen.ONBOARDING -> OnboardingScreen(model)
             Screen.RECOVERY -> RecoverySetupScreen(model)
@@ -1815,7 +1815,7 @@ private fun KeyraRoot(
 }
 
 @Composable
-private fun SplashScreen() {
+private fun SplashScreen(languageCode: String) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -1843,7 +1843,7 @@ private fun SplashScreen() {
                 maxLines = 1
             )
             Text(
-                "SIGURNI UPRAVITELJ LOZINKI",
+                keyraLocalized(languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"),
                 color = Muted,
                 fontSize = if (compact) 10.sp else 11.sp,
                 letterSpacing = if (compact) 1.8.sp else 2.4.sp,
