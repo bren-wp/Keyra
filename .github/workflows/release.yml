@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.25"
+        default: "0.6.26"
 
 permissions:
   contents: write
@@ -369,7 +369,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.25 hardens first-run master-password editing on iOS: the 256-character limit is enforced directly in the SwiftUI Binding setter instead of rewriting text state in an onChange callback during an active keyboard edit. Android and iOS first-run UI regressions now also check 11-character rejection followed by valid 12-character entry. Existing vault integrity, Recovery Key, Keychain safeguards, and KEYRA1/KEYRA2/KEYRAREC1 compatibility are preserved.
+          Keyra 0.6.26 introduces an English-first onboarding experience and a persisted 27-language selection with English fallback for untranslated legacy screens. Android and iOS Settings can export an explicitly approved, unencrypted ZIP containing a PDF with aggregate vault-item counts only; passwords, names, notes, TOTP seeds and keys are never included. The existing encrypted .keyra backup and legacy KEYRA1/KEYRA2/KEYRAREC1 compatibility are unchanged. Brendigo privacy policy and terms remain publicly accessible.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
