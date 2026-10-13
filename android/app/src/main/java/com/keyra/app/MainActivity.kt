@@ -5690,10 +5690,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Info,
-                    "O aplikaciji",
+                    keyraLocalized(model.languageCode, "About Keyra", "O aplikaciji"),
                     "Keyra $versionName • Brendigo",
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
+                        if (!openWebsite(context, "https://brendigo.com/o-nama/")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
