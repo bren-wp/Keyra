@@ -77,7 +77,7 @@ Keyra's core vault operates without a user account or a Keyra-operated backend. 
 
 | Protection | Current implementation |
 | --- | --- |
-| Encrypted vault | AES-256-GCM; unlock fails safely if the encrypted vault is missing or unreadable rather than showing an invented empty vault |
+| Encrypted vault | AES-256-GCM; unlock fails safely if the encrypted vault is missing or unreadable. First-run setup also refuses to overwrite existing ciphertext when its master-password verifier is missing. |
 | Master-password verifier | PBKDF2-HMAC-SHA-256, 600,000 iterations for current records |
 | Protected device key | Android Keystore / Apple Keychain. On iOS, an unavailable or missing existing vault key cannot be silently regenerated during unlock or re-save. |
 | Access control | Supported biometric or device authentication |
