@@ -2154,7 +2154,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     maxLines = 1
                 )
                 Text(
-                    "SIGURNI UPRAVITELJ LOZINKI",
+                    keyraLocalized(model.languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"),
                     color = Muted,
                     fontSize = if (compact) 9.sp else 11.sp,
                     letterSpacing = if (compact) 1.4.sp else 2.sp,
@@ -2165,14 +2165,14 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 if (!short) OnboardingVaultHero(compact)
                 Spacer(Modifier.height(if (compact) 9.dp else 18.dp))
                 Text(
-                    "Sigurniji način upravljanja lozinkama",
+                    keyraLocalized(model.languageCode, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"),
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White,
                     fontSize = if (compact) 25.sp else 31.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.",
+                    keyraLocalized(model.languageCode, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."),
                     modifier = Modifier.fillMaxWidth(),
                     color = Muted,
                     fontSize = if (compact) 14.sp else 16.sp
@@ -2194,7 +2194,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                     shape = RoundedCornerShape(28.dp)
                 ) {
-                    Text("Izradi trezor", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
+                    Text(keyraLocalized(model.languageCode, "Create my vault", "Izradi trezor"), fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                 }
@@ -2206,7 +2206,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Download, contentDescription = null, tint = Cyan)
                     Spacer(Modifier.width(8.dp))
-                    Text("Uvezi Keyra trezor", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "Import my vault", "Uvezi Keyra trezor"), color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
                 TextButton(
                     onClick = model::startRecovery,
@@ -2214,7 +2214,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Key, contentDescription = null, tint = Ice)
                     Spacer(Modifier.width(8.dp))
-                    Text("Imam Recovery Key", color = Ice, fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "I have a Recovery Key", "Imam Recovery Key"), color = Ice, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -5505,8 +5505,8 @@ private fun SettingsScreen(
         ) {
             item {
                 SettingsIntroCard(
-                    title = "Vaša Keyra, vaše postavke.",
-                    subtitle = "Sve važne opcije na jednom mjestu."
+                    title = keyraLocalized(model.languageCode, "Your Keyra. Your preferences.", "Vaša Keyra, vaše postavke."),
+                    subtitle = keyraLocalized(model.languageCode, "Make Keyra work the way you do.", "Sve važne opcije na jednom mjestu.")
                 )
             }
             if (model.isProcessingBackup || model.isProcessingRecovery) {
@@ -5664,10 +5664,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
-                    "Pravila privatnosti",
-                    "Pročitajte pravila privatnosti.",
+                    keyraLocalized(model.languageCode, "Privacy policy", "Politika privatnosti"),
+                    keyraLocalized(model.languageCode, "How Keyra protects your information.", "Saznajte kako Keyra štiti vaše podatke."),
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/politika-privatnosti")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
@@ -5676,10 +5676,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Description,
-                    "Uvjeti korištenja",
-                    "Pročitajte uvjete korištenja aplikacije.",
+                    keyraLocalized(model.languageCode, "Terms of use", "Uvjeti korištenja"),
+                    keyraLocalized(model.languageCode, "Your rights and responsibilities.", "Vaša prava i odgovornosti."),
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/uvjeti-koristenja")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/TERMS.md")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
