@@ -21,7 +21,7 @@ This checklist complements, but **does not replace**, a physical-device investig
   updated password back into the same SwiftUI state while the IME was editing.
   This removes that re-entrant state-write pattern; it is **not** a confirmed
   root-cause attribution for the originally reported crash.
-- Android: first and second input digits in the main instrumented test are now sent using system `UiAutomation.injectInputEvent(KeyEvent)` keyboard events. The test waits for actual editable field content to change after each key. This covers more of the Android input dispatch path than Compose `performTextInput`, but it is still **an emulator**, not proof for a specific physical keyboard or IME.
+- Android: v0.6.25 CI initially attempted `UiAutomation.injectInputEvent(KeyEvent)` for the first two digits, but Android API 35 emulator hardware-key events were not reflected by the Compose field with the software IME active. This caused a `ComposeTimeoutException` in [Android run #38463002897](https://github.com/bren-wp/Keyra/actions/runs/38463002897). The regression now uses the reliable Compose text editing API and asserts the actual editable text after each digit. Hardware keyboard/IME dispatch is a separate physical-device verification requirement; CI does **not** claim that path was exercised.
 - Android and iOS: instrumented first-run test flows now submit an 11-character
   synthetic password, confirm that it is rejected while the editing screen
   remains accessible, then clear it and successfully enter the minimum valid
