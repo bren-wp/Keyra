@@ -5,4 +5,8 @@ enum RecoveryCiphertextPolicy {
     static func allowsInstall(hasCiphertext: Bool, initialRecovery: Bool) -> Bool {
         hasCiphertext || initialRecovery
     }
+
+    static func allowsFreshVaultCreation(hasCiphertext: Bool) -> Bool {
+        !hasCiphertext
+    }
 }
