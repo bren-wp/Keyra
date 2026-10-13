@@ -181,3 +181,44 @@ on name-frequency heuristics. Physical keyboard crash reproduction (#25),
 cross-platform device restore, production signing, and store-console submission
 are separate release gates.
 
+## 14 October 2026 — v0.6.28 scoped production review
+
+This review compared the current 0.6.27 production Kotlin and Swift sources,
+the referenced resource tree and the existing UI/release workflows. It did not
+treat low reference frequency as proof of dead code. Existing recovery protocols,
+Keychain/Keystore integration, Swift `FileDocument` methods and first-run
+fault-injection coverage are intentionally preserved.
+
+**Findings and verified code changes**
+
+- The Android and iOS PDF-report implementations each scanned the entire
+  category list repeatedly, once per displayed category. Both now aggregate
+  item counts in a **single pass**, preserving the fixed report labels and
+  excluding user-created category/type strings from serialized PDF contents.
+- Android's original PDF ZIP exporter wrote to the user-selected destination
+  inside the same background operation that rendered the report. It now checks
+  its authentication epoch, foreground status and Settings screen **after**
+  rendering but **before** opening the destination URI. This prevents a
+  paused/locked session from initiating a new export.
+- Android had `allowBackup=false` and `fullBackupContent=false` but lacked
+  an explicit Android 12+ `dataExtractionRules` exclusion for device-to-device
+  transfer. This has been added, with a separate CI validator for cloud and
+  device-transfer policy. iOS already stores ciphertext with
+  `completeFileProtection` and excludes its application-support vault
+  directory from backup.
+- A genuine first-run **iOS simulator PNG** is now captured before any vault
+  or synthetic credentials exist, validated, included in release checksums,
+  uploaded as a release asset and referenced by the product README. No
+  fabricated screenshot/mock-up files were reintroduced.
+- Current production Kotlin and Swift source scans found no diagnostic
+  `println`/`NSLog` logging or cleartext password dumps. No production
+  function was removed on an unsupported single-reference heuristic.
+
+**Remaining evidence requirements**
+
+The only proof of release-ready compilation is green **Android CI, iOS CI and
+the release workflow on the final release SHA**. Cross-device hardware/IME
+reproduction (issue #25), Keyra legacy recovery on real Android/iOS devices,
+production Play/App Store signing, store-console review and complete per-screen
+translations remain outstanding. This static and workflow-scoped audit is not
+a formal proof that all runtime-reachable code is free of defects.
