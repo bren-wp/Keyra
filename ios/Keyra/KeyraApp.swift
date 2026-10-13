@@ -815,10 +815,21 @@ final class EncryptedVault {
         let data: Data
         let migratedFromDefaults: Bool
 
-        if FileManager.default.fileExists(atPath: url.path) {
+        // Non-destructive simulator UI fault injection. Both storage sources
+        // appear absent for this load only; the actual encrypted file, legacy
+        // data and Keychain verifier remain untouched for the recovery check.
+        // This is unavailable in device and Release builds.
+        #if DEBUG && targetEnvironment(simulator)
+        let simulatedMissingCiphertext =
+            ProcessInfo.processInfo.arguments.contains("-keyra-ci-simulate-missing-vault")
+        #else
+        let simulatedMissingCiphertext = false
+        #endif
+
+        if !simulatedMissingCiphertext && FileManager.default.fileExists(atPath: url.path) {
             data = try Data(contentsOf: url)
             migratedFromDefaults = false
-        } else if let legacy = defaults.data(forKey: legacyKey) {
+        } else if !simulatedMissingCiphertext, let legacy = defaults.data(forKey: legacyKey) {
             data = legacy
             migratedFromDefaults = true
         } else {
