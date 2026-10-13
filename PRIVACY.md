@@ -2,7 +2,7 @@
 
 **Razvojni programer / publisher:** Brendigo  
 **Kontakt za privatnost:** info@brendigo.com  
-**Posljednje ažuriranje:** 9. listopada 2026.
+**Posljednje ažuriranje:** 13. listopada 2026.
 
 Keyra je osmišljena tako da se osjetljivi podaci čuvaju šifrirani na uređaju.
 
@@ -50,3 +50,13 @@ Kritični izvoz/uvoz sigurnosnih kopija i Recovery Key datoteka te trajno brisan
 Keyra 0.6.3 dodatno smanjuje izlaganje osjetljivog sadržaja u sistemskim prikazima aplikacije. Android na podržanim verzijama zasebno onemogućuje Recents screenshot uz postojeći `FLAG_SECURE`, a touch događaji kroz obscured prozor odbacuju se kao dodatna zaštita od tapjacking scenarija. iOS privacy shield sada se aktivira čim aplikacija počne napuštati aktivno stanje.
 
 Osjetljivi password/recovery inputi na Androidu označeni su kao password input prema tipkovnici. Clipboard ponašanje ostaje ograničeno: Android automatski čisti nepromijenjeni Keyra sadržaj nakon 30 sekundi i označava ga kao sensitive gdje je podržano, a iOS koristi `localOnly` pasteboard s istekom nakon 30 sekundi.
+
+## Izvoz PDF pregleda u ZIP datoteci
+
+Keyra može na izričit zahtjev korisnika izraditi ZIP datoteku s PDF dokumentom koji prikazuje samo **ukupan broj zapisa i broj zapisa po vrstama**. Dokument ne sadrži imena zapisa, korisnička imena, lozinke, bilješke, adrese web-stranica, TOTP tajne ni Recovery Key.
+
+**PDF i ZIP nisu šifrirani.** Korisnik bira lokaciju spremanja putem sistemskog sučelja. Ovaj pregled nije šifrirana sigurnosna kopija i iz njega se ne može obnoviti trezor. Keyra neće automatski prenositi taj dokument na svoj poslužitelj.
+
+## Jezik sučelja
+
+Postavka jezika sprema se lokalno na uređaju i ne šalje se Brendigu. Zadani jezik novog odabira je engleski; dostupno je 27 ponuđenih jezika, uključujući hrvatski. Potpuni prijevodi svih postojećih zaslona još nisu implementirani; dio postojećih tekstova ostaje na hrvatskom dok se lokalizacija dovršava.
