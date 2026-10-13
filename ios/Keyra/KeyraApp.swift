@@ -1759,6 +1759,7 @@ final class KeyraStore: ObservableObject {
             "biometric_enabled",
             "sensitive_reauth_enabled",
             "auto_lock_seconds",
+            "preferred_language_v1",
             "unlock_failed_attempts",
             "unlock_lockout_until"
         ]
@@ -1779,6 +1780,7 @@ final class KeyraStore: ObservableObject {
         biometricEnabled = false
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
+        preferredLanguage = "en"
         screen = .onboarding
         SecureClipboard.clearIfOwned()
         message = "Podaci trezora i zaštitni ključevi su izbrisani."
