@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.28"
+        default: "0.6.29"
 
 permissions:
   contents: write
@@ -28,6 +28,9 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Verify first-run import preserves encrypted vault data
+        run: python3 .github/scripts/validate_initial_import_preflight.py
 
       - name: Verify Android/iOS localization parity
         run: python3 .github/scripts/validate_localizations.py
