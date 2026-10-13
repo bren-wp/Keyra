@@ -2160,6 +2160,7 @@ private fun OnboardingVaultHero(compact: Boolean) {
 
 @Composable
 private fun OnboardingScreen(model: KeyraViewModel) {
+    var showLanguages by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compact = maxHeight < 800.dp || maxWidth < 360.dp
         val short = maxHeight < 590.dp
@@ -2253,6 +2254,22 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     Text(keyraLocalized(model.languageCode, "I have a Recovery Key", "Imam Recovery Key"), color = Ice, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+
+        // Available before creating a vault, including on compact devices.
+        IconButton(
+            onClick = { showLanguages = true },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
+                .size(44.dp).testTag("keyra-onboarding-language"),
+        ) {
+            Icon(
+                Icons.Outlined.Language,
+                contentDescription = keyraLocalized(model.languageCode, "App language", "Jezik aplikacije"),
+                tint = Cyan
+            )
+        }
+        if (showLanguages) {
+            KeyraLanguageDialog(model) { showLanguages = false }
         }
     }
 }
@@ -5189,6 +5206,40 @@ private fun DetailRow(icon: ImageVector, label: String, value: String, action: (
 }
 
 @Composable
+private fun KeyraLanguageDialog(model: KeyraViewModel, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(keyraLocalized(model.languageCode, "App language", "Jezik aplikacije")) },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 430.dp)) {
+                keyraLanguageNames.forEach { (code, name) ->
+                    item(key = code) {
+                        TextButton(
+                            onClick = {
+                                model.setLanguage(code)
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("keyra-language-$code")
+                        ) {
+                            Text(name, modifier = Modifier.weight(1f), color = Color.White)
+                            if (model.languageCode == code) {
+                                Icon(Icons.Outlined.Check, null, tint = Cyan)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(keyraLocalized(model.languageCode, "Close", "Zatvori"))
+            }
+        },
+        containerColor = Slate
+    )
+}
+
+@Composable
 private fun SettingsScreen(
     model: KeyraViewModel,
     requestBiometric: (String, () -> Unit) -> Unit
@@ -5259,36 +5310,7 @@ private fun SettingsScreen(
 
     Column(Modifier.fillMaxSize()) {
         if (showLanguages) {
-            AlertDialog(
-                onDismissRequest = { showLanguages = false },
-                title = { Text(keyraLocalized(model.languageCode, "App language", "Jezik aplikacije")) },
-                text = {
-                    LazyColumn(Modifier.heightIn(max = 430.dp)) {
-                        keyraLanguageNames.forEach { (code, name) ->
-                            item(key = code) {
-                                TextButton(
-                                    onClick = {
-                                        model.setLanguage(code)
-                                        showLanguages = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth().testTag("keyra-language-$code")
-                                ) {
-                                    Text(name, modifier = Modifier.weight(1f), color = Color.White)
-                                    if (model.languageCode == code) {
-                                        Icon(Icons.Outlined.Check, null, tint = Cyan)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showLanguages = false }) {
-                        Text(keyraLocalized(model.languageCode, "Close", "Zatvori"))
-                    }
-                },
-                containerColor = Slate
-            )
+            KeyraLanguageDialog(model) { showLanguages = false }
         }
         if (confirmReport) {
             AlertDialog(
