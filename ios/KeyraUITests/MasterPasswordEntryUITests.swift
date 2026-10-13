@@ -48,13 +48,32 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master = app.secureTextFields["keyra-master-password"]
         XCTAssertTrue(master.waitForExistence(timeout: 15))
         let synthetic = "SafeDemo2026" // Exactly 12 characters
+        let underlength = "Short123#26" // Exactly 11 characters
+        let confirmation = app.secureTextFields["keyra-confirm-master-password"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+
+        // Check the lower boundary using the actual software keyboard.
+        // An invalid submission must not create a vault or erase the entry.
+        master.tap()
+        master.typeText(underlength)
+        confirmation.tap()
+        confirmation.typeText(underlength)
+        app.buttons["keyra-submit-master-password"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Glavna lozinka mora imati između 12 i 256 znakova."]
+                .waitForExistence(timeout: 10),
+            "An 11-character master password must be rejected without a crash."
+        )
+        XCTAssertTrue(master.exists, "Invalid first-run input must keep the editor accessible")
+        master.tap()
+        master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: underlength.count))
+        confirmation.tap()
+        confirmation.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: underlength.count))
         master.tap()
         master.typeText(synthetic)
         XCTAssertEqual((master.value as? String)?.count, synthetic.count,
                        "Master-password IME must accept the complete synthetic input")
 
-        let confirmation = app.secureTextFields["keyra-confirm-master-password"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
         confirmation.tap()
         confirmation.typeText(synthetic)
         XCTAssertEqual((confirmation.value as? String)?.count, synthetic.count,
