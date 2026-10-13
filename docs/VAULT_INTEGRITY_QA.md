@@ -35,6 +35,12 @@ The Android JUnit regression checks all four combinations of ciphertext
 presence and initial-recovery intent. iOS CI compiles the actual Swift
 recovery policy and runs four corresponding Swift assertions.
 
+**Additional Android guard:** failure to persist an upgraded master-password
+verifier no longer triggers destruction of a pre-existing valid verifier.
+Fresh setup may still clean up a failed partial credential installation.
+Android JUnit tests distinguish these two cases; actual disk write failure
+injection remains device QA.
+
 **Additional iOS guard:** Keychain read errors are distinguished from an
 actual `errSecItemNotFound`. A transient or access-related read failure must
 not trigger a new encryption key. Loading existing ciphertext requires an
