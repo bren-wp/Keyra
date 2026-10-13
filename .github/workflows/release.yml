@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.27"
+        default: "0.6.28"
 
 permissions:
   contents: write
@@ -388,7 +388,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.27 extends the existing English-first 27-language selection with translated navigation, vault creation, import and language controls on Android and iOS, plus a language picker available before creating a first vault. Existing untranslated screens use their prior text while broader localization continues. Encrypted backups, the safe aggregate-only PDF/ZIP report, strong device protection, and KEYRA1/KEYRA2/KEYRAREC1 compatibility remain unchanged.
+          Keyra 0.6.28 adds explicit Android 12+ cloud and device-to-device vault exclusion rules, prevents expired sessions from exporting PDF overview files, optimizes aggregate PDF/ZIP reports on both platforms, and includes a genuine iOS onboarding screenshot captured from the release simulator. Existing encrypted backups, multi-language onboarding, Keychain protections and KEYRA1/KEYRA2/KEYRAREC1 compatibility remain intact.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
