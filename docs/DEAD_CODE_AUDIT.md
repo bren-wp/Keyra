@@ -222,3 +222,10 @@ reproduction (issue #25), Keyra legacy recovery on real Android/iOS devices,
 production Play/App Store signing, store-console review and complete per-screen
 translations remain outstanding. This static and workflow-scoped audit is not
 a formal proof that all runtime-reachable code is free of defects.
+
+## 14 October 2026 — v0.6.29 orphaned-ciphertext import review
+
+- Found a data-preservation gap in both first-run backup import paths. Fresh vault creation correctly refused to overwrite surviving encrypted ciphertext, but the import flow did not enforce the same pre-write policy if its password verifier was missing.
+- Android `importNewVault` now rejects surviving ciphertext before any decryption or storage. iOS `importNewVault` applies `RecoveryCiphertextPolicy.allowsFreshVaultCreation` before any storage mutation, guiding the user to explicit Recovery Key restoration.
+- New cross-platform CI source-level regression check asserts the guard executes before import decryption and save. Policy tests remain enabled. KEYRA1, KEYRA2, KEYRAREC1 and existing encrypted records are unchanged.
+- No speculative deletion of low-reference compatibility functions, cryptographic migration logic or Swift FileDocument methods. Still requires hardware recovery, large-vault and interrupted-write verification, as well as store signing and full 27-language localization.
