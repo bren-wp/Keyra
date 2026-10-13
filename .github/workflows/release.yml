@@ -32,6 +32,9 @@ jobs:
       - name: Verify Android/iOS localization parity
         run: python3 .github/scripts/validate_localizations.py
 
+      - name: Verify no silent Android vault backup or device migration
+        run: python3 .github/scripts/validate_vault_transfer.py
+
       - id: version
         name: Uskladi Android i iOS verziju
         shell: bash
@@ -320,6 +323,19 @@ jobs:
           sleep 3
           /bin/kill -0 "$PID"
 
+          # Authentic screenshot of a freshly provisioned empty vault setup.
+          # Capture before XCTest creates any synthetic credentials. The
+          # screenshot is included in the real release assets for README.
+          SCREENSHOT="dist/Keyra-${VERSION}-iOS-Onboarding.png"
+          xcrun simctl io "$UDID" screenshot "$SCREENSHOT"
+          test -s "$SCREENSHOT"
+          python3 - "$SCREENSHOT" <<'PY'
+          import pathlib, sys
+          data = pathlib.Path(sys.argv[1]).read_bytes()
+          assert data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"), "iOS screenshot is not a PNG"
+          assert len(data) > 10240, "iOS screenshot capture was unexpectedly small"
+          PY
+
           # The release previously passed on simulator launch alone while its
           # separate main iOS UI workflow failed. Gate publication on the
           # actual synthetic first-run password-entry XCTest as well.
@@ -377,7 +393,7 @@ jobs:
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
           - iOS build, static analysis, privacy gates, Swift policy assertions, first-run simulator UI regression including 11/12/256-character boundaries, missing ciphertext and unavailable Keychain simulations
-          - Android debug/unsigned APK and AAB; iOS simulator ZIP and unsigned IPA; SHA-256 checksum manifests
+          - Android debug/unsigned APK and AAB; iOS simulator ZIP and unsigned IPA; a genuine first-run simulator PNG; SHA-256 checksum manifests
           - Issue #25: the original device crash remains unconfirmed without a reproducible device trace. Passing simulator tests alone do not establish a physical-device fix. See docs/MASTER_PASSWORD_INPUT_QA.md.
 
           ## Store signing
