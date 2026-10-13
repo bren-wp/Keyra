@@ -48,6 +48,17 @@ existing Keychain key, and saving an already persisted vault cannot silently
 create another key if its original key is unavailable. New empty vault
 creation still provisions the initial key normally.
 
+## Orphaned ciphertext safeguards in 0.6.24
+
+When the master-password verifier is missing but encrypted vault data still
+exists, ordinary first-run creation now refuses to overwrite the persisted
+ciphertext. Android checks the stored vault preference before creating a new
+empty vault. iOS checks its encrypted file and legacy stored data before
+creating. Rejection occurs before any destructive cleanup or new save.
+
+JUnit and compiled Swift regression assertions cover fresh/occupied storage.
+Actual missing-verifier fault injection on disposable devices is still required.
+
 ## Automated verification
 
 - Android instrumented `MasterPasswordEntryInstrumentedTest` first confirms that a synthetic encrypted vault is created and can be unlocked after an activity recreation.
