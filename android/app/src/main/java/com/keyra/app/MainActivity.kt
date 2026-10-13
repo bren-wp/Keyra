@@ -683,6 +683,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         biometricEnabled = false
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
+        languageCode = "en"
         screen = Screen.ONBOARDING
         // A destructive vault wipe must not leave a credential on the clipboard.
         // Only erase a matching Keyra-owned clip, not newer third-party content.
