@@ -332,7 +332,7 @@ jobs:
           python3 - "$SCREENSHOT" <<'PY'
           import pathlib, sys
           data = pathlib.Path(sys.argv[1]).read_bytes()
-          assert data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"), "iOS screenshot is not a PNG"
+          assert data.startswith(bytes.fromhex("89504e470d0a1a0a")), "iOS screenshot is not a PNG"
           assert len(data) > 10240, "iOS screenshot capture was unexpectedly small"
           PY
 
