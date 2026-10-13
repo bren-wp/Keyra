@@ -791,20 +791,39 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
         val requestEpoch = authenticationEpoch
         val snapshotTypes = items.map { it.type }
+        val resolver = context.applicationContext.contentResolver
         isProcessingBackup = true
         viewModelScope.launch {
-            val success = withContext(Dispatchers.IO) {
+            val zip = withContext(Dispatchers.IO) {
                 runCatching {
-                    val zip = keyraPdfOverviewArchive(snapshotTypes)
-                    require(zip.size in 1..1_000_000)
-                    context.contentResolver.openOutputStream(uri, "w")?.use { it.write(zip) }
-                        ?: error("Selected document could not be opened")
+                    keyraPdfOverviewArchive(snapshotTypes).also {
+                        require(it.size in 1..1_000_000)
+                    }
+                }.getOrNull()
+            }
+            // Do not export any document if the user locked the vault,
+            // left Settings, or sent the app to background while rendering.
+            if (!canCompleteSettingsCrypto(requestEpoch)) {
+                isProcessingBackup = false
+                return@launch
+            }
+            if (zip == null) {
+                isProcessingBackup = false
+                message = "Unable to create the PDF overview."
+                return@launch
+            }
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openOutputStream(uri, "w")?.use { stream ->
+                        stream.write(zip)
+                        stream.flush()
+                    } ?: error("Selected document could not be opened")
                     true
                 }.getOrDefault(false)
             }
             isProcessingBackup = false
             if (canCompleteSettingsCrypto(requestEpoch)) {
-                message = if (success) "PDF overview exported. The ZIP is not encrypted." else
+                message = if (saved) "PDF overview exported. The ZIP is not encrypted." else
                     "Unable to save the PDF overview."
             }
         }
