@@ -29,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify Android/iOS localization parity
+        run: python3 .github/scripts/validate_localizations.py
+
       - id: version
         name: Uskladi Android i iOS verziju
         shell: bash
