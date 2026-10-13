@@ -2157,7 +2157,7 @@ struct RootView: View {
             .ignoresSafeArea()
 
             if splash {
-                SplashView()
+                SplashView(languageCode: store.preferredLanguage)
             } else {
                 switch store.screen {
                 case .onboarding: OnboardingView().keyraPageWidth(680)
@@ -2308,6 +2308,7 @@ struct KeyraMark: View {
 }
 
 struct SplashView: View {
+    let languageCode: String
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < 620 || proxy.size.width < 340
@@ -2326,7 +2327,7 @@ struct SplashView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    Text("SIGURNI UPRAVITELJ LOZINKI")
+                    Text(keyraLocalized(languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
                         .font(.system(size: compact ? 10 : 11, weight: .medium))
                         .tracking(compact ? 1.8 : 2.4)
                         .foregroundStyle(muted)
