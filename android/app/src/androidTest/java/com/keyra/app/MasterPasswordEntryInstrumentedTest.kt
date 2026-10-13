@@ -66,11 +66,11 @@ class MasterPasswordEntryInstrumentedTest {
         // Real hardware/IME event delivery still requires physical-device QA.
         master.performTextInput("1")
         assertEquals(
-            "1", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.text
+            "1", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
         )
         master.performTextInput("2")
         assertEquals(
-            "12", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.text
+            "12", master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
         )
         master.performTextInput("ČćžŠ😀")
         master.performTextClearance()
