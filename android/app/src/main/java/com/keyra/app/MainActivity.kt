@@ -421,7 +421,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                             "Prethodno nedovršeno stanje nije moguće sigurno ukloniti."
                         }
                         beganInstalling = true
-                        store.installRecoveryKey(rawKey)
+                        store.installRecoveryKey(rawKey, initialRecovery = true)
                         store.save(imported)
                         check(auth.create(newPassword)) { "Novu glavnu lozinku nije moguće spremiti." }
                     }.fold(
@@ -1255,6 +1255,12 @@ internal fun normalizePortableUpdatedAt(
 internal fun destroyVaultInOrder(removeEncryptedData: () -> Boolean, removeKey: () -> Boolean): Boolean =
     removeEncryptedData() && removeKey()
 
+// A missing encrypted vault is only valid after the destructive preflight of an
+// explicitly requested initial recovery. Never replace an active vault's key
+// because its ciphertext has disappeared.
+internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Boolean): Boolean =
+    hasCiphertext || initialRecovery
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
 
@@ -1273,8 +1279,11 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
 
     fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
 
-    fun installRecoveryKey(rawKey: ByteArray): List<VaultItem> {
+    fun installRecoveryKey(rawKey: ByteArray, initialRecovery: Boolean = false): List<VaultItem> {
         val blob = prefs.getString("vault_blob", null)
+        check(canInstallRecoveryKey(!blob.isNullOrBlank(), initialRecovery)) {
+            "Encrypted vault data is missing; recovery key installation is refused."
+        }
         val verified = if (blob.isNullOrBlank()) {
             emptyList()
         } else {
