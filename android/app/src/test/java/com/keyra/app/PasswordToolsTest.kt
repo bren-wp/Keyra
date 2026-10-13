@@ -68,7 +68,8 @@ class PasswordToolsTest {
     }
 
     @Test
-    fun firstRunCreationMustNotOverwriteOrphanedCiphertext() {
+    fun firstRunCreationAndImportMustNotOverwriteOrphanedCiphertext() {
+        // Both initial-import and fresh-creation paths use this pre-write guard.
         assertFalse(canCreateFreshVault(hasCiphertext = true))
         assertTrue(canCreateFreshVault(hasCiphertext = false))
     }
