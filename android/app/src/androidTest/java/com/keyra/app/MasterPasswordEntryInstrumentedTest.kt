@@ -72,6 +72,19 @@ class MasterPasswordEntryInstrumentedTest {
         compose.onNodeWithContentDescription("Prikaži Glavna lozinka").performClick()
         master.performClick()
 
+        val underlength = "Short123#26" // Exactly 11 UTF-16 code units
+        master.performTextInput(underlength)
+        confirm.performClick()
+        confirm.performTextInput(underlength)
+        submit.performClick()
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithText("Glavna lozinka mora imati između 12 i 256 znakova.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        master.assertExists()
+        master.performTextClearance()
+        confirm.performTextClearance()
+
         val synthetic = "ČćDemo##2026" // Exactly 12 UTF-16 code units
         master.performTextInput(synthetic)
         confirm.performClick()
