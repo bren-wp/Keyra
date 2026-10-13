@@ -5486,7 +5486,11 @@ private func keyraPdfOverviewArchive(kinds: [String]) -> Data? {
         ("Kartica", "Payment cards"), ("Identitet", "Identities"),
         ("Wi-Fi", "Wi-Fi"), ("Autentifikator", "Authenticators")
     ]
-    let known = Set(kindsToLabels.map { $0.0 })
+    // A single aggregate pass avoids rescanning the vault for each label.
+    // User-supplied record types never appear in the generated document.
+    var counts: [String: Int] = [:]
+    for kind in kinds { counts[kind, default: 0] += 1 }
+    let knownTotal = kindsToLabels.reduce(0) { $0 + (counts[$1.0] ?? 0) }
     let bounds = CGRect(x: 0, y: 0, width: 595, height: 842)
     let renderer = UIGraphicsPDFRenderer(bounds: bounds)
     let pdf = renderer.pdfData { context in
@@ -5502,9 +5506,9 @@ private func keyraPdfOverviewArchive(kinds: [String]) -> Data? {
         draw("A private, read-only inventory report", at: 98)
         draw("Total saved items: \(kinds.count)", at: 151)
         for (index, pair) in kindsToLabels.enumerated() {
-            draw("\(pair.1): \(kinds.filter { $0 == pair.0 }.count)", at: 195 + CGFloat(index * 29))
+            draw("\(pair.1): \(counts[pair.0] ?? 0)", at: 195 + CGFloat(index * 29))
         }
-        draw("Other items: \(kinds.filter { !known.contains($0) }.count)", at: 369)
+        draw("Other items: \(kinds.count - knownTotal)", at: 369)
         draw("No passwords, recovery keys or personal item details are included.", at: 464, size: 11)
         draw("Unencrypted ZIP. Not a backup. Protect before sharing.", at: 484, size: 11)
     }

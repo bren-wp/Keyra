@@ -188,8 +188,10 @@ internal fun keyraPdfOverviewArchive(itemTypes: List<String>): ByteArray {
         "Kartica" to "Payment cards", "Identitet" to "Identities",
         "Wi-Fi" to "Wi-Fi", "Autentifikator" to "Authenticators"
     )
-    val counts = groups.keys.associateWith { kind -> itemTypes.count { it == kind } }
-    val other = itemTypes.size - counts.values.sum()
+    // Count once, rather than rescan the vault for every category.
+    // Only fixed category names, never user-supplied kinds, reach the PDF.
+    val counts = itemTypes.groupingBy { it }.eachCount()
+    val other = itemTypes.size - groups.keys.sumOf { counts[it] ?: 0 }
     val document = PdfDocument()
     val pdfBytes = ByteArrayOutputStream()
     try {
@@ -205,7 +207,7 @@ internal fun keyraPdfOverviewArchive(itemTypes: List<String>): ByteArray {
         paint.textSize = 13f
         var y = 218f
         for ((kind, label) in groups) {
-            page.canvas.drawText("$label: ${counts.getValue(kind)}", 46f, y, paint)
+            page.canvas.drawText("$label: ${counts[kind] ?: 0}", 46f, y, paint)
             y += 29f
         }
         page.canvas.drawText("Other items: $other", 46f, y, paint)
@@ -791,20 +793,39 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         }
         val requestEpoch = authenticationEpoch
         val snapshotTypes = items.map { it.type }
+        val resolver = context.applicationContext.contentResolver
         isProcessingBackup = true
         viewModelScope.launch {
-            val success = withContext(Dispatchers.IO) {
+            val zip = withContext(Dispatchers.IO) {
                 runCatching {
-                    val zip = keyraPdfOverviewArchive(snapshotTypes)
-                    require(zip.size in 1..1_000_000)
-                    context.contentResolver.openOutputStream(uri, "w")?.use { it.write(zip) }
-                        ?: error("Selected document could not be opened")
+                    keyraPdfOverviewArchive(snapshotTypes).also {
+                        require(it.size in 1..1_000_000)
+                    }
+                }.getOrNull()
+            }
+            // Do not export any document if the user locked the vault,
+            // left Settings, or sent the app to background while rendering.
+            if (!canCompleteSettingsCrypto(requestEpoch)) {
+                isProcessingBackup = false
+                return@launch
+            }
+            if (zip == null) {
+                isProcessingBackup = false
+                message = "Unable to create the PDF overview."
+                return@launch
+            }
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openOutputStream(uri, "w")?.use { stream ->
+                        stream.write(zip)
+                        stream.flush()
+                    } ?: error("Selected document could not be opened")
                     true
                 }.getOrDefault(false)
             }
             isProcessingBackup = false
             if (canCompleteSettingsCrypto(requestEpoch)) {
-                message = if (success) "PDF overview exported. The ZIP is not encrypted." else
+                message = if (saved) "PDF overview exported. The ZIP is not encrypted." else
                     "Unable to save the PDF overview."
             }
         }

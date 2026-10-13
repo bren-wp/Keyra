@@ -16,6 +16,16 @@ No account. No ads. No subscriptions. No Keyra cloud account.
 
 </div>
 
+## A first look at Keyra
+
+<div align="center">
+
+<img src="https://github.com/bren-wp/Keyra/releases/download/v0.6.28/Keyra-0.6.28-iOS-Onboarding.png" width="320" alt="Authentic Keyra iOS welcome screen captured on a fresh iPhone simulator before any account or password is created">
+
+*The real Keyra welcome screen, captured directly from the iOS app during release verification. No mock-ups or sample credentials.*
+
+</div>
+
 ---
 
 ## Made for the things that matter
@@ -56,7 +66,7 @@ Keyra works without requiring a Keyra user account or sending your vault to a Ke
 
 Your device and exported files still need protection. No security technology eliminates the risks of a compromised device or a weak master password.
 
-[Privacy policy](PRIVACY.md) &nbsp;·&nbsp; [Security](SECURITY.md) &nbsp;·&nbsp; [Recovery Key guide](docs/RECOVERY_KEY.md)
+[Privacy policy](PRIVACY.md) &nbsp;·&nbsp; [Terms of use](TERMS.md) &nbsp;·&nbsp; [Security](SECURITY.md)
 
 ## Get Keyra
 

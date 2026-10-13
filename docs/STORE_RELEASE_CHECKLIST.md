@@ -356,3 +356,24 @@ Ako se uvede prava automatska cloud sinkronizacija, mora biti opt-in, end-to-end
 - [ ] **Physical Android device**: confirm all issue #25 test cases including third-party keyboards, portrait/landscape, pasting, accessibility and backgrounding.
 - [ ] **Physical iPhone**: confirm all issue #25 test cases including soft keyboard, Unicode variants, focus transitions, paste and accessibility.
 - [ ] Confirm original reported failure is reproduced and repaired, or obtain a sanitized exception/stack trace proving no remaining crash; **do not close #25** without this evidence.
+
+## 0.6.28 privacy, data-transfer and genuine media gate
+
+- [x] Android 12+ `dataExtractionRules` configured to exclude the vault from
+  cloud backup and device-to-device migration. `allowBackup=false` and the
+  Android 11-and-earlier backup exclusion are retained.
+- [x] Android CI and release preparation inspect backup, migration and offline
+  permission policies with a zero-dependency XML validator.
+- [x] Android PDF overview generation checks the active unlocked Settings
+  session again before opening an external document URI.
+- [x] Android/iOS PDF category counting simplified to one aggregate pass; no
+  vault item titles, credentials, notes or TOTP seeds are serialized.
+- [x] Release workflow captures a **real iPhone simulator first-run PNG**
+  before vault creation, verifies the PNG, includes it in SHA-256 manifests and
+  publishes it with the APK/AAB/IPA assets.
+- [ ] Both platform CI workflows pass on the **final v0.6.28 PR SHA**.
+- [ ] The main-branch release workflow completes and publishes all expected
+  v0.6.28 artifacts including the verified first-run PNG.
+- [ ] Physical Android/iOS QA, production key signing, store console privacy
+  declarations, actual Store Connect/Play upload and review are still required.
+- [ ] Full-screen localization for all 27 languages remains incomplete.

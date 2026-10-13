@@ -60,3 +60,18 @@ Keyra može na izričit zahtjev korisnika izraditi ZIP datoteku s PDF dokumentom
 ## Jezik sučelja
 
 Postavka jezika sprema se lokalno na uređaju i ne šalje se Brendigu. Zadani jezik novog odabira je engleski; dostupno je 27 ponuđenih jezika, uključujući hrvatski. Potpuni prijevodi svih postojećih zaslona još nisu implementirani; dio postojećih tekstova ostaje na hrvatskom dok se lokalizacija dovršava.
+
+## Zaštita prilikom prijenosa na drugi uređaj (v0.6.28)
+
+Android verzija Keyre izričito isključuje podatke aplikacije iz automatskog
+backupa u oblaku i iz Android 12+ sistemskog prijenosa aplikacijskih datoteka
+na drugi uređaj. To nadopunjuje postojeći `allowBackup=false` jer ga dio
+uređaja ne primjenjuje jednako na prijenos između uređaja. Prijenos sadržaja
+trezora obavljate isključivo vlastitim **šifriranim .keyra backupom** i
+odgovarajućom lozinkom.
+
+PDF pregled spremljen u ZIP-u sadržava samo zbrojeve zapisa i **nije
+šifriran**. Kod izvoza Android ponovno provjerava je li korisnik još unutar
+otključane aktivne sesije prije zapisivanja datoteke. Sistemsko spremanje
+ostaje korisnička radnja, a odabrani vanjski pružatelj pohrane primjenjuje
+svoja pravila.
