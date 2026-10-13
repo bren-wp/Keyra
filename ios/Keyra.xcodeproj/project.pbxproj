@@ -7,12 +7,14 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* KeyraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* KeyraApp.swift */; };
+		A10000000000000000000030 /* RecoveryCiphertextPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000031 /* RecoveryCiphertextPolicy.swift */; };
 		A10000000000000000000012 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* PrivacyInfo.xcprivacy */; };
 		A10000000000000000000020 /* MasterPasswordEntryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* MasterPasswordEntryUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000000000000000000002 /* KeyraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyraApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000031 /* RecoveryCiphertextPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryCiphertextPolicy.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Keyra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keyra.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A10000000000000000000021 /* MasterPasswordEntryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasterPasswordEntryUITests.swift; sourceTree = "<group>"; };
@@ -52,6 +54,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000002 /* KeyraApp.swift */,
+				A10000000000000000000031 /* RecoveryCiphertextPolicy.swift */,
 				A10000000000000000000013 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Keyra;
@@ -154,7 +157,10 @@
 		A1000000000000000000000A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A10000000000000000000001 /* KeyraApp.swift in Sources */);
+			files = (
+				A10000000000000000000001 /* KeyraApp.swift in Sources */,
+				A10000000000000000000030 /* RecoveryCiphertextPolicy.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A10000000000000000000024 /* Sources */ = {
@@ -208,7 +214,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Keyra;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -218,7 +224,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.6.23;
+				MARKETING_VERSION = 0.6.24;
 				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -233,7 +239,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Keyra;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -243,7 +249,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.6.23;
+				MARKETING_VERSION = 0.6.24;
 				PRODUCT_BUNDLE_IDENTIFIER = com.keyra.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

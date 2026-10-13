@@ -444,6 +444,7 @@ struct VaultItem: Identifiable, Codable, Equatable {
 
 enum KeyraError: Error {
     case invalidData
+    case existingVaultData
     case keyUnavailable
     // OSStatus is safe to show only in DEBUG diagnostics; never log Keychain data.
     case keychainStatus(OSStatus)
@@ -534,7 +535,14 @@ enum KeychainVault {
     private static let service = "com.keyra.app.vault"
     private static let account = "encryption-key"
 
-    private static func existingKeyData() -> Data? {
+    private static func existingKeyData() throws -> Data? {
+        // CI-only, simulator-only fault: report a transient Keychain read error
+        // without touching or removing any persisted secret.
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-keyra-ci-simulate-keychain-unavailable") {
+            throw KeyraError.keychainStatus(errSecInteractionNotAllowed)
+        }
+        #endif
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -544,15 +552,26 @@ enum KeychainVault {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var output: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &output) == errSecSuccess else {
-            return nil
+        let status = SecItemCopyMatching(query as CFDictionary, &output)
+        if status == errSecItemNotFound { return nil }
+        // Keychain access errors (e.g. locked device) are not missing keys.
+        // Replacing an unreadable existing key would orphan the encrypted vault.
+        guard status == errSecSuccess else { throw KeyraError.keychainStatus(status) }
+        guard let data = output as? Data, data.count == 32 else {
+            throw KeyraError.keyUnavailable
         }
-        return output as? Data
+        return data
+    }
+
+    static func existingKey() throws -> SymmetricKey {
+        guard let data = try existingKeyData() else {
+            throw KeyraError.keyUnavailable
+        }
+        return SymmetricKey(data: data)
     }
 
     static func rawKeyData() throws -> Data {
-        if let existing = existingKeyData() {
-            guard existing.count == 32 else { throw KeyraError.keyUnavailable }
+        if let existing = try existingKeyData() {
             return existing
         }
 
@@ -800,12 +819,26 @@ final class EncryptedVault {
         return directory.appendingPathComponent("vault.bin", isDirectory: false)
     }
 
+    func hasPersistedCiphertext() throws -> Bool {
+        let url = try storageURL()
+        return FileManager.default.fileExists(atPath: url.path) ||
+            defaults.object(forKey: legacyKey) != nil
+    }
+
     func save(_ items: [VaultItem]) throws {
+        let url = try storageURL()
+        // Persisted ciphertext must never be re-encrypted under a newly
+        // generated key if its existing Keychain item is missing/unreadable.
+        // A brand-new vault may generate its first key.
+        let hasPersistedCiphertext = FileManager.default.fileExists(atPath: url.path) ||
+            defaults.object(forKey: legacyKey) != nil
+        let vaultKey = hasPersistedCiphertext
+            ? try KeychainVault.existingKey()
+            : try KeychainVault.key()
         let data = try JSONEncoder().encode(items)
-        let sealed = try AES.GCM.seal(data, using: KeychainVault.key())
+        let sealed = try AES.GCM.seal(data, using: vaultKey)
         guard let combined = sealed.combined else { throw KeyraError.invalidData }
 
-        let url = try storageURL()
         try combined.write(to: url, options: [.atomic, .completeFileProtection])
         defaults.removeObject(forKey: legacyKey)
     }
@@ -815,10 +848,21 @@ final class EncryptedVault {
         let data: Data
         let migratedFromDefaults: Bool
 
-        if FileManager.default.fileExists(atPath: url.path) {
+        // Non-destructive simulator UI fault injection. Both storage sources
+        // appear absent for this load only; the actual encrypted file, legacy
+        // data and Keychain verifier remain untouched for the recovery check.
+        // This is unavailable in device and Release builds.
+        #if DEBUG && targetEnvironment(simulator)
+        let simulatedMissingCiphertext =
+            ProcessInfo.processInfo.arguments.contains("-keyra-ci-simulate-missing-vault")
+        #else
+        let simulatedMissingCiphertext = false
+        #endif
+
+        if !simulatedMissingCiphertext && FileManager.default.fileExists(atPath: url.path) {
             data = try Data(contentsOf: url)
             migratedFromDefaults = false
-        } else if let legacy = defaults.data(forKey: legacyKey) {
+        } else if !simulatedMissingCiphertext, let legacy = defaults.data(forKey: legacyKey) {
             data = legacy
             migratedFromDefaults = true
         } else {
@@ -829,7 +873,7 @@ final class EncryptedVault {
         }
 
         let box = try AES.GCM.SealedBox(combined: data)
-        let clear = try AES.GCM.open(box, using: KeychainVault.key())
+        let clear = try AES.GCM.open(box, using: KeychainVault.existingKey())
         let decoded = try JSONDecoder().decode([VaultItem].self, from: clear)
 
         if migratedFromDefaults {
@@ -843,7 +887,7 @@ final class EncryptedVault {
         try KeychainVault.rawKeyData()
     }
 
-    func installRecoveryKey(_ data: Data) throws -> [VaultItem] {
+    func installRecoveryKey(_ data: Data, initialRecovery: Bool = false) throws -> [VaultItem] {
         guard data.count == 32 else { throw KeyraError.invalidData }
 
         let url = try storageURL()
@@ -852,6 +896,15 @@ final class EncryptedVault {
             encrypted = try Data(contentsOf: url)
         } else {
             encrypted = defaults.data(forKey: legacyKey)
+        }
+
+        // An existing vault must have ciphertext, even when its legitimate
+        // contents are an encrypted empty array. Only the initial recovery
+        // workflow may install a key before writing its restored ciphertext.
+        guard RecoveryCiphertextPolicy.allowsInstall(
+            hasCiphertext: encrypted != nil, initialRecovery: initialRecovery
+        ) else {
+            throw KeyraError.invalidData
         }
 
         let verified: [VaultItem]
@@ -1395,7 +1448,15 @@ final class KeyraStore: ObservableObject {
             guard let self else { return }
             let saved: Bool
             let failureMessage: String?
+            var beganCreatingVault = false
             do {
+                let existingCiphertext = try self.vault.hasPersistedCiphertext()
+                guard RecoveryCiphertextPolicy.allowsFreshVaultCreation(
+                    hasCiphertext: existingCiphertext
+                ) else {
+                    throw KeyraError.existingVaultData
+                }
+                beganCreatingVault = true
                 try self.vault.save([])
                 saved = self.auth.create(password: password)
                 failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
@@ -1404,6 +1465,8 @@ final class KeyraStore: ObservableObject {
                 // Distinguish a Keychain entitlement/protection failure from
                 // filesystem write failures without disclosing any secrets.
                 switch error {
+                case KeyraError.existingVaultData:
+                    failureMessage = "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
                 case KeyraError.keychainStatus(let status):
                     #if DEBUG
                     failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain. [OSStatus:\(status)]"
@@ -1421,7 +1484,7 @@ final class KeyraStore: ObservableObject {
                     #endif
                 }
             }
-            if !saved {
+            if !saved && beganCreatingVault {
                 _ = self.vault.clear()
             }
             DispatchQueue.main.async {
@@ -1529,7 +1592,7 @@ final class KeyraStore: ObservableObject {
                     guard self.auth.clear() else { throw KeyraDocumentError.invalidOrOversized }
                     guard KeychainVault.clear() else { throw KeyraDocumentError.invalidOrOversized }
                     beganInstalling = true
-                    _ = try self.vault.installRecoveryKey(rawKey)
+                    _ = try self.vault.installRecoveryKey(rawKey, initialRecovery: true)
                     try self.vault.save(imported)
                     guard self.auth.create(password: newPassword) else {
                         throw KeyraDocumentError.invalidOrOversized

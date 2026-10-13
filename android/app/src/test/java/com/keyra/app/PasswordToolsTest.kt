@@ -56,6 +56,32 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun failedVerifierMigrationNeverClearsExistingCredentials() {
+        assertFalse(
+            "Failed credential upgrades must leave the previous verifier intact",
+            shouldCleanFailedVerifierWrite(hadExistingVerifier = true)
+        )
+        assertTrue(
+            "First-time setup may clean up a partially installed verifier",
+            shouldCleanFailedVerifierWrite(hadExistingVerifier = false)
+        )
+    }
+
+    @Test
+    fun firstRunCreationMustNotOverwriteOrphanedCiphertext() {
+        assertFalse(canCreateFreshVault(hasCiphertext = true))
+        assertTrue(canCreateFreshVault(hasCiphertext = false))
+    }
+
+    @Test
+    fun recoveryKeyInstallRejectsMissingCiphertextUnlessInitialRecoveryWasExplicit() {
+        assertFalse(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = false))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = false))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = true))
+        assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = true))
+    }
+
+    @Test
     fun vaultErasureNeverRemovesKeyUntilEncryptedDataIsDeleted() {
         val stages = mutableListOf<String>()
         assertFalse(destroyVaultInOrder(

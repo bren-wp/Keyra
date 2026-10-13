@@ -308,12 +308,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         val requestEpoch = authenticationEpoch
         isCreatingVault = true
         viewModelScope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    store.save(emptyList())
-                    if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
-                }.isSuccess.also { success ->
+            val (saved, existingCiphertext) = withContext(Dispatchers.IO) {
+                if (!canCreateFreshVault(store.hasPersistedCiphertext())) {
+                    // No write or destructive rollback if an old encrypted vault exists.
+                    Pair(false, true)
+                } else {
+                    val success = runCatching {
+                        store.save(emptyList())
+                        if (!auth.create(password)) error("Zaštitu lozinke nije moguće spremiti.")
+                    }.isSuccess
                     if (!success) runCatching { store.destroy() }
+                    Pair(success, false)
                 }
             }
             isCreatingVault = false
@@ -321,7 +326,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                 password, emptyList(),
                 shouldAcceptAuthCompletion(requestEpoch, authenticationEpoch, appInForeground)
             )
-            else message = "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            else message = if (existingCiphertext) {
+                "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+            } else {
+                "Trezor nije moguće izraditi. Provjerite zaključavanje uređaja i pokušajte ponovno."
+            }
         }
     }
 
@@ -421,7 +430,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                             "Prethodno nedovršeno stanje nije moguće sigurno ukloniti."
                         }
                         beganInstalling = true
-                        store.installRecoveryKey(rawKey)
+                        store.installRecoveryKey(rawKey, initialRecovery = true)
                         store.save(imported)
                         check(auth.create(newPassword)) { "Novu glavnu lozinku nije moguće spremiti." }
                     }.fold(
@@ -938,6 +947,12 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
+// Credential migration must not erase a previously persisted verifier merely
+// because the replacement write failed. First-time creation may clean up a
+// partially initialized verifier if no prior credential existed.
+internal fun shouldCleanFailedVerifierWrite(hadExistingVerifier: Boolean): Boolean =
+    !hadExistingVerifier
+
 private class AuthStore(private val prefs: android.content.SharedPreferences) {
     companion object {
         private const val CURRENT_ITERATIONS = 600_000
@@ -952,6 +967,7 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
             (prefs.contains("master_hash") && prefs.contains("master_salt"))
 
     fun create(password: String): Boolean {
+        val hadExistingVerifier = isSetup()
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val hash = derive(password, salt, CURRENT_ITERATIONS)
         return try {
@@ -968,7 +984,9 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
                 .remove("master_iterations")
                 .remove("master_hash")
                 .commit()
-            if (!saved) clear()
+            if (!saved && shouldCleanFailedVerifierWrite(hadExistingVerifier)) {
+                clear()
+            }
             saved
         } catch (_: Exception) {
             false
@@ -1255,8 +1273,19 @@ internal fun normalizePortableUpdatedAt(
 internal fun destroyVaultInOrder(removeEncryptedData: () -> Boolean, removeKey: () -> Boolean): Boolean =
     removeEncryptedData() && removeKey()
 
+// A missing encrypted vault is only valid after the destructive preflight of an
+// explicitly requested initial recovery. Never replace an active vault's key
+// because its ciphertext has disappeared.
+internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Boolean): Boolean =
+    hasCiphertext || initialRecovery
+
+// An orphaned encrypted vault is never overwritten by first-run setup.
+internal fun canCreateFreshVault(hasCiphertext: Boolean): Boolean = !hasCiphertext
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
+
+    fun hasPersistedCiphertext(): Boolean = prefs.contains("vault_blob")
 
     fun save(items: List<VaultItem>) {
         val encrypted = crypto.encrypt(toJson(items))
@@ -1273,8 +1302,11 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
 
     fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
 
-    fun installRecoveryKey(rawKey: ByteArray): List<VaultItem> {
+    fun installRecoveryKey(rawKey: ByteArray, initialRecovery: Boolean = false): List<VaultItem> {
         val blob = prefs.getString("vault_blob", null)
+        check(canInstallRecoveryKey(!blob.isNullOrBlank(), initialRecovery)) {
+            "Encrypted vault data is missing; recovery key installation is refused."
+        }
         val verified = if (blob.isNullOrBlank()) {
             emptyList()
         } else {
