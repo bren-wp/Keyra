@@ -1350,8 +1350,46 @@ private let keyraLanguages: [(code: String, name: String)] = [
     ("tr", "Türkçe"), ("ar", "العربية"), ("ja", "日本語")
 ]
 
+// Curated copy for the most visible controls across all selectable locales.
+// The remaining legacy screens must receive their own localized strings.
+private let keyraCoreKeys: [String] = ["Vault", "Collections", "Generator", "Settings", "Create my vault", "Import my vault", "App language"]
+private let keyraCoreTranslations: [String: [String]] = [
+    "hr": ["Trezor", "Kolekcije", "Generator", "Postavke", "Izradi trezor", "Uvezi Keyra trezor", "Jezik aplikacije"],
+    "de": ["Tresor", "Sammlungen", "Generator", "Einstellungen", "Tresor erstellen", "Tresor importieren", "App-Sprache"],
+    "fr": ["Coffre", "Collections", "Générateur", "Paramètres", "Créer mon coffre", "Importer mon coffre", "Langue de l’application"],
+    "es": ["Bóveda", "Colecciones", "Generador", "Ajustes", "Crear mi bóveda", "Importar mi bóveda", "Idioma de la aplicación"],
+    "it": ["Cassaforte", "Raccolte", "Generatore", "Impostazioni", "Crea la mia cassaforte", "Importa la mia cassaforte", "Lingua dell'app"],
+    "pt": ["Cofre", "Coleções", "Gerador", "Definições", "Criar o meu cofre", "Importar o meu cofre", "Idioma da aplicação"],
+    "nl": ["Kluis", "Collecties", "Generator", "Instellingen", "Mijn kluis maken", "Mijn kluis importeren", "App-taal"],
+    "pl": ["Sejf", "Kolekcje", "Generator", "Ustawienia", "Utwórz sejf", "Importuj sejf", "Język aplikacji"],
+    "cs": ["Trezor", "Kolekce", "Generátor", "Nastavení", "Vytvořit trezor", "Importovat trezor", "Jazyk aplikace"],
+    "sk": ["Trezor", "Kolekcie", "Generátor", "Nastavenia", "Vytvoriť trezor", "Importovať trezor", "Jazyk aplikácie"],
+    "sl": ["Trezor", "Zbirke", "Generator", "Nastavitve", "Ustvari trezor", "Uvozi trezor", "Jezik aplikacije"],
+    "hu": ["Széf", "Gyűjtemények", "Generátor", "Beállítások", "Széf létrehozása", "Széf importálása", "Alkalmazás nyelve"],
+    "ro": ["Seif", "Colecții", "Generator", "Setări", "Creează seiful", "Importă seiful", "Limba aplicației"],
+    "bg": ["Сейф", "Колекции", "Генератор", "Настройки", "Създай сейф", "Импортирай сейф", "Език на приложението"],
+    "el": ["Θησαυροφυλάκιο", "Συλλογές", "Γεννήτρια", "Ρυθμίσεις", "Δημιουργία θησαυροφυλακίου", "Εισαγωγή θησαυροφυλακίου", "Γλώσσα εφαρμογής"],
+    "sv": ["Valv", "Samlingar", "Generator", "Inställningar", "Skapa valv", "Importera valv", "Appspråk"],
+    "da": ["Boks", "Samlinger", "Generator", "Indstillinger", "Opret boks", "Importer boks", "Appsprog"],
+    "fi": ["Holvi", "Kokoelmat", "Generaattori", "Asetukset", "Luo holvi", "Tuo holvi", "Sovelluksen kieli"],
+    "no": ["Hvelv", "Samlinger", "Generator", "Innstillinger", "Opprett hvelv", "Importer hvelv", "Appspråk"],
+    "et": ["Seif", "Kogud", "Generaator", "Seaded", "Loo seif", "Impordi seif", "Rakenduse keel"],
+    "lv": ["Seifs", "Kolekcijas", "Ģenerators", "Iestatījumi", "Izveidot seifu", "Importēt seifu", "Lietotnes valoda"],
+    "lt": ["Saugykla", "Kolekcijos", "Generatorius", "Nustatymai", "Sukurti saugyklą", "Importuoti saugyklą", "Programėlės kalba"],
+    "uk": ["Сховище", "Колекції", "Генератор", "Налаштування", "Створити сховище", "Імпортувати сховище", "Мова застосунку"],
+    "tr": ["Kasa", "Koleksiyonlar", "Oluşturucu", "Ayarlar", "Kasa oluştur", "Kasayı içe aktar", "Uygulama dili"],
+    "ar": ["الخزنة", "المجموعات", "مولد كلمات المرور", "الإعدادات", "إنشاء خزنة", "استيراد خزنة", "لغة التطبيق"],
+    "ja": ["保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語"]
+]
+
 private func keyraLocalized(_ code: String, _ english: String, _ croatian: String) -> String {
-    code == "hr" ? croatian : english
+    if code == "hr" { return croatian }
+    guard let index = keyraCoreKeys.firstIndex(of: english),
+          let translated = keyraCoreTranslations[code],
+          translated.indices.contains(index) else {
+        return english
+    }
+    return translated[index]
 }
 
 final class KeyraStore: ObservableObject {
