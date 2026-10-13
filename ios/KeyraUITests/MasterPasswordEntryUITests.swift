@@ -121,5 +121,42 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master.typeText(synthetic)
         app.buttons["keyra-submit-master-password"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 55), "Correct password must reopen vault")
+
+        // A simulator-only launch argument makes both ciphertext locations
+        // appear absent to load(), without deleting the synthetic vault or
+        // touching the Keychain verifier. Correct credentials must not unlock.
+        settings.tap()
+        XCTAssertTrue(lock.waitForExistence(timeout: 10))
+        lock.tap()
+        app.terminate()
+        app.launchArguments = ["-keyra-ci-simulate-missing-vault"]
+        app.launch()
+
+        let missingVaultMaster = app.secureTextFields["keyra-master-password"]
+        XCTAssertTrue(missingVaultMaster.waitForExistence(timeout: 15))
+        missingVaultMaster.tap()
+        missingVaultMaster.typeText(synthetic)
+        app.buttons["keyra-submit-master-password"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Trezor nije moguće otvoriti. Podaci nisu promijenjeni."]
+                .waitForExistence(timeout: 55),
+            "Missing ciphertext must fail closed instead of displaying an empty vault"
+        )
+        XCTAssertTrue(missingVaultMaster.exists, "Vault must remain locked after missing ciphertext")
+        XCTAssertFalse(settings.exists, "Missing ciphertext must never open the vault")
+
+        // Removing the fault flag must reopen the untouched encrypted vault.
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        let restoredMaster = app.secureTextFields["keyra-master-password"]
+        XCTAssertTrue(restoredMaster.waitForExistence(timeout: 15))
+        restoredMaster.tap()
+        restoredMaster.typeText(synthetic)
+        app.buttons["keyra-submit-master-password"].tap()
+        XCTAssertTrue(
+            settings.waitForExistence(timeout: 55),
+            "Simulated missing ciphertext must not delete data or verifier"
+        )
     }
 }
