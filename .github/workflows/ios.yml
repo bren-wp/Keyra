@@ -237,17 +237,12 @@ jobs:
             exit 1
           fi
 
-          # Capture a genuine privacy-safe first-run screenshot from the
-          # freshly provisioned Keyra simulator. No vault or credentials exist.
-          # The encoded PNG permits an exact repository asset to be created
-          # later without inventing or redrawing a screenshot.
+          # A real screenshot of the empty first-run screen; no credentials
+          # or vault data exist at capture time. Upload as a CI artifact,
+          # never dump image data into logs.
           SCREENSHOT="$RUNNER_TEMP/keyra-ios-onboarding.png"
           xcrun simctl io "$UDID" screenshot "$SCREENSHOT"
           test -s "$SCREENSHOT"
-          echo "KEYRA_IOS_ONBOARDING_PNG_BEGIN"
-          base64 < "$SCREENSHOT" | tr -d '\n'
-          echo
-          echo "KEYRA_IOS_ONBOARDING_PNG_END"
 
           # Run the actual first-run keyboard/visibility/create/relock XCTest flow
           # against this same freshly provisioned simulator. Synthetic data only.
@@ -264,3 +259,12 @@ jobs:
             CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Preserve authentic iOS first-run screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyra-ios-onboarding-screenshot
+          if-no-files-found: ignore
+          retention-days: 7
+          path: ${{ runner.temp }}/keyra-ios-onboarding.png
