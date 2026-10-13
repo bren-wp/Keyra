@@ -469,6 +469,13 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         isImportingVault = true
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
+                // Initial import must not overwrite surviving encrypted vault data.
+                // Use explicit Recovery Key flow to replace an existing vault.
+                if (!canCreateFreshVault(store.hasPersistedCiphertext())) {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+                    )
+                }
                 val imported = runCatching {
                     val json = PortableBackup.decrypt(payload, password)
                     store.fromJson(json)
