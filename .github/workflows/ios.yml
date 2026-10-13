@@ -70,6 +70,13 @@ jobs:
             exit 1
           fi
 
+      - name: Run Swift recovery ciphertext regression assertions
+        run: |
+          set -euo pipefail
+          swiftc ios/Keyra/RecoveryCiphertextPolicy.swift ios/tests/RecoveryCiphertextPolicyTests.swift \
+            -o "$RUNNER_TEMP/keyra-recovery-policy-tests"
+          "$RUNNER_TEMP/keyra-recovery-policy-tests"
+
       - name: Provjeri iOS aplikaciju
         run: |
           set -euo pipefail
