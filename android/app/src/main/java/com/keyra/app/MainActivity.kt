@@ -938,6 +938,12 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
+// Credential migration must not erase a previously persisted verifier merely
+// because the replacement write failed. First-time creation may clean up a
+// partially initialized verifier if no prior credential existed.
+internal fun shouldCleanFailedVerifierWrite(hadExistingVerifier: Boolean): Boolean =
+    !hadExistingVerifier
+
 private class AuthStore(private val prefs: android.content.SharedPreferences) {
     companion object {
         private const val CURRENT_ITERATIONS = 600_000
@@ -952,6 +958,7 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
             (prefs.contains("master_hash") && prefs.contains("master_salt"))
 
     fun create(password: String): Boolean {
+        val hadExistingVerifier = isSetup()
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val hash = derive(password, salt, CURRENT_ITERATIONS)
         return try {
@@ -968,7 +975,9 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
                 .remove("master_iterations")
                 .remove("master_hash")
                 .commit()
-            if (!saved) clear()
+            if (!saved && shouldCleanFailedVerifierWrite(hadExistingVerifier)) {
+                clear()
+            }
             saved
         } catch (_: Exception) {
             false
