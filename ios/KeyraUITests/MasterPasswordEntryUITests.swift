@@ -32,8 +32,15 @@ final class MasterPasswordEntryUITests: XCTestCase {
         XCTAssertTrue(master.waitForExistence(timeout: 10))
         master.tap()
         master.typeText(String(repeating: "A", count: 260))
-        XCTAssertEqual((master.value as? String)?.count, 256,
-                       "First-run field must cap long pasted/typed passwords at 256 characters")
+        // SecureTextField accessibility values may report a single masking
+        // glyph instead of the real number of characters. Reveal only our
+        // synthetic test input and verify the actual bounded field value.
+        show.tap()
+        let boundedVisible = app.textFields["keyra-master-password"]
+        XCTAssertTrue(boundedVisible.waitForExistence(timeout: 10))
+        XCTAssertEqual((boundedVisible.value as? String)?.count, 256,
+                       "First-run field must cap long typed passwords at 256 characters")
+        show.tap()
         // A long sequence of 256 synthetic backspaces may race with iOS IME
         // updates and leave the field nonempty. Test the 256-character boundary,
         // then create a fresh first-run view before exercising vault creation.
@@ -71,13 +78,10 @@ final class MasterPasswordEntryUITests: XCTestCase {
         confirmation.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: underlength.count))
         master.tap()
         master.typeText(synthetic)
-        XCTAssertEqual((master.value as? String)?.count, synthetic.count,
-                       "Master-password IME must accept the complete synthetic input")
-
         confirmation.tap()
         confirmation.typeText(synthetic)
-        XCTAssertEqual((confirmation.value as? String)?.count, synthetic.count,
-                       "Confirmation input must match the complete master-password length")
+        // Exact values are checked below after toggling the two synthetic
+        // fields to visible mode; masked accessibility values are not reliable.
 
         // Equal lengths do not establish that the iOS keyboard entered equal
         // text. Reveal synthetic credentials only inside the test process to
