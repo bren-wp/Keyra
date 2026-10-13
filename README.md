@@ -1,162 +1,98 @@
 <div align="center">
 
-<a href="https://github.com/bren-wp/Keyra"><img src="assets/brand/keyra-logo.svg" alt="Keyra" width="460"></a>
+<a href="https://github.com/bren-wp/Keyra"><img src="assets/brand/keyra-logo.svg" alt="Keyra — private password manager" width="440"></a>
 
-# Keyra
+# One vault. Everything important.
 
-### Your digital life. One beautifully protected vault.
+### A more beautiful way to keep your digital life private.
 
-**A refined, privacy-first password manager for Android and iOS.**
+**Keyra** brings passwords, authenticator codes, private notes, identities and important details together in a thoughtfully designed vault for **Android and iOS**.
 
-Secure passwords, private notes, cards, identities, Wi-Fi credentials and authenticator codes — without registration, ads or a Keyra cloud account.
+No account. No ads. No subscriptions. No Keyra cloud account.
 
-[![Latest release](https://img.shields.io/github/v/release/bren-wp/Keyra?style=for-the-badge&label=Release&color=00bfae)](https://github.com/bren-wp/Keyra/releases/latest)
-[![Android CI](https://img.shields.io/github/actions/workflow/status/bren-wp/Keyra/android.yml?style=for-the-badge&label=Android)](https://github.com/bren-wp/Keyra/actions/workflows/android.yml)
-[![iOS CI](https://img.shields.io/github/actions/workflow/status/bren-wp/Keyra/ios.yml?style=for-the-badge&label=iOS)](https://github.com/bren-wp/Keyra/actions/workflows/ios.yml)
+[**Get Keyra ↓**](https://github.com/bren-wp/Keyra/releases/latest) &nbsp;·&nbsp; [**Explore Keyra**](#made-for-the-things-that-matter) &nbsp;·&nbsp; [**Your privacy**](#private-by-design)
 
-[Explore](#explore-keyra) · [Privacy](#built-around-privacy) · [Download](#download--installation) · [Build](#build-from-source) · [Security](#security--responsible-disclosure)
-
-<img src="assets/brand/keyra-styleboard.svg" alt="Keyra brand colors and visual language" width="100%">
+<img src="assets/brand/keyra-styleboard.svg" width="100%" alt="Keyra brand identity — dark surfaces and cyan accents">
 
 </div>
 
 ---
 
-## Beautifully simple. Thoughtfully secure.
+## Made for the things that matter
 
-Your important information deserves more than an endless list of passwords. Keyra gives it a considered home: an elegant dark interface, clear navigation, useful security insights and familiar actions that feel effortless.
+Your passwords should be easy to find and hard for anyone else to access. Keyra pairs a calm, dark interface with powerful, deliberately simple tools.
 
-<table>
-<tr>
-<td width="33%" align="center"><strong>🔒 Privacy by design</strong><br><sub>No account, advertising SDK, analytics or Keyra-operated sync service.</sub></td>
-<td width="33%" align="center"><strong>✨ Crafted for clarity</strong><br><sub>Thoughtful typography, useful collections and a distraction-free experience.</sub></td>
-<td width="33%" align="center"><strong>📱 Two platforms, one experience</strong><br><sub>Android and iOS, with portable encrypted backups.</sub></td>
-</tr>
-</table>
-
-## Explore Keyra
+|  | Experience |
+| --- | --- |
+| 🔐 **Encrypted vault** | Keep your sensitive information protected with strong, on-device encryption. |
+| 🗂️ **One place for everything** | Organize logins, secure notes, cards, identities and Wi-Fi details. |
+| 🔎 **Find it fast** | Navigate your saved items with search, favorites and collections. |
+| ✨ **Better passwords** | Generate stronger passwords with configurable length and character types. |
+| ⏱️ **Authenticator codes** | Keep compatible time-based one-time codes alongside the accounts you use. |
+| 🛡️ **Security insights** | Identify weak or reused passwords and other supported security warnings. |
+| 👆 **Quick, protected access** | Use supported device authentication and automatic vault locking. |
+| 📦 **Your own encrypted backup** | Export and import protected files whenever you choose. |
 
 <div align="center">
-<img src="assets/screens/splash.svg" alt="Splash preview" width="22%">
-<img src="assets/screens/onboarding.svg" alt="Welcome preview" width="22%">
-<img src="assets/screens/unlock.svg" alt="Vault unlock preview" width="22%">
-<img src="assets/screens/vault.svg" alt="Vault preview" width="22%">
+<img src="assets/brand/keyra-icon.svg" width="92" alt="Keyra app icon">
 
-<sub>Existing Keyra UI illustrations; appearance may differ on individual screens and devices.</sub>
+**Thoughtful design. Meaningful protection.**
+
 </div>
 
-### Your vault, your way
+## Private by design
 
-| Organize everything | Take control of security |
-| --- | --- |
-| **Passwords & logins** — store the credentials that matter | **Password generator** — adjust length and character groups |
-| **Private notes** — protect information beyond logins | **Security Center** — weak/reused password and invalid TOTP alerts |
-| **Payment cards** — card details and expiry warnings | **TOTP codes** — offline, RFC 6238-compatible authenticator |
-| **Identities & Wi-Fi** — fields built for each type | **Biometric access** — supported device authentication |
-| **Favorites & collections** — find what you need quickly | **Automatic lock** — protect the vault when you leave |
-| **Encrypted backups** — deliberately export and restore | **Recovery Key** — the existing KEYRAREC1 recovery process |
+Keyra works without requiring a Keyra user account or sending your vault to a Keyra server. Its core features are designed to work locally.
+
+- **You stay in control:** your saved items remain in your local encrypted vault.
+- **No ad tracking:** no advertising or analytics SDK is included in the current app.
+- **No surprise sync:** backup export and import happen only when you choose to use them.
+- **System-level protection:** Android Keystore and Apple Keychain help safeguard encryption keys.
+- **Recovery with care:** a Recovery Key and an encrypted backup serve different purposes; preserve both securely if you need full recovery.
+
+Your device and exported files still need protection. No security technology eliminates the risks of a compromised device or a weak master password.
+
+[Privacy policy](PRIVACY.md) &nbsp;·&nbsp; [Security](SECURITY.md) &nbsp;·&nbsp; [Recovery Key guide](docs/RECOVERY_KEY.md)
+
+## Get Keyra
 
 <div align="center">
-<img src="assets/screens/add-login.svg" alt="Create item preview" width="29%">
-<img src="assets/screens/detail.svg" alt="Item details preview" width="29%">
-<img src="assets/screens/generator.svg" alt="Password generator preview" width="29%">
+
+### Available for Android and iOS
+
+[**View the latest GitHub release →**](https://github.com/bren-wp/Keyra/releases/latest)
+
 </div>
 
-### The little things matter
-
-Useful search, dedicated item editors, hidden sensitive values, understandable error messages, and clipboard content that expires. Every new vault starts empty: no invented accounts or example passwords.
-
-<div align="center">
-<img src="assets/screens/collections.svg" alt="Collections preview" width="42%">
-<img src="assets/screens/settings.svg" alt="Settings preview" width="42%">
-</div>
-
-## Built around privacy
-
-Keyra's core vault operates without a user account or a Keyra-operated backend. On Android the app does not request Internet permission; the code contains no analytics or remote-sync SDK. Files are exported only when you choose the destination.
-
-| Protection | Current implementation |
+| Android | iOS |
 | --- | --- |
-| Encrypted vault | AES-256-GCM; unlock fails safely if the encrypted vault is missing or unreadable. First-run setup also refuses to overwrite existing ciphertext when its master-password verifier is missing. |
-| Master-password verifier | PBKDF2-HMAC-SHA-256, 600,000 iterations for current records |
-| Protected device key | Android Keystore / Apple Keychain. On iOS, an unavailable or missing existing vault key cannot be silently regenerated during unlock or re-save. |
-| Access control | Supported biometric or device authentication |
-| Sensitive UI | Android screenshot restrictions / iOS privacy shield where supported |
-| Clipboard | Copied secrets remain briefly available for external pasting. Android uses a short-lived, keyed ownership tag (not a second plaintext copy) and attempts cleanup after ~30 seconds. iOS uses a 30-second pasteboard expiration. Successful full-vault erasure also clears Keyra-owned pasteboard content where the OS allows it; neither platform promises guaranteed clipboard removal. |
-| Portable backup | Encrypted KEYRA2; legacy KEYRA1 compatible |
-| Recovery | KEYRAREC1, separate from the actual vault backup |
+| Download the Android testing APK from GitHub Releases. | The GitHub release provides a simulator package and an unsigned IPA for development/testing. |
+| Store distribution requires a separately signed Android App Bundle. | Installing on an iPhone or publishing through the App Store requires Apple signing and provisioning. |
 
-**Privacy is a design principle, not an absolute guarantee.** A compromised device, another app's clipboard access, weak master passwords, or an unprotected exported backup can still expose information. See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
+**Availability:** Keyra is distributed through GitHub Releases. The presence of a release package does not mean the app is already available on Google Play or the App Store.
 
-### Your backup. Your choice.
+## Questions, answered
 
-Export an encrypted `.keyra` document, then save it through your preferred system file provider, including compatible private cloud apps. This is **manual document export/import**, not automatic background cloud sync. Your Recovery Key is not a backup of your vault contents; the two files may both be needed for recovery. As of 0.6.24, importing a Recovery Key into an existing vault refuses to replace its device-wrapped key if encrypted vault data is missing. Explicit initial recovery remains supported after its ordered cleanup preflight.
+**Can I use Keyra without registering?**  
+Yes. Your core vault does not require a Keyra account.
 
-[Recovery guide](docs/RECOVERY_KEY.md) · [Vault integrity & missing-data QA](docs/VAULT_INTEGRITY_QA.md) · [Recovery deletion & failure-injection QA](docs/RECOVERY_ERASURE_QA.md) · [Private document backup](docs/PRIVACY_CLOUD_BACKUP.md)
+**Does Keyra automatically synchronize my data?**  
+No. You decide when and where to export an encrypted backup.
 
-## Download & installation
+**Is the Recovery Key itself a backup?**  
+No. A Recovery Key protects access to the portable vault key; an encrypted backup preserves the actual contents.
 
-### [⬇ Get Keyra from GitHub Releases](https://github.com/bren-wp/Keyra/releases/latest)
-
-The release workflow publishes these file types:
-
-| Release file | Purpose |
-| --- | --- |
-| `Keyra-*-Android-debug.apk` | Debug-signed Android build for testing |
-| `Keyra-*-Android-unsigned.apk` | Unsigned APK, **requires signing** |
-| `Keyra-*-Android.aab` | App Bundle, **not automatically production-signed** |
-| `Keyra-*-iOS-Simulator.zip` | Build for iOS simulator QA |
-| `Keyra-*-iOS-unsigned.ipa` | Unsigned IPA, **not ready for normal iOS installation or App Store** |
-| `SHA256SUMS-Android.txt`, `SHA256SUMS-iOS.txt` | File integrity checksums |
-
-**Android:** verify the release checksums, then install the debug APK on a compatible testing device. The debug APK is not intended as a store-ready production package.
-
-**iOS:** use the Xcode simulator build or create a correctly provisioned and signed device build. An unsigned IPA cannot be installed as a normal App Store app. This README does not claim that Keyra is published in the app stores.
-
-## Build from source
-
-### Android
-
-Use Java 17, Gradle 8.13 and the required Android SDK, matching the CI toolchain.
-
-```bash
-git clone https://github.com/bren-wp/Keyra.git
-cd Keyra
-gradle -p android :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
-```
-
-### iOS
-
-Use macOS, Xcode and the appropriate iOS SDK. The current CI requirement is documented in [.github/workflows/ios.yml](.github/workflows/ios.yml).
-
-```bash
-git clone https://github.com/bren-wp/Keyra.git
-cd Keyra
-xcodebuild -project ios/Keyra.xcodeproj -scheme Keyra \
-  -sdk iphonesimulator -configuration Debug \
-  CODE_SIGNING_ALLOWED=NO build
-```
-
-### Quality standards
-
-Android CI checks lint, unit tests, builds and privacy restrictions. iOS CI runs builds, static analysis, privacy checks and a simulator launch smoke test. Release validation runs separately from the merged `main` commit.
-
-**Passing automated checks does not prove every screen or keyboard interaction works on physical devices.** Known gaps stay visible in [GitHub Issues](https://github.com/bren-wp/Keyra/issues) and the [release QA checklist](docs/STORE_RELEASE_CHECKLIST.md).
-
-## Security & responsible disclosure
-
-For security problems, follow [SECURITY.md](SECURITY.md). Never post actual passwords, recovery keys, TOTP secrets, vault exports or unredacted crash logs in public GitHub issues.
-
-[Security](SECURITY.md) · [Privacy](PRIVACY.md) · [Android data safety](docs/PLAY_DATA_SAFETY.md) · [iOS privacy](docs/APP_STORE_PRIVACY.md) · [Open issues](https://github.com/bren-wp/Keyra/issues)
+**Can I use the same backup across Android and iOS?**  
+Keyra supports its portable encrypted backup format on both platforms. Test your backup and recovery process before relying on it for a device migration.
 
 ---
 
 <div align="center">
-<img src="assets/brand/keyra-icon.svg" alt="Keyra icon" width="88">
 
-### Keyra
+<img src="assets/brand/keyra-logo.svg" width="250" alt="Keyra">
 
-**Everything important. Beautifully protected.**
+### Everything important. Beautifully protected.
 
-<sub>Made for privacy-conscious people on Android and iOS.</sub>
+*Privacy-first password management for Android and iOS.*
+
 </div>
