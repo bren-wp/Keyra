@@ -28,7 +28,10 @@ This checklist complements, but **does not replace**, a physical-device investig
   12-character synthetic password. Existing visibility, Unicode, 256-character,
   relock and wrong-password scenarios remain.
 - Run the PR CI on its final commit on **both** platforms; earlier green runs
-  from a different SHA are insufficient. Follow with actual hardware QA.
+  from a different SHA are insufficient. Release CI now also runs Android
+  instrumented UI tests and iOS first-run XCTest before artifact publication,
+  rather than relying only on production builds and an iOS launch smoke test.
+  Follow with actual hardware QA.
 - The source report did not identify a platform, keyboard, OS, device or
   exception. Without a sanitized physical-device reproduction or evidence of
   a specific fixed defect, maintain issue #25 as open rather than marking
