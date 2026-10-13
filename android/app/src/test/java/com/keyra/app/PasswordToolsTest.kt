@@ -56,6 +56,18 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun failedVerifierMigrationNeverClearsExistingCredentials() {
+        assertFalse(
+            "Failed credential upgrades must leave the previous verifier intact",
+            shouldCleanFailedVerifierWrite(hadExistingVerifier = true)
+        )
+        assertTrue(
+            "First-time setup may clean up a partially installed verifier",
+            shouldCleanFailedVerifierWrite(hadExistingVerifier = false)
+        )
+    }
+
+    @Test
     fun recoveryKeyInstallRejectsMissingCiphertextUnlessInitialRecoveryWasExplicit() {
         assertFalse(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = false))
         assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = false))
