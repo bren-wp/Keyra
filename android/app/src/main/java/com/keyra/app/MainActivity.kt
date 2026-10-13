@@ -1,6 +1,10 @@
 package com.keyra.app
 
 import android.app.Application
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ClipDescription
@@ -124,6 +128,70 @@ internal fun eraseRecoveryPredecessors(
     eraseVerifier: () -> Boolean
 ): Boolean = eraseVault() && eraseVerifier()
 
+// Languages not yet translated use the English interface copy as a fallback;
+// never claim that selecting a locale fully translates every legacy screen.
+internal val keyraLanguageNames = linkedMapOf(
+    "en" to "English", "hr" to "Hrvatski", "de" to "Deutsch",
+    "fr" to "Français", "es" to "Español", "it" to "Italiano",
+    "pt" to "Português", "nl" to "Nederlands", "pl" to "Polski",
+    "cs" to "Čeština", "sk" to "Slovenčina", "sl" to "Slovenščina",
+    "hu" to "Magyar", "ro" to "Română", "bg" to "Български",
+    "el" to "Ελληνικά", "sv" to "Svenska", "da" to "Dansk",
+    "fi" to "Suomi", "no" to "Norsk", "et" to "Eesti",
+    "lv" to "Latviešu", "lt" to "Lietuvių", "uk" to "Українська",
+    "tr" to "Türkçe", "ar" to "العربية", "ja" to "日本語"
+)
+
+private fun keyraLocalized(code: String, english: String, croatian: String): String =
+    if (code == "hr") croatian else english
+
+// Export deliberately excludes vault titles, usernames, passwords,
+// TOTP seeds, URLs, notes and all custom fields. The ZIP is NOT encrypted.
+internal fun keyraPdfOverviewArchive(itemTypes: List<String>): ByteArray {
+    val groups = linkedMapOf(
+        "Prijava" to "Logins", "Bilješka" to "Secure notes",
+        "Kartica" to "Payment cards", "Identitet" to "Identities",
+        "Wi-Fi" to "Wi-Fi", "Autentifikator" to "Authenticators"
+    )
+    val counts = groups.keys.associateWith { kind -> itemTypes.count { it == kind } }
+    val other = itemTypes.size - counts.values.sum()
+    val document = PdfDocument()
+    val pdfBytes = ByteArrayOutputStream()
+    try {
+        val page = document.startPage(PdfDocument.PageInfo.Builder(595, 842, 1).create())
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(12, 20, 32) }
+        paint.textSize = 27f
+        paint.isFakeBoldText = true
+        page.canvas.drawText("Keyra | Vault overview", 46f, 76f, paint)
+        paint.isFakeBoldText = false
+        paint.textSize = 14f
+        page.canvas.drawText("A private, read-only inventory report", 46f, 111f, paint)
+        page.canvas.drawText("Total saved items: ${itemTypes.size}", 46f, 168f, paint)
+        paint.textSize = 13f
+        var y = 218f
+        for ((kind, label) in groups) {
+            page.canvas.drawText("$label: ${counts.getValue(kind)}", 46f, y, paint)
+            y += 29f
+        }
+        page.canvas.drawText("Other items: $other", 46f, y, paint)
+        paint.textSize = 11f
+        page.canvas.drawText("No passwords, recovery keys or personal item details are included.", 46f, y + 76f, paint)
+        page.canvas.drawText("Unencrypted ZIP. Not a backup. Protect before sharing.", 46f, y + 98f, paint)
+        document.finishPage(page)
+        document.writeTo(pdfBytes)
+    } finally {
+        document.close()
+    }
+    return ByteArrayOutputStream().use { archive ->
+        ZipOutputStream(archive).use { zip ->
+            zip.putNextEntry(ZipEntry("Keyra-Vault-Overview.pdf"))
+            zip.write(pdfBytes.toByteArray())
+            zip.closeEntry()
+        }
+        archive.toByteArray()
+    }
+}
+
 enum class Screen { ONBOARDING, RECOVERY, UNLOCK, VAULT, COLLECTIONS, GENERATOR, ADD, DETAIL, SETTINGS, SECURITY }
 
 data class VaultItem(
@@ -240,6 +308,17 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             deviceAuthenticationAvailable
     )
     var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
+    var languageCode by mutableStateOf(
+        prefs.getString("preferred_language_v1", "en")?.takeIf { it in keyraLanguageNames } ?: "en"
+    )
+    fun setLanguage(code: String) {
+        if (code !in keyraLanguageNames) return
+        if (prefs.edit().putString("preferred_language_v1", code).commit()) {
+            languageCode = code
+        } else {
+            message = "Unable to save your language preference."
+        }
+    }
     var importingNewVault by mutableStateOf(false)
     var isCreatingVault by mutableStateOf(false)
         private set
@@ -604,6 +683,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         biometricEnabled = false
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
+        languageCode = "en"
         screen = Screen.ONBOARDING
         // A destructive vault wipe must not leave a credential on the clipboard.
         // Only erase a matching Keyra-owned clip, not newer third-party content.
@@ -666,6 +746,33 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure {
                 message = "Stavku nije moguće izbrisati. Pokušajte ponovno."
             }
+    }
+
+    fun exportPdfOverviewZipToUri(context: Context, uri: Uri) {
+        if (!unlocked || !isSetup || screen != Screen.SETTINGS ||
+            isProcessingBackup || isProcessingRecovery) {
+            message = "Unlock the vault before exporting a document."
+            return
+        }
+        val requestEpoch = authenticationEpoch
+        val snapshotTypes = items.map { it.type }
+        isProcessingBackup = true
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    val zip = keyraPdfOverviewArchive(snapshotTypes)
+                    require(zip.size in 1..1_000_000)
+                    context.contentResolver.openOutputStream(uri, "w")?.use { it.write(zip) }
+                        ?: error("Selected document could not be opened")
+                    true
+                }.getOrDefault(false)
+            }
+            isProcessingBackup = false
+            if (canCompleteSettingsCrypto(requestEpoch)) {
+                message = if (success) "PDF overview exported. The ZIP is not encrypted." else
+                    "Unable to save the PDF overview."
+            }
+        }
     }
 
     fun exportBackupToUri(context: Context, uri: Uri) {
@@ -1669,7 +1776,7 @@ private fun KeyraRoot(
         splash = false
     }
     Box(Modifier.fillMaxSize().background(Midnight)) {
-        if (splash) SplashScreen()
+        if (splash) SplashScreen(model.languageCode)
         else when (model.screen) {
             Screen.ONBOARDING -> OnboardingScreen(model)
             Screen.RECOVERY -> RecoverySetupScreen(model)
@@ -1708,7 +1815,7 @@ private fun KeyraRoot(
 }
 
 @Composable
-private fun SplashScreen() {
+private fun SplashScreen(languageCode: String) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -1736,7 +1843,7 @@ private fun SplashScreen() {
                 maxLines = 1
             )
             Text(
-                "SIGURNI UPRAVITELJ LOZINKI",
+                keyraLocalized(languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"),
                 color = Muted,
                 fontSize = if (compact) 10.sp else 11.sp,
                 letterSpacing = if (compact) 1.8.sp else 2.4.sp,
@@ -2048,7 +2155,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     maxLines = 1
                 )
                 Text(
-                    "SIGURNI UPRAVITELJ LOZINKI",
+                    keyraLocalized(model.languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"),
                     color = Muted,
                     fontSize = if (compact) 9.sp else 11.sp,
                     letterSpacing = if (compact) 1.4.sp else 2.sp,
@@ -2059,14 +2166,14 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 if (!short) OnboardingVaultHero(compact)
                 Spacer(Modifier.height(if (compact) 9.dp else 18.dp))
                 Text(
-                    "Sigurniji način upravljanja lozinkama",
+                    keyraLocalized(model.languageCode, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"),
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White,
                     fontSize = if (compact) 25.sp else 31.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.",
+                    keyraLocalized(model.languageCode, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."),
                     modifier = Modifier.fillMaxWidth(),
                     color = Muted,
                     fontSize = if (compact) 14.sp else 16.sp
@@ -2088,7 +2195,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                     shape = RoundedCornerShape(28.dp)
                 ) {
-                    Text("Izradi trezor", fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
+                    Text(keyraLocalized(model.languageCode, "Create my vault", "Izradi trezor"), fontSize = if (compact) 17.sp else 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
                 }
@@ -2100,7 +2207,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Download, contentDescription = null, tint = Cyan)
                     Spacer(Modifier.width(8.dp))
-                    Text("Uvezi Keyra trezor", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "Import my vault", "Uvezi Keyra trezor"), color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
                 TextButton(
                     onClick = model::startRecovery,
@@ -2108,7 +2215,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 ) {
                     Icon(Icons.Outlined.Key, contentDescription = null, tint = Ice)
                     Spacer(Modifier.width(8.dp))
-                    Text("Imam Recovery Key", color = Ice, fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "I have a Recovery Key", "Imam Recovery Key"), color = Ice, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2634,10 +2741,10 @@ private fun BottomNav(model: KeyraViewModel, active: Screen) {
                     .padding(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NavItem(Icons.Outlined.Home, "Trezor", active == Screen.VAULT, compact) { model.open(Screen.VAULT) }
-                NavItem(Icons.Outlined.Folder, "Kolekcije", active == Screen.COLLECTIONS, compact) { model.open(Screen.COLLECTIONS) }
-                NavItem(Icons.Outlined.Refresh, "Generator", active == Screen.GENERATOR, compact) { model.open(Screen.GENERATOR) }
-                NavItem(Icons.Outlined.Settings, "Postavke", active == Screen.SETTINGS, compact) { model.open(Screen.SETTINGS) }
+                NavItem(Icons.Outlined.Home, keyraLocalized(model.languageCode, "Vault", "Trezor"), active == Screen.VAULT, compact, "Trezor") { model.open(Screen.VAULT) }
+                NavItem(Icons.Outlined.Folder, keyraLocalized(model.languageCode, "Collections", "Kolekcije"), active == Screen.COLLECTIONS, compact, "Kolekcije") { model.open(Screen.COLLECTIONS) }
+                NavItem(Icons.Outlined.Refresh, keyraLocalized(model.languageCode, "Generator", "Generator"), active == Screen.GENERATOR, compact, "Generator") { model.open(Screen.GENERATOR) }
+                NavItem(Icons.Outlined.Settings, keyraLocalized(model.languageCode, "Settings", "Postavke"), active == Screen.SETTINGS, compact, "Postavke") { model.open(Screen.SETTINGS) }
             }
         }
     }
@@ -2649,6 +2756,7 @@ private fun RowScope.NavItem(
     label: String,
     selected: Boolean,
     compact: Boolean,
+    testIdentifier: String = label,
     onClick: () -> Unit
 ) {
     Box(
@@ -2668,7 +2776,7 @@ private fun RowScope.NavItem(
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick)
-            .testTag("keyra-nav-" + label),
+            .testTag("keyra-nav-" + testIdentifier),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -5063,6 +5171,22 @@ private fun SettingsScreen(
     var recoveryExportConfirm by remember { mutableStateOf("") }
     var recoveryImportPassphrase by remember { mutableStateOf("") }
 
+    var showLanguages by remember { mutableStateOf(false) }
+    var confirmReport by remember { mutableStateOf(false) }
+
+    val exportReportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            val perform = { model.exportPdfOverviewZipToUri(context, uri) }
+            if (model.criticalReauthAvailable()) {
+                requestBiometric("Confirm your identity before exporting the PDF overview.", perform)
+            } else {
+                perform()
+            }
+        }
+    }
+
     val exportFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
@@ -5099,6 +5223,63 @@ private fun SettingsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
+        if (showLanguages) {
+            AlertDialog(
+                onDismissRequest = { showLanguages = false },
+                title = { Text(keyraLocalized(model.languageCode, "App language", "Jezik aplikacije")) },
+                text = {
+                    LazyColumn(Modifier.heightIn(max = 430.dp)) {
+                        keyraLanguageNames.forEach { (code, name) ->
+                            item(key = code) {
+                                TextButton(
+                                    onClick = {
+                                        model.setLanguage(code)
+                                        showLanguages = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth().testTag("keyra-language-$code")
+                                ) {
+                                    Text(name, modifier = Modifier.weight(1f), color = Color.White)
+                                    if (model.languageCode == code) {
+                                        Icon(Icons.Outlined.Check, null, tint = Cyan)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLanguages = false }) {
+                        Text(keyraLocalized(model.languageCode, "Close", "Zatvori"))
+                    }
+                },
+                containerColor = Slate
+            )
+        }
+        if (confirmReport) {
+            AlertDialog(
+                onDismissRequest = { confirmReport = false },
+                title = { Text(keyraLocalized(model.languageCode, "Export PDF overview", "Izvezi PDF pregled")) },
+                text = {
+                    Text(keyraLocalized(
+                        model.languageCode,
+                        "Exports a ZIP with a PDF containing only item counts. It excludes titles, usernames, passwords, notes and recovery keys. The ZIP is not encrypted or a vault backup.",
+                        "ZIP s PDF-om sadržava samo broj stavki. Ne uključuje nazive, korisnička imena, lozinke, bilješke ni ključeve. ZIP nije šifriran niti zamjenjuje sigurnosnu kopiju."
+                    ))
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmReport = false
+                        exportReportLauncher.launch("Keyra-Vault-Overview.zip")
+                    }) { Text(keyraLocalized(model.languageCode, "Export ZIP", "Izvezi ZIP")) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmReport = false }) {
+                        Text(keyraLocalized(model.languageCode, "Cancel", "Odustani"))
+                    }
+                },
+                containerColor = Slate
+            )
+        }
         pendingRecoveryExport?.let { uri ->
             val strongPassphrase = isStrongRecoveryPassphrase(recoveryExportPassphrase)
             val matchingPassphrase =
@@ -5326,8 +5507,8 @@ private fun SettingsScreen(
         ) {
             item {
                 SettingsIntroCard(
-                    title = "Vaša Keyra, vaše postavke.",
-                    subtitle = "Sve važne opcije na jednom mjestu."
+                    title = keyraLocalized(model.languageCode, "Your Keyra. Your preferences.", "Vaša Keyra, vaše postavke."),
+                    subtitle = keyraLocalized(model.languageCode, "Make Keyra work the way you do.", "Sve važne opcije na jednom mjestu.")
                 )
             }
             if (model.isProcessingBackup || model.isProcessingRecovery) {
@@ -5350,7 +5531,15 @@ private fun SettingsScreen(
                 }
             }
 
-            item { SectionTitle("ZAŠTITA") }
+            item {
+                SettingRow(
+                    Icons.Outlined.Language,
+                    keyraLocalized(model.languageCode, "App language", "Jezik aplikacije"),
+                    keyraLanguageNames[model.languageCode] ?: "English",
+                    onClick = { showLanguages = true }
+                )
+            }
+            item { SectionTitle(keyraLocalized(model.languageCode, "SECURITY", "ZAŠTITA")) }
             item {
                 SettingRow(
                     Icons.Outlined.Fingerprint,
@@ -5393,7 +5582,19 @@ private fun SettingsScreen(
                 )
             }
 
-            item { SectionTitle("SIGURNOSNE KOPIJE") }
+            item { SectionTitle(keyraLocalized(model.languageCode, "BACKUP & EXPORT", "SIGURNOSNE KOPIJE I IZVOZ")) }
+            item {
+                SettingRow(
+                    Icons.Outlined.PictureAsPdf,
+                    keyraLocalized(model.languageCode, "Export PDF overview (.zip)", "Izvezi PDF pregled (.zip)"),
+                    keyraLocalized(
+                        model.languageCode,
+                        "A private inventory overview without account details or passwords.",
+                        "Pregled broja stavki bez korisničkih podataka ili lozinki."
+                    ),
+                    onClick = { confirmReport = true }
+                )
+            }
             item {
                 SettingRow(
                     Icons.Outlined.CloudUpload,
@@ -5465,10 +5666,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
-                    "Pravila privatnosti",
-                    "Pročitajte pravila privatnosti.",
+                    keyraLocalized(model.languageCode, "Privacy policy", "Politika privatnosti"),
+                    keyraLocalized(model.languageCode, "How Keyra protects your information.", "Saznajte kako Keyra štiti vaše podatke."),
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/politika-privatnosti")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
@@ -5477,10 +5678,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Description,
-                    "Uvjeti korištenja",
-                    "Pročitajte uvjete korištenja aplikacije.",
+                    keyraLocalized(model.languageCode, "Terms of use", "Uvjeti korištenja"),
+                    keyraLocalized(model.languageCode, "Your rights and responsibilities.", "Vaša prava i odgovornosti."),
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/uvjeti-koristenja")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra/blob/main/TERMS.md")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
@@ -5489,10 +5690,10 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.Info,
-                    "O aplikaciji",
-                    "Keyra $versionName",
+                    keyraLocalized(model.languageCode, "About Keyra", "O aplikaciji"),
+                    "Keyra $versionName • Brendigo",
                     onClick = {
-                        if (!openWebsite(context, "https://app.brendigo.com/keya/o-nama")) {
+                        if (!openWebsite(context, "https://brendigo.com/o-nama/")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
@@ -5514,8 +5715,15 @@ private fun SettingsScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Zaključaj trezor", fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "Lock my vault", "Zaključaj trezor"), fontWeight = FontWeight.SemiBold)
                 }
+            }
+            item {
+                Text("© 2026 Brendigo · Keyra",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center)
             }
         }
     }

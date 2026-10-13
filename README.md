@@ -32,6 +32,7 @@ Your passwords should be easy to find and hard for anyone else to access. Keyra 
 | 🛡️ **Security insights** | Identify weak or reused passwords and other supported security warnings. |
 | 👆 **Quick, protected access** | Use supported device authentication and automatic vault locking. |
 | 📦 **Your own encrypted backup** | Export and import protected files whenever you choose. |
+| 📄 **PDF vault overview** | Save an easy-to-read PDF report inside a ZIP, with item counts only and no secrets. |
 
 <div align="center">
 <img src="assets/brand/keyra-icon.svg" width="92" alt="Keyra app icon">
@@ -72,6 +73,9 @@ Your device and exported files still need protection. No security technology eli
 **Availability:** Keyra is distributed through GitHub Releases. The presence of a release package does not mean the app is already available on Google Play or the App Store.
 
 ## Questions, answered
+
+**Is the PDF ZIP an encrypted backup?**  
+No. The exported ZIP contains an unencrypted summary of item counts, without secrets or identifying fields. Use the separate encrypted .keyra file to back up vault contents.
 
 **Can I use Keyra without registering?**  
 Yes. Your core vault does not require a Keyra account.

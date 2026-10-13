@@ -1338,6 +1338,22 @@ func deviceAuthenticationAvailable() -> Bool {
     return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
 }
 
+private let keyraLanguages: [(code: String, name: String)] = [
+    ("en", "English"), ("hr", "Hrvatski"), ("de", "Deutsch"),
+    ("fr", "Français"), ("es", "Español"), ("it", "Italiano"),
+    ("pt", "Português"), ("nl", "Nederlands"), ("pl", "Polski"),
+    ("cs", "Čeština"), ("sk", "Slovenčina"), ("sl", "Slovenščina"),
+    ("hu", "Magyar"), ("ro", "Română"), ("bg", "Български"),
+    ("el", "Ελληνικά"), ("sv", "Svenska"), ("da", "Dansk"),
+    ("fi", "Suomi"), ("no", "Norsk"), ("et", "Eesti"),
+    ("lv", "Latviešu"), ("lt", "Lietuvių"), ("uk", "Українська"),
+    ("tr", "Türkçe"), ("ar", "العربية"), ("ja", "日本語")
+]
+
+private func keyraLocalized(_ code: String, _ english: String, _ croatian: String) -> String {
+    code == "hr" ? croatian : english
+}
+
 final class KeyraStore: ObservableObject {
     private let auth = AuthStore()
     private let vault = EncryptedVault()
@@ -1352,6 +1368,13 @@ final class KeyraStore: ObservableObject {
     @Published var biometricEnabled: Bool
     @Published var sensitiveReauthEnabled: Bool
     @Published var autoLockSeconds: Int
+    @Published var preferredLanguage: String = "en"
+
+    func setPreferredLanguage(_ code: String) {
+        guard keyraLanguages.contains(where: { $0.code == code }) else { return }
+        defaults.set(code, forKey: "preferred_language_v1")
+        preferredLanguage = code
+    }
     @Published var isSetup: Bool
     @Published var importingNewVault = false
     @Published private(set) var isCreatingVault = false
@@ -1390,6 +1413,8 @@ final class KeyraStore: ObservableObject {
         self.biometricEnabled = savedBiometric && authenticationAvailable
         self.sensitiveReauthEnabled = savedSensitiveReauth && savedBiometric && authenticationAvailable
         self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
+        let code = defaults.string(forKey: "preferred_language_v1") ?? "en"
+        self.preferredLanguage = keyraLanguages.contains(where: { $0.code == code }) ? code : "en"
     }
 
     func startCreate() {
@@ -1734,6 +1759,7 @@ final class KeyraStore: ObservableObject {
             "biometric_enabled",
             "sensitive_reauth_enabled",
             "auto_lock_seconds",
+            "preferred_language_v1",
             "unlock_failed_attempts",
             "unlock_lockout_until"
         ]
@@ -1754,6 +1780,7 @@ final class KeyraStore: ObservableObject {
         biometricEnabled = false
         sensitiveReauthEnabled = false
         autoLockSeconds = 0
+        preferredLanguage = "en"
         screen = .onboarding
         SecureClipboard.clearIfOwned()
         message = "Podaci trezora i zaštitni ključevi su izbrisani."
@@ -2101,6 +2128,7 @@ struct KeyraApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environment(\.locale, Locale(identifier: store.preferredLanguage))
                 .preferredColorScheme(.dark)
         }
     }
@@ -2129,7 +2157,7 @@ struct RootView: View {
             .ignoresSafeArea()
 
             if splash {
-                SplashView()
+                SplashView(languageCode: store.preferredLanguage)
             } else {
                 switch store.screen {
                 case .onboarding: OnboardingView().keyraPageWidth(680)
@@ -2280,6 +2308,7 @@ struct KeyraMark: View {
 }
 
 struct SplashView: View {
+    let languageCode: String
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < 620 || proxy.size.width < 340
@@ -2298,7 +2327,7 @@ struct SplashView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    Text("SIGURNI UPRAVITELJ LOZINKI")
+                    Text(keyraLocalized(languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
                         .font(.system(size: compact ? 10 : 11, weight: .medium))
                         .tracking(compact ? 1.8 : 2.4)
                         .foregroundStyle(muted)
@@ -2541,7 +2570,7 @@ struct OnboardingView: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
-                        Text("SIGURNI UPRAVITELJ LOZINKI")
+                        Text(keyraLocalized(store.preferredLanguage, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
                             .font(.system(size: compact ? 9 : 11))
                             .tracking(compact ? 1.4 : 2)
                             .foregroundStyle(muted)
@@ -2554,11 +2583,11 @@ struct OnboardingView: View {
                         }
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
-                            Text("Sigurniji način upravljanja lozinkama")
+                            Text(keyraLocalized(store.preferredLanguage, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"))
                                 .font(.system(size: compact ? 25 : 31, weight: .black))
                                 .foregroundStyle(.white)
                                 .minimumScaleFactor(0.8)
-                            Text("Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.")
+                            Text(keyraLocalized(store.preferredLanguage, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."))
                                 .font(compact ? .subheadline : .body)
                                 .foregroundStyle(muted)
                         }
@@ -2575,7 +2604,7 @@ struct OnboardingView: View {
                         store.startCreate()
                     } label: {
                         HStack {
-                            Text("Izradi trezor").fontWeight(.bold)
+                            Text(keyraLocalized(store.preferredLanguage, "Create my vault", "Izradi trezor")).fontWeight(.bold)
                             Image(systemName: "arrow.right")
                         }
                         .frame(maxWidth: .infinity)
@@ -2592,7 +2621,7 @@ struct OnboardingView: View {
                     } label: {
                         HStack {
                             Image(systemName: "square.and.arrow.down")
-                            Text("Uvezi Keyra trezor").fontWeight(.semibold)
+                            Text(keyraLocalized(store.preferredLanguage, "Import my vault", "Uvezi Keyra trezor")).fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 46 : 52)
@@ -2606,7 +2635,7 @@ struct OnboardingView: View {
                     } label: {
                         HStack {
                             Image(systemName: "key.horizontal.fill")
-                            Text("Imam Recovery Key").fontWeight(.semibold)
+                            Text(keyraLocalized(store.preferredLanguage, "I have a Recovery Key", "Imam Recovery Key")).fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 42 : 48)
@@ -3104,10 +3133,10 @@ struct BottomBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            BottomItem(icon: "house.fill", title: "Trezor", screen: .vault)
-            BottomItem(icon: "square.grid.2x2.fill", title: "Kolekcije", screen: .collections)
-            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
-            BottomItem(icon: "gearshape.fill", title: "Postavke", screen: .settings)
+            BottomItem(icon: "house.fill", title: keyraLocalized(store.preferredLanguage, "Vault", "Trezor"), screen: .vault, testIdentifier: "Trezor")
+            BottomItem(icon: "square.grid.2x2.fill", title: keyraLocalized(store.preferredLanguage, "Collections", "Kolekcije"), screen: .collections, testIdentifier: "Kolekcije")
+            BottomItem(icon: "arrow.triangle.2.circlepath", title: keyraLocalized(store.preferredLanguage, "Generator", "Generator"), screen: .generator, testIdentifier: "Generator")
+            BottomItem(icon: "gearshape.fill", title: keyraLocalized(store.preferredLanguage, "Settings", "Postavke"), screen: .settings, testIdentifier: "Postavke")
         }
         .padding(6)
         .background(
@@ -3127,7 +3156,7 @@ struct BottomBar: View {
     }
 
     @ViewBuilder
-    private func BottomItem(icon: String, title: String, screen: KeyraScreen) -> some View {
+    private func BottomItem(icon: String, title: String, screen: KeyraScreen, testIdentifier: String) -> some View {
         let selected = store.screen == screen
         Button {
             store.open(screen)
@@ -3162,7 +3191,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("keyra-nav-" + title)
+        .accessibilityIdentifier("keyra-nav-" + testIdentifier)
     }
 }
 
@@ -5325,6 +5354,103 @@ struct DetailRow: View {
     }
 }
 
+
+// A small, standards-compliant single-file ZIP writer using the STORE method.
+// This avoids importing archive dependencies or writing sensitive temp files.
+private func keyraZipPdf(_ pdf: Data) -> Data? {
+    guard !pdf.isEmpty, pdf.count < 1_000_000 else { return nil }
+    let fileName = Array("Keyra-Vault-Overview.pdf".utf8)
+    var crc: UInt32 = 0xFFFF_FFFF
+    for byte in pdf {
+        crc ^= UInt32(byte)
+        for _ in 0..<8 {
+            crc = (crc & 1) == 0 ? crc >> 1 : (crc >> 1) ^ 0xEDB8_8320
+        }
+    }
+    crc = ~crc
+
+    var zip = Data()
+    func append16(_ value: UInt16) {
+        var little = value.littleEndian
+        withUnsafeBytes(of: &little) { zip.append(contentsOf: $0) }
+    }
+    func append32(_ value: UInt32) {
+        var little = value.littleEndian
+        withUnsafeBytes(of: &little) { zip.append(contentsOf: $0) }
+    }
+    let length = UInt32(pdf.count)
+    let nameLength = UInt16(fileName.count)
+    // Local file header
+    append32(0x0403_4B50)
+    append16(20); append16(0); append16(0); append16(0); append16(0)
+    append32(crc); append32(length); append32(length)
+    append16(nameLength); append16(0)
+    zip.append(contentsOf: fileName)
+    zip.append(pdf)
+    let centralOffset = UInt32(zip.count)
+
+    // Central directory entry
+    append32(0x0201_4B50)
+    append16(20); append16(20); append16(0); append16(0)
+    append16(0); append16(0)
+    append32(crc); append32(length); append32(length)
+    append16(nameLength); append16(0); append16(0)
+    append16(0); append16(0); append32(0); append32(0)
+    zip.append(contentsOf: fileName)
+    let centralLength = UInt32(zip.count) - centralOffset
+
+    // End-of-central-directory record
+    append32(0x0605_4B50)
+    append16(0); append16(0); append16(1); append16(1)
+    append32(centralLength); append32(centralOffset); append16(0)
+    return zip
+}
+
+private func keyraPdfOverviewArchive(kinds: [String]) -> Data? {
+    let kindsToLabels: [(String, String)] = [
+        ("Prijava", "Logins"), ("Bilješka", "Secure notes"),
+        ("Kartica", "Payment cards"), ("Identitet", "Identities"),
+        ("Wi-Fi", "Wi-Fi"), ("Autentifikator", "Authenticators")
+    ]
+    let known = Set(kindsToLabels.map { $0.0 })
+    let bounds = CGRect(x: 0, y: 0, width: 595, height: 842)
+    let renderer = UIGraphicsPDFRenderer(bounds: bounds)
+    let pdf = renderer.pdfData { context in
+        context.beginPage()
+        func draw(_ text: String, at y: CGFloat, size: CGFloat = 14, bold: Bool = false) {
+            let font = bold ? UIFont.boldSystemFont(ofSize: size) : UIFont.systemFont(ofSize: size)
+            (text as NSString).draw(at: CGPoint(x: 46, y: y), withAttributes: [
+                .font: font,
+                .foregroundColor: UIColor(red: 0.05, green: 0.08, blue: 0.13, alpha: 1)
+            ])
+        }
+        draw("Keyra | Vault overview", at: 60, size: 25, bold: true)
+        draw("A private, read-only inventory report", at: 98)
+        draw("Total saved items: \(kinds.count)", at: 151)
+        for (index, pair) in kindsToLabels.enumerated() {
+            draw("\(pair.1): \(kinds.filter { $0 == pair.0 }.count)", at: 195 + CGFloat(index * 29))
+        }
+        draw("Other items: \(kinds.filter { !known.contains($0) }.count)", at: 369)
+        draw("No passwords, recovery keys or personal item details are included.", at: 464, size: 11)
+        draw("Unencrypted ZIP. Not a backup. Protect before sharing.", at: 484, size: 11)
+    }
+    return keyraZipPdf(pdf)
+}
+
+struct KeyraZipDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
+    var data: Data = Data()
+
+    init(data: Data = Data()) { self.data = data }
+    init(configuration: ReadConfiguration) throws {
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        guard data.count <= 1_000_000 else { throw KeyraError.invalidBackup }
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.openURL) private var openURL
@@ -5336,6 +5462,9 @@ struct SettingsView: View {
     @State private var recoveryDocument = KeyraBackupDocument()
     @State private var exportRecoveryFile = false
     @State private var importRecoveryFile = false
+    @State private var showPdfExportConfirmation = false
+    @State private var exportPdfOverview = false
+    @State private var pdfOverviewDocument = KeyraZipDocument()
     @State private var showRecoveryExportPrompt = false
     @State private var recoveryExportPassphrase = ""
     @State private var recoveryExportConfirm = ""
@@ -5386,15 +5515,30 @@ struct SettingsView: View {
         }
     }
 
+    private func preparePdfOverview() {
+        // Explicitly approved non-secret category totals only; never include
+        // titles, URLs, user names, notes, passwords or authenticator secrets.
+        store.authorizeCritical(reason: "Confirm your identity to export a PDF overview.") {
+            guard store.isSetup, store.screen == .settings else { return }
+            let kinds = store.items.map { $0.kind }
+            guard let zipData = keyraPdfOverviewArchive(kinds: kinds) else {
+                store.message = "Unable to create the PDF overview."
+                return
+            }
+            pdfOverviewDocument = KeyraZipDocument(data: zipData)
+            exportPdfOverview = true
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            BrandHeader(subtitle: "POSTAVKE")
+            BrandHeader(subtitle: keyraLocalized(store.preferredLanguage, "SETTINGS", "POSTAVKE"))
 
             ScrollView {
                 VStack(spacing: 10) {
                     SettingsIntroCard(
-                        title: "Vaša Keyra, vaše postavke.",
-                        subtitle: "Sve važne opcije na jednom mjestu."
+                        title: keyraLocalized(store.preferredLanguage, "Your Keyra. Your preferences.", "Vaša Keyra, vaše postavke."),
+                        subtitle: keyraLocalized(store.preferredLanguage, "Make Keyra work the way you do.", "Sve važne opcije na jednom mjestu.")
                     )
                     if store.isProcessingBackup || store.isProcessingRecovery {
                         HStack(spacing: 10) {
@@ -5411,7 +5555,31 @@ struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
 
-                    SectionLabel("ZAŠTITA")
+                    SettingRow(
+                        icon: "globe",
+                        title: keyraLocalized(store.preferredLanguage, "App language", "Jezik aplikacije"),
+                        subtitle: keyraLanguages.first(where: { $0.code == store.preferredLanguage })?.name ?? "English"
+                    ) {
+                        Menu {
+                            ForEach(keyraLanguages.indices, id: \.self) { index in
+                                let language = keyraLanguages[index]
+                                Button {
+                                    store.setPreferredLanguage(language.code)
+                                } label: {
+                                    if store.preferredLanguage == language.code {
+                                        Label(language.name, systemImage: "checkmark")
+                                    } else {
+                                        Text(language.name)
+                                    }
+                                }
+                                .accessibilityIdentifier("keyra-language-\(language.code)")
+                            }
+                        } label: {
+                            Image(systemName: "chevron.up.chevron.down").foregroundStyle(cyan)
+                        }
+                    }
+
+                    SectionLabel(keyraLocalized(store.preferredLanguage, "SECURITY", "ZAŠTITA"))
 
                     SettingRow(
                         icon: "faceid",
@@ -5474,7 +5642,25 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    SectionLabel("SIGURNOSNE KOPIJE")
+                    SectionLabel(keyraLocalized(store.preferredLanguage, "BACKUP & EXPORT", "SIGURNOSNE KOPIJE I IZVOZ"))
+
+                    SettingRow(
+                        icon: "doc.zipper",
+                        title: keyraLocalized(store.preferredLanguage, "Export PDF overview (.zip)", "Izvezi PDF pregled (.zip)"),
+                        subtitle: keyraLocalized(
+                            store.preferredLanguage,
+                            "A private inventory overview without account details or passwords.",
+                            "Pregled broja stavki bez korisničkih podataka ili lozinki."
+                        )
+                    ) {
+                        Button {
+                            showPdfExportConfirmation = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up").foregroundStyle(cyan)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("keyra-export-pdf-zip")
+                    }
 
                     SettingRow(
                         icon: "externaldrive.badge.plus",
@@ -5546,14 +5732,14 @@ struct SettingsView: View {
                     SectionLabel("PRIVATNOST I APLIKACIJA")
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/politika-privatnosti") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "hand.raised.fill",
-                            title: "Pravila privatnosti",
-                            subtitle: "Pročitajte pravila privatnosti."
+                            title: keyraLocalized(store.preferredLanguage, "Privacy policy", "Politika privatnosti"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "How Keyra protects your information.", "Saznajte kako Keyra štiti vaše podatke.")
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
@@ -5561,14 +5747,14 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/uvjeti-koristenja") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/TERMS.md") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "doc.text",
-                            title: "Uvjeti korištenja",
-                            subtitle: "Pročitajte uvjete korištenja aplikacije."
+                            title: keyraLocalized(store.preferredLanguage, "Terms of use", "Uvjeti korištenja"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "Your rights and responsibilities.", "Vaša prava i odgovornosti.")
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
@@ -5576,14 +5762,14 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/o-nama") {
+                        if let url = URL(string: "https://brendigo.com/o-nama/") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "info.circle",
-                            title: "O aplikaciji",
-                            subtitle: "Keyra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")"
+                            title: keyraLocalized(store.preferredLanguage, "About Keyra", "O aplikaciji"),
+                            subtitle: "Keyra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") • Brendigo"
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
@@ -5617,10 +5803,47 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("keyra-lock-vault")
+
+                    Text("© 2026 Brendigo · Keyra")
+                        .font(.footnote)
+                        .foregroundStyle(muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
                 }
                 .padding(18)
                 .padding(.bottom, 100)
             }
+        }
+        .confirmationDialog(
+            keyraLocalized(store.preferredLanguage, "Export PDF overview?", "Izvesti PDF pregled?"),
+            isPresented: $showPdfExportConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(keyraLocalized(store.preferredLanguage, "Export ZIP", "Izvezi ZIP")) {
+                preparePdfOverview()
+            }
+            Button(keyraLocalized(store.preferredLanguage, "Cancel", "Odustani"), role: .cancel) {}
+        } message: {
+            Text(keyraLocalized(
+                store.preferredLanguage,
+                "Exports a ZIP with a PDF containing only item counts. It excludes names, passwords, notes and recovery keys. The ZIP is not encrypted or a vault backup.",
+                "ZIP s PDF-om sadržava samo broj stavki, bez naziva, lozinki, bilješki ili ključeva. ZIP nije šifriran niti zamjenjuje sigurnosnu kopiju."
+            ))
+        }
+        .fileExporter(
+            isPresented: $exportPdfOverview,
+            document: pdfOverviewDocument,
+            contentType: .zip,
+            defaultFilename: "Keyra-Vault-Overview"
+        ) { result in
+            switch result {
+            case .success:
+                store.message = "PDF overview exported. The ZIP is not encrypted."
+            case .failure:
+                store.message = "Unable to save the PDF overview."
+            }
+            // Don't keep generated export data in the Settings view state.
+            pdfOverviewDocument = KeyraZipDocument()
         }
         .confirmationDialog(
             "Izbrisati sve podatke?",
