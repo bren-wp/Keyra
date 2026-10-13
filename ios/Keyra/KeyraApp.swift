@@ -444,6 +444,7 @@ struct VaultItem: Identifiable, Codable, Equatable {
 
 enum KeyraError: Error {
     case invalidData
+    case existingVaultData
     case keyUnavailable
     // OSStatus is safe to show only in DEBUG diagnostics; never log Keychain data.
     case keychainStatus(OSStatus)
@@ -818,13 +819,19 @@ final class EncryptedVault {
         return directory.appendingPathComponent("vault.bin", isDirectory: false)
     }
 
+    func hasPersistedCiphertext() throws -> Bool {
+        let url = try storageURL()
+        return FileManager.default.fileExists(atPath: url.path) ||
+            defaults.object(forKey: legacyKey) != nil
+    }
+
     func save(_ items: [VaultItem]) throws {
         let url = try storageURL()
         // Persisted ciphertext must never be re-encrypted under a newly
         // generated key if its existing Keychain item is missing/unreadable.
         // A brand-new vault may generate its first key.
         let hasPersistedCiphertext = FileManager.default.fileExists(atPath: url.path) ||
-            defaults.data(forKey: legacyKey) != nil
+            defaults.object(forKey: legacyKey) != nil
         let vaultKey = hasPersistedCiphertext
             ? try KeychainVault.existingKey()
             : try KeychainVault.key()
@@ -1441,7 +1448,15 @@ final class KeyraStore: ObservableObject {
             guard let self else { return }
             let saved: Bool
             let failureMessage: String?
+            var beganCreatingVault = false
             do {
+                let existingCiphertext = try self.vault.hasPersistedCiphertext()
+                guard RecoveryCiphertextPolicy.allowsFreshVaultCreation(
+                    hasCiphertext: existingCiphertext
+                ) else {
+                    throw KeyraError.existingVaultData
+                }
+                beganCreatingVault = true
                 try self.vault.save([])
                 saved = self.auth.create(password: password)
                 failureMessage = saved ? nil : "Zaštitu glavne lozinke nije moguće spremiti u Keychain."
@@ -1450,6 +1465,8 @@ final class KeyraStore: ObservableObject {
                 // Distinguish a Keychain entitlement/protection failure from
                 // filesystem write failures without disclosing any secrets.
                 switch error {
+                case KeyraError.existingVaultData:
+                    failureMessage = "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
                 case KeyraError.keychainStatus(let status):
                     #if DEBUG
                     failureMessage = "Zaštitni ključ trezora nije moguće spremiti u Keychain. [OSStatus:\(status)]"
@@ -1467,7 +1484,7 @@ final class KeyraStore: ObservableObject {
                     #endif
                 }
             }
-            if !saved {
+            if !saved && beganCreatingVault {
                 _ = self.vault.clear()
             }
             DispatchQueue.main.async {
