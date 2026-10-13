@@ -5802,6 +5802,12 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("keyra-lock-vault")
+
+                    Text("© 2026 Brendigo · Keyra")
+                        .font(.footnote)
+                        .foregroundStyle(muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
                 }
                 .padding(18)
                 .padding(.bottom, 100)
