@@ -145,7 +145,25 @@ final class MasterPasswordEntryUITests: XCTestCase {
         XCTAssertTrue(missingVaultMaster.exists, "Vault must remain locked after missing ciphertext")
         XCTAssertFalse(settings.exists, "Missing ciphertext must never open the vault")
 
-        // Removing the fault flag must reopen the untouched encrypted vault.
+        // A transient Keychain read error must also fail closed. Never
+        // create a replacement key or remove the existing ciphertext.
+        app.terminate()
+        app.launchArguments = ["-keyra-ci-simulate-keychain-unavailable"]
+        app.launch()
+        let keychainUnavailableMaster = app.secureTextFields["keyra-master-password"]
+        XCTAssertTrue(keychainUnavailableMaster.waitForExistence(timeout: 15))
+        keychainUnavailableMaster.tap()
+        keychainUnavailableMaster.typeText(synthetic)
+        app.buttons["keyra-submit-master-password"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Trezor nije moguće otvoriti. Podaci nisu promijenjeni."]
+                .waitForExistence(timeout: 55),
+            "Unavailable Keychain data must not cause key replacement or unlock"
+        )
+        XCTAssertTrue(keychainUnavailableMaster.exists)
+        XCTAssertFalse(settings.exists)
+
+        // Removing both fault flags must reopen the untouched encrypted vault.
         app.terminate()
         app.launchArguments = []
         app.launch()
