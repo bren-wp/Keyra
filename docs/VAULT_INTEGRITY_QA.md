@@ -1,4 +1,4 @@
-# Vault integrity and missing encrypted data — Keyra 0.6.23
+# Vault integrity and missing encrypted data — Keyra 0.6.23–0.6.24
 
 ## Confirmed defect
 
@@ -18,6 +18,24 @@ The old behavior could silently display an empty vault after storage loss, causi
 - **Both:** normal intentional empty vaults are still stored as encrypted records and can be created, locked, relaunched and unlocked. An authentication verifier is never deleted just because its vault file is absent.
 
 Neither format changes nor automatic repair / silent replacement is performed. No automatic data restoration is claimed. Keep encrypted backup and Recovery Key documents in separate safe locations.
+
+## Follow-up protection in 0.6.24
+
+Manual Recovery Key installation on an **existing** vault now refuses to replace
+the wrapping key when both current/legacy ciphertext storage are absent (or the
+Android persisted blob is blank). This is distinct from the valid encrypted
+empty array: an empty vault still has ciphertext and can be verified normally.
+
+The explicit **initial recovery** path is the only exception: once it has
+successfully completed its existing ordered cleanup preflight, it can install
+the recovered key before writing the recovered encrypted backup. Neither
+KEYRA1, KEYRA2 nor KEYRAREC1 serialization was changed.
+
+The Android JUnit regression checks all four combinations of ciphertext
+presence and initial-recovery intent. iOS CI now compiles the actual Swift
+recovery policy and runs four corresponding Swift assertions. These policy
+checks are **not** filesystem fault injection and do not prove Keychain /
+Keystore behavior on a device.
 
 ## Automated verification
 
@@ -39,4 +57,4 @@ The first-run typing crash in issue #25 remains open until physical-device repro
 
 ## Release policy
 
-Version **0.6.23 / build 29** is only releasable after Android and iOS PR checks pass at the same final SHA, both main checks complete successfully, and the GitHub Release workflow confirms its tag plus all seven nonempty assets and SHA-256 checksum manifests. Public CI packages must not be described as production-signed app-store uploads.
+Version **0.6.24 / build 30** requires successful Android and iOS PR checks on the same final SHA, successful separate main-branch checks, and confirmation of the release tag, all seven nonempty assets and SHA-256 checksum manifests before claiming publication. Public CI packages must not be described as production-signed app-store uploads.
