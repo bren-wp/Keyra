@@ -5714,8 +5714,15 @@ private fun SettingsScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Outlined.Logout, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Zaključaj trezor", fontWeight = FontWeight.SemiBold)
+                    Text(keyraLocalized(model.languageCode, "Lock my vault", "Zaključaj trezor"), fontWeight = FontWeight.SemiBold)
                 }
+            }
+            item {
+                Text("© 2026 Brendigo · Keyra",
+                    color = Muted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center)
             }
         }
     }
