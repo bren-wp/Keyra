@@ -843,7 +843,7 @@ final class EncryptedVault {
         try KeychainVault.rawKeyData()
     }
 
-    func installRecoveryKey(_ data: Data) throws -> [VaultItem] {
+    func installRecoveryKey(_ data: Data, initialRecovery: Bool = false) throws -> [VaultItem] {
         guard data.count == 32 else { throw KeyraError.invalidData }
 
         let url = try storageURL()
@@ -852,6 +852,15 @@ final class EncryptedVault {
             encrypted = try Data(contentsOf: url)
         } else {
             encrypted = defaults.data(forKey: legacyKey)
+        }
+
+        // An existing vault must have ciphertext, even when its legitimate
+        // contents are an encrypted empty array. Only the initial recovery
+        // workflow may install a key before writing its restored ciphertext.
+        guard RecoveryCiphertextPolicy.allowsInstall(
+            hasCiphertext: encrypted != nil, initialRecovery: initialRecovery
+        ) else {
+            throw KeyraError.invalidData
         }
 
         let verified: [VaultItem]
@@ -1529,7 +1538,7 @@ final class KeyraStore: ObservableObject {
                     guard self.auth.clear() else { throw KeyraDocumentError.invalidOrOversized }
                     guard KeychainVault.clear() else { throw KeyraDocumentError.invalidOrOversized }
                     beganInstalling = true
-                    _ = try self.vault.installRecoveryKey(rawKey)
+                    _ = try self.vault.installRecoveryKey(rawKey, initialRecovery: true)
                     try self.vault.save(imported)
                     guard self.auth.create(password: newPassword) else {
                         throw KeyraDocumentError.invalidOrOversized
