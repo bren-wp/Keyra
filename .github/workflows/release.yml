@@ -102,6 +102,23 @@ jobs:
             sha256sum * > SHA256SUMS-Android.txt
           )
 
+      - name: Omogući Android emulator akceleraciju
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+          fi
+
+      - name: Provjeri master-password UI na Android emulatoru prije izdanja
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-snapshot -gpu swiftshader_indirect
+          script: gradle -p android :app:connectedDebugAndroidTest --no-daemon --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: keyra-android-${{ env.VERSION }}
