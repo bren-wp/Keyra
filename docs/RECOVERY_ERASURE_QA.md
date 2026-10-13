@@ -1,4 +1,4 @@
-# Recovery cleanup failure-injection QA — Keyra 0.6.22
+# Recovery cleanup failure-injection QA — Keyra 0.6.22–0.6.24
 
 This document covers the initial Recovery Key + encrypted-backup restoration path, **not** routine unlocking or manual encrypted-backup import.
 
@@ -17,6 +17,15 @@ These changes do **not** add a guarantee of forensic secure erasure on flash sto
 - Android PR CI: lint, unit tests, build and privacy gates. iOS PR CI: build, analyze, simulator launch and existing UI tests.
 - No iOS filesystem/Keychain fault-injection test is present. A passing simulator launch test does **not** simulate a failed `FileManager.removeItem` or `SecItemDelete`.
 
+## Recovery Key import safeguard in 0.6.24
+
+Existing-vault Recovery Key import rejects missing or blank encrypted storage
+before replacing the device-wrapped key. The initial-recovery path retains its
+intentional ability to install a key after deleting prior vault data and before
+writing a validated, encrypted backup. Existing restore format compatibility is
+unchanged. Android JUnit and Swift policy regressions cover this distinction;
+neither is a substitute for destructive I/O fault injection on disposable devices.
+
 ## Physical-device QA still required
 
 On a disposable device/test installation with **synthetic-only** credentials, validate separately on Android and iOS:
@@ -32,4 +41,4 @@ Issue #25 (first-run master-password typing crash) is separate and stays open pe
 
 ## Release and signing
 
-Both platforms use version 0.6.22, build 28. Publish only after both PR checks pass on the exact final commit, both main-branch checks pass, and the release and all seven non-empty assets plus SHA256SUMS are independently confirmed. Release APK/AAB/IPA artifacts are not proof of store-production signing.
+For the 0.6.24 follow-up, both platforms use build 30. Publish only after both PR checks pass on the exact final commit, both main-branch checks pass, and the release and all seven non-empty assets plus SHA256SUMS are independently confirmed. Release APK/AAB/IPA artifacts are not proof of store-production signing.
