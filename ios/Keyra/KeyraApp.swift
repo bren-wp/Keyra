@@ -535,6 +535,13 @@ enum KeychainVault {
     private static let account = "encryption-key"
 
     private static func existingKeyData() throws -> Data? {
+        // CI-only, simulator-only fault: report a transient Keychain read error
+        // without touching or removing any persisted secret.
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("-keyra-ci-simulate-keychain-unavailable") {
+            throw KeyraError.keychainStatus(errSecInteractionNotAllowed)
+        }
+        #endif
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
