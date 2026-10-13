@@ -3132,10 +3132,10 @@ struct BottomBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            BottomItem(icon: "house.fill", title: "Trezor", screen: .vault)
-            BottomItem(icon: "square.grid.2x2.fill", title: "Kolekcije", screen: .collections)
-            BottomItem(icon: "arrow.triangle.2.circlepath", title: "Generator", screen: .generator)
-            BottomItem(icon: "gearshape.fill", title: "Postavke", screen: .settings)
+            BottomItem(icon: "house.fill", title: keyraLocalized(store.preferredLanguage, "Vault", "Trezor"), screen: .vault, testIdentifier: "Trezor")
+            BottomItem(icon: "square.grid.2x2.fill", title: keyraLocalized(store.preferredLanguage, "Collections", "Kolekcije"), screen: .collections, testIdentifier: "Kolekcije")
+            BottomItem(icon: "arrow.triangle.2.circlepath", title: keyraLocalized(store.preferredLanguage, "Generator", "Generator"), screen: .generator, testIdentifier: "Generator")
+            BottomItem(icon: "gearshape.fill", title: keyraLocalized(store.preferredLanguage, "Settings", "Postavke"), screen: .settings, testIdentifier: "Postavke")
         }
         .padding(6)
         .background(
@@ -3155,7 +3155,7 @@ struct BottomBar: View {
     }
 
     @ViewBuilder
-    private func BottomItem(icon: String, title: String, screen: KeyraScreen) -> some View {
+    private func BottomItem(icon: String, title: String, screen: KeyraScreen, testIdentifier: String) -> some View {
         let selected = store.screen == screen
         Button {
             store.open(screen)
@@ -3190,7 +3190,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("keyra-nav-" + title)
+        .accessibilityIdentifier("keyra-nav-" + testIdentifier)
     }
 }
 
