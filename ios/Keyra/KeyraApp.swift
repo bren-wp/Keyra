@@ -2876,6 +2876,24 @@ struct UnlockView: View {
     private var creating: Bool { !store.isSetup }
     private var importing: Bool { creating && store.importingNewVault }
 
+    // Bound directly to the text input transaction instead of rewriting @State
+    // in an onChange observer while the keyboard is still editing.
+    private var masterPasswordBinding: Binding<String> {
+        Binding(
+            get: { password },
+            set: { incoming in
+                password = (creating && !importing) ? String(incoming.prefix(256)) : incoming
+            }
+        )
+    }
+
+    private var confirmationBinding: Binding<String> {
+        Binding(
+            get: { confirm },
+            set: { incoming in confirm = String(incoming.prefix(256)) }
+        )
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < 700 || proxy.size.width < 360
@@ -2908,17 +2926,9 @@ struct UnlockView: View {
                     )
                     .foregroundStyle(muted)
 
-                    SecretField(title: "Glavna lozinka", text: $password, reveal: $reveal, testIdentifier: "keyra-master-password")
-                        .onChange(of: password) { _, value in
-                            if creating && !importing && value.count > 256 {
-                                password = String(value.prefix(256))
-                            }
-                        }
+                    SecretField(title: "Glavna lozinka", text: masterPasswordBinding, reveal: $reveal, testIdentifier: "keyra-master-password")
                     if creating && !importing {
-                        SecretField(title: "Ponovite glavnu lozinku", text: $confirm, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
-                            .onChange(of: confirm) { _, value in
-                                if value.count > 256 { confirm = String(value.prefix(256)) }
-                            }
+                        SecretField(title: "Ponovite glavnu lozinku", text: confirmationBinding, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
                         Text("Glavna lozinka: najmanje 12 znakova.")
                             .font(.caption)
                             .foregroundStyle(muted)
