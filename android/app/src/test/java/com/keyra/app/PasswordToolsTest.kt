@@ -68,6 +68,12 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun firstRunCreationMustNotOverwriteOrphanedCiphertext() {
+        assertFalse(canCreateFreshVault(hasCiphertext = true))
+        assertTrue(canCreateFreshVault(hasCiphertext = false))
+    }
+
+    @Test
     fun recoveryKeyInstallRejectsMissingCiphertextUnlessInitialRecoveryWasExplicit() {
         assertFalse(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = false))
         assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = false))
