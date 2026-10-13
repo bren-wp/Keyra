@@ -2567,7 +2567,7 @@ struct OnboardingView: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
-                        Text("SIGURNI UPRAVITELJ LOZINKI")
+                        Text(keyraLocalized(store.preferredLanguage, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
                             .font(.system(size: compact ? 9 : 11))
                             .tracking(compact ? 1.4 : 2)
                             .foregroundStyle(muted)
@@ -2580,11 +2580,11 @@ struct OnboardingView: View {
                         }
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
-                            Text("Sigurniji način upravljanja lozinkama")
+                            Text(keyraLocalized(store.preferredLanguage, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"))
                                 .font(.system(size: compact ? 25 : 31, weight: .black))
                                 .foregroundStyle(.white)
                                 .minimumScaleFactor(0.8)
-                            Text("Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu.")
+                            Text(keyraLocalized(store.preferredLanguage, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."))
                                 .font(compact ? .subheadline : .body)
                                 .foregroundStyle(muted)
                         }
@@ -2601,7 +2601,7 @@ struct OnboardingView: View {
                         store.startCreate()
                     } label: {
                         HStack {
-                            Text("Izradi trezor").fontWeight(.bold)
+                            Text(keyraLocalized(store.preferredLanguage, "Create my vault", "Izradi trezor")).fontWeight(.bold)
                             Image(systemName: "arrow.right")
                         }
                         .frame(maxWidth: .infinity)
@@ -2618,7 +2618,7 @@ struct OnboardingView: View {
                     } label: {
                         HStack {
                             Image(systemName: "square.and.arrow.down")
-                            Text("Uvezi Keyra trezor").fontWeight(.semibold)
+                            Text(keyraLocalized(store.preferredLanguage, "Import my vault", "Uvezi Keyra trezor")).fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 46 : 52)
@@ -2632,7 +2632,7 @@ struct OnboardingView: View {
                     } label: {
                         HStack {
                             Image(systemName: "key.horizontal.fill")
-                            Text("Imam Recovery Key").fontWeight(.semibold)
+                            Text(keyraLocalized(store.preferredLanguage, "I have a Recovery Key", "Imam Recovery Key")).fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: compact ? 42 : 48)
@@ -5534,8 +5534,8 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     SettingsIntroCard(
-                        title: "Vaša Keyra, vaše postavke.",
-                        subtitle: "Sve važne opcije na jednom mjestu."
+                        title: keyraLocalized(store.preferredLanguage, "Your Keyra. Your preferences.", "Vaša Keyra, vaše postavke."),
+                        subtitle: keyraLocalized(store.preferredLanguage, "Make Keyra work the way you do.", "Sve važne opcije na jednom mjestu.")
                     )
                     if store.isProcessingBackup || store.isProcessingRecovery {
                         HStack(spacing: 10) {
@@ -5729,14 +5729,14 @@ struct SettingsView: View {
                     SectionLabel("PRIVATNOST I APLIKACIJA")
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/politika-privatnosti") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "hand.raised.fill",
-                            title: "Pravila privatnosti",
-                            subtitle: "Pročitajte pravila privatnosti."
+                            title: keyraLocalized(store.preferredLanguage, "Privacy policy", "Politika privatnosti"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "How Keyra protects your information.", "Saznajte kako Keyra štiti vaše podatke.")
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
@@ -5744,14 +5744,14 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://app.brendigo.com/keya/uvjeti-koristenja") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/TERMS.md") {
                             openURL(url)
                         }
                     } label: {
                         SettingRow(
                             icon: "doc.text",
-                            title: "Uvjeti korištenja",
-                            subtitle: "Pročitajte uvjete korištenja aplikacije."
+                            title: keyraLocalized(store.preferredLanguage, "Terms of use", "Uvjeti korištenja"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "Your rights and responsibilities.", "Vaša prava i odgovornosti.")
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
