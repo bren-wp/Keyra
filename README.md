@@ -90,7 +90,7 @@ Keyra's core vault operates without a user account or a Keyra-operated backend. 
 
 ### Your backup. Your choice.
 
-Export an encrypted `.keyra` document, then save it through your preferred system file provider, including compatible private cloud apps. This is **manual document export/import**, not automatic background cloud sync. Your Recovery Key is not a backup of your vault contents; the two files may both be needed for recovery.
+Export an encrypted `.keyra` document, then save it through your preferred system file provider, including compatible private cloud apps. This is **manual document export/import**, not automatic background cloud sync. Your Recovery Key is not a backup of your vault contents; the two files may both be needed for recovery. As of 0.6.24, importing a Recovery Key into an existing vault refuses to replace its device-wrapped key if encrypted vault data is missing. Explicit initial recovery remains supported after its ordered cleanup preflight.
 
 [Recovery guide](docs/RECOVERY_KEY.md) · [Vault integrity & missing-data QA](docs/VAULT_INTEGRITY_QA.md) · [Recovery deletion & failure-injection QA](docs/RECOVERY_ERASURE_QA.md) · [Private document backup](docs/PRIVACY_CLOUD_BACKUP.md)
 
