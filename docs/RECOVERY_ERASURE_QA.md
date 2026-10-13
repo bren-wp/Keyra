@@ -25,6 +25,9 @@ intentional ability to install a key after deleting prior vault data and before
 writing a validated, encrypted backup. Existing restore format compatibility is
 unchanged. Android JUnit and Swift policy regressions cover this distinction;
 neither is a substitute for destructive I/O fault injection on disposable devices.
+The iOS simulator UI regression also simulates absent ciphertext and
+unavailable Keychain reads **without removing actual keys or files**. After
+the fault flags are removed it must still unlock the original test vault.
 
 ## Physical-device QA still required
 
