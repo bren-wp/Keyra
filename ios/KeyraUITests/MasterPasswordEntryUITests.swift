@@ -59,27 +59,48 @@ final class MasterPasswordEntryUITests: XCTestCase {
         let confirmation = app.secureTextFields["keyra-confirm-master-password"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
 
-        // Check the lower boundary using the actual software keyboard.
-        // An invalid submission must not create a vault or erase the entry.
+        // Verify the exact 11-character value in both synthetic fields before
+        // submitting. A transient toast disappears after 2.6 seconds and is
+        // not a reliable XCTest synchronization point.
         master.tap()
         master.typeText(underlength)
         confirmation.tap()
         confirmation.typeText(underlength)
+        let invalidToggle = app.buttons["keyra-toggle-Glavna lozinka"]
+        invalidToggle.tap()
+        let invalidMaster = app.textFields["keyra-master-password"]
+        let invalidConfirmation = app.textFields["keyra-confirm-master-password"]
+        XCTAssertTrue(invalidMaster.waitForExistence(timeout: 10))
+        XCTAssertTrue(invalidConfirmation.waitForExistence(timeout: 10))
+        XCTAssertEqual(invalidMaster.value as? String, underlength,
+                       "The test must submit precisely 11 synthetic characters")
+        XCTAssertEqual(invalidConfirmation.value as? String, underlength,
+                       "The synthetic confirmation must match exactly")
+        invalidToggle.tap()
         app.buttons["keyra-submit-master-password"].tap()
-        XCTAssertTrue(
-            app.staticTexts["Glavna lozinka mora imati između 12 i 256 znakova."]
-                .waitForExistence(timeout: 10),
-            "An 11-character master password must be rejected without a crash."
-        )
-        XCTAssertTrue(master.exists, "Invalid first-run input must keep the editor accessible")
-        master.tap()
-        master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: underlength.count))
-        confirmation.tap()
-        confirmation.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: underlength.count))
+        XCTAssertTrue(master.waitForExistence(timeout: 10),
+                      "Invalid first-run input must keep the editor accessible")
+        XCTAssertTrue(app.buttons["keyra-submit-master-password"].exists,
+                      "Rejected master password must not advance to the vault")
+        XCTAssertFalse(app.buttons["keyra-nav-Postavke"].waitForExistence(timeout: 5),
+                       "Eleven-character master password must not create a vault")
+
+        // Restart only the local first-run editor: no vault was created, so
+        // this avoids racing with keyboard backspace animations or IME state.
+        app.terminate()
+        app.launch()
+        let freshCreate = app.buttons["keyra-first-run-create"]
+        XCTAssertTrue(freshCreate.waitForExistence(timeout: 15),
+                      "An invalid submission must leave the vault uninitialized")
+        freshCreate.tap()
+        master = app.secureTextFields["keyra-master-password"]
+        XCTAssertTrue(master.waitForExistence(timeout: 15))
         master.tap()
         master.typeText(synthetic)
-        confirmation.tap()
-        confirmation.typeText(synthetic)
+        let freshConfirmation = app.secureTextFields["keyra-confirm-master-password"]
+        XCTAssertTrue(freshConfirmation.waitForExistence(timeout: 10))
+        freshConfirmation.tap()
+        freshConfirmation.typeText(synthetic)
         // Exact values are checked below after toggling the two synthetic
         // fields to visible mode; masked accessibility values are not reliable.
 
