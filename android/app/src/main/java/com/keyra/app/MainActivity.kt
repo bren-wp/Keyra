@@ -2137,7 +2137,7 @@ private fun BrandHeader(
                                 Text(
                                     if (notificationCount > 9) "9+" else notificationCount.toString(),
                                     color = Color.White,
-                                    fontSize = 8.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )
@@ -4226,9 +4226,9 @@ private fun AddScreen(model: KeyraViewModel) {
                     Text(
                         if (original == null) "NOVA STAVKA" else "UREĐIVANJE STAVKE",
                         color = Muted,
-                        fontSize = 9.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.4.sp
+                        letterSpacing = .7.sp
                     )
                 }
             }
