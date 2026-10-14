@@ -17,8 +17,13 @@ final class MasterPasswordEntryUITests: XCTestCase {
         var master = app.secureTextFields["keyra-master-password"]
         XCTAssertTrue(master.waitForExistence(timeout: 15), "First-run secure field must render")
         master.tap()
+        let guidance = app.staticTexts["keyra-master-password-guidance"]
+        XCTAssertTrue(guidance.exists, "First-run password bounds must be visible")
         master.typeText("1")
+        XCTAssertTrue(master.exists, "Typing the first character must keep the input view alive")
+        XCTAssertTrue(guidance.label.contains("1/256"), "First character must update the UI without exposing it")
         master.typeText("2")
+        XCTAssertTrue(master.exists, "Typing the second character must not replace or dismiss the field")
         master.typeText("Čć")
         master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
 
@@ -70,6 +75,8 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master.typeText(underlength)
         confirmation.tap()
         confirmation.typeText(underlength)
+        let matchHint = app.staticTexts["keyra-master-password-match"]
+        XCTAssertTrue(matchHint.waitForExistence(timeout: 10), "Show confirmation status without revealing secrets")
         let invalidToggle = app.buttons["keyra-toggle-Glavna lozinka"]
         invalidToggle.tap()
         let invalidMaster = app.textFields["keyra-master-password"]
