@@ -2667,8 +2667,9 @@ struct OnboardingView: View {
             let compact = proxy.size.height < 800 || proxy.size.width < 360
             let short = proxy.size.height < 590
 
-            VStack(spacing: 0) {
-                VStack(spacing: compact ? 7 : 11) {
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    VStack(spacing: compact ? 7 : 11) {
                         KeyraMark(size: short ? 50 : (compact ? 64 : 82))
                             .padding(.top, compact ? 6 : 14)
 
@@ -2681,8 +2682,8 @@ struct OnboardingView: View {
                             .font(.system(size: compact ? 9 : 11))
                             .tracking(compact ? 1.4 : 2)
                             .foregroundStyle(muted)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.82)
 
                         if !short {
                             OnboardingVaultHero(compact: compact)
@@ -2693,7 +2694,8 @@ struct OnboardingView: View {
                             Text(keyraLocalized(store.preferredLanguage, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"))
                                 .font(.system(size: compact ? 25 : 31, weight: .black))
                                 .foregroundStyle(.white)
-                                .minimumScaleFactor(0.8)
+                                .minimumScaleFactor(0.85)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(keyraLocalized(store.preferredLanguage, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."))
                                 .font(compact ? .subheadline : .body)
                                 .foregroundStyle(muted)
@@ -2704,7 +2706,8 @@ struct OnboardingView: View {
 
                     }
                 .padding(.horizontal, compact ? 16 : 22)
-                .frame(maxHeight: .infinity)
+
+                Spacer(minLength: 12)
 
                 VStack(spacing: 8) {
                     Button {
@@ -2753,7 +2756,12 @@ struct OnboardingView: View {
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
+                }
+                .frame(maxWidth: 680)
+                .frame(minHeight: proxy.size.height)
+                .frame(maxWidth: .infinity)
             }
+            .scrollIndicators(.hidden)
             .overlay(alignment: .topTrailing) {
                 KeyraLanguageMenu()
                     .accessibilityIdentifier("keyra-onboarding-language")
@@ -3070,10 +3078,17 @@ struct UnlockView: View {
 
                     SecretField(title: "Glavna lozinka", text: masterPasswordBinding, reveal: $reveal, testIdentifier: "keyra-master-password")
                     if creating && !importing {
+                        Text("Najmanje 12, najviše 256 znakova • \(password.count)/256")
+                            .font(.subheadline)
+                            .foregroundStyle((12...256).contains(password.count) ? good : muted)
+                            .accessibilityIdentifier("keyra-master-password-guidance")
                         SecretField(title: "Ponovite glavnu lozinku", text: confirmationBinding, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
-                        Text("Glavna lozinka: najmanje 12 znakova.")
-                            .font(.caption)
-                            .foregroundStyle(muted)
+                        if !confirm.isEmpty {
+                            Text(password == confirm ? "Lozinke se podudaraju." : "Lozinke se još ne podudaraju.")
+                                .font(.subheadline)
+                                .foregroundStyle(password == confirm ? good : warn)
+                                .accessibilityIdentifier("keyra-master-password-match")
+                        }
                     }
                     if importing {
                         Button {
