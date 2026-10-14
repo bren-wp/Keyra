@@ -68,6 +68,23 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun autoLockUsesMonotonicElapsedTimeAndFailsClosedOnInvalidState() {
+        val started = 40_000L
+        assertFalse(shouldLockAfterBackground(69_999L, started, 30))
+        assertTrue(shouldLockAfterBackground(70_000L, started, 30))
+        assertFalse(shouldLockAfterBackground(99_999L, started, 60))
+        assertTrue(shouldLockAfterBackground(100_000L, started, 60))
+        assertFalse(shouldLockAfterBackground(339_999L, started, 300))
+        assertTrue(shouldLockAfterBackground(340_000L, started, 300))
+
+        // Invalid settings and a regressed monotonic reading must not extend access.
+        assertTrue(shouldLockAfterBackground(40_001L, started, 0))
+        assertTrue(shouldLockAfterBackground(40_001L, started, -1))
+        assertTrue(shouldLockAfterBackground(40_001L, started, Int.MAX_VALUE))
+        assertTrue(shouldLockAfterBackground(39_999L, started, 30))
+    }
+
+    @Test
     fun firstRunCreationAndImportMustNotOverwriteOrphanedCiphertext() {
         // Both initial-import and fresh-creation paths use this pre-write guard.
         assertFalse(canCreateFreshVault(hasCiphertext = true))
