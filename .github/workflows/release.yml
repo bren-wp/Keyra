@@ -57,6 +57,12 @@ jobs:
             VERSION="$ANDROID_VERSION"
           fi
 
+          # Never publish directly from an unmerged feature or PR branch.
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Release publication requires the protected main branch."
+            exit 1
+          fi
+
           if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "Invalid semantic version; expected MAJOR.MINOR.PATCH."
             exit 1
@@ -68,6 +74,10 @@ jobs:
           # previously published version from a different source revision.
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             echo "Release v${VERSION} already exists. Bump the version for a new release."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists; reuse of release tags is forbidden."
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -445,6 +455,10 @@ jobs:
           set -euo pipefail
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             echo "Refusing to overwrite already-published v${VERSION} artifacts."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Refusing to publish over existing tag v${VERSION}."
             exit 1
           fi
           gh release create "v${VERSION}" \
