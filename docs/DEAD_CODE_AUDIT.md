@@ -229,3 +229,74 @@ a formal proof that all runtime-reachable code is free of defects.
 - Android `importNewVault` now rejects surviving ciphertext before any decryption or storage. iOS `importNewVault` applies `RecoveryCiphertextPolicy.allowsFreshVaultCreation` before any storage mutation, guiding the user to explicit Recovery Key restoration.
 - New cross-platform CI source-level regression check asserts the guard executes before import decryption and save. Policy tests remain enabled. KEYRA1, KEYRA2, KEYRAREC1 and existing encrypted records are unchanged.
 - No speculative deletion of low-reference compatibility functions, cryptographic migration logic or Swift FileDocument methods. Still requires hardware recovery, large-vault and interrupted-write verification, as well as store signing and full 27-language localization.
+
+## 14 October 2026 — v0.6.29 cross-platform code, privacy and UI audit
+
+### Complete current source inventory (static, not a formal reachability proof)
+
+Inspected both main UI/application implementations, Android JUnit and instrumented
+tests, iOS policy tests and XCTest UI flows, Gradle dependencies, Xcode project
+references, release/CI gates, Android manifests and extraction rules, iOS privacy
+manifest, README-brand assets, and public privacy/security documentation.
+
+- Android `MainActivity.kt`: over 6,300 source lines; about 174 declared
+  Kotlin functions (including UI composables, lifecycle callbacks and internal
+  cryptographic helpers). Import-name screening found no plainly unused
+  explicit import. Two low-reference private composables were **false
+  positives**: `KeyraTheme` and `GlassCard` use trailing-lambda syntax
+  without parentheses and are invoked in live UI code.
+- iOS `KeyraApp.swift`: over 6,400 source lines, about 113 declared Swift
+  functions, plus `RecoveryCiphertextPolicy.swift`, production FileDocument
+  conformances and XCTest files. The textual low-reference scan produced no
+  independently verifiable dead private helper. Framework-required methods,
+  Objective-C/runtime callbacks, SwiftUI renderers, backup-format fallbacks
+  and app launch hooks are not removable based on occurrence count.
+- Checked source and resource retention: Android app icon/mipmap resources,
+  iOS AppIcon, brand SVGs, iOS PrivacyInfo, extraction rules and existing
+  backup migration parsers remain intentionally in place. No unused
+  dependency or asset was safely proven removable during this pass.
+- No speculative function deletion or mass movement of encryption/persistence
+  code: that would risk backward compatibility without device QA and a more
+  complete call graph.
+
+### Actual improvements committed to this PR
+
+- Android now uses `SystemClock.elapsedRealtime` for background auto-lock
+  instead of adjustable wall-clock time; rejects invalid persisted auto-lock
+  values, fails closed on suspicious timer readings, and clears the stale
+  timer when explicitly locked. JUnit exercises 30/60/300-second boundaries.
+- iOS now uses `ContinuousClock` to measure background duration, rejects
+  invalid persisted intervals and enforces complete file protection for the
+  pre-existing vault directory as well as newly created directories.
+  Failure to apply the directory backup exclusion is no longer swallowed.
+- Android imported backup plaintext is decoded as strict UTF-8 after
+  successful AEAD verification; malformed authenticated payloads cannot
+  silently alter user-supplied text via replacement characters.
+- English/Croatian destructive-data warnings, About Keyra links, Brendigo
+  attribution and relevant Settings rows are consistent on both platforms.
+  The 27-language selector still does **not** imply complete translation
+  of every screen; only the existing seven shared core keys have full
+  27-language coverage.
+- Repeated lookup of shared localized labels now uses immutable
+  precomputed key-index mappings on Android and iOS. No external
+  library/dependency was added.
+- Expanded cross-platform CI privacy gate checks backup transfer,
+  the iOS file-protection/exclusion error path and monotonic auto-lock.
+  Existing Android build/lint, JVM, emulator and iOS build/analyze/XCTest
+  remain the actual runtime verification gates.
+
+### Residual production risks / QA blockers
+
+- Issue #25 still needs a physical-device stack trace or reproduction, not
+  just passing simulator password-entry automation.
+- Manual screen-by-screen UI QA (small phones, tablets, split screen, large
+  fonts, IME interactions, accessibility, RTL) and full 27-locale translation
+  are **not** completed by this code audit.
+- Legacy KEYRA1/KEYRA2/KEYRAREC1 cross-platform recovery, low-disk failures,
+  key loss, full-device restore and background write interruption still
+  require real Android/iOS device exercises. External penetration testing
+  and instrumented memory inspection are outside CI scope.
+- Password-manager security relies on cryptographic correctness and
+  migrations; a textual dead-code report must never be represented as
+  evidence that all runtime-reachable paths are safe. No PR merge without
+  green Android and iOS checks on the same final SHA.
