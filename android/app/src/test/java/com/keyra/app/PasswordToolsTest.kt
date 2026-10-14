@@ -92,6 +92,15 @@ class PasswordToolsTest {
     }
 
     @Test
+    fun recoveryExportRequiresAnExistingWrappedKeyAndNeverCreatesOne() {
+        assertTrue(runCatching { requireExistingWrappedVaultKey(null) }.isFailure)
+        assertTrue(runCatching { requireExistingWrappedVaultKey("") }.isFailure)
+        assertTrue(runCatching { requireExistingWrappedVaultKey("   ") }.isFailure)
+        val existing = "KEYRAWRAP1.ciphertext.fixture"
+        assertEquals(existing, requireExistingWrappedVaultKey(existing))
+    }
+
+    @Test
     fun recoveryKeyInstallRejectsMissingCiphertextUnlessInitialRecoveryWasExplicit() {
         assertFalse(canInstallRecoveryKey(hasCiphertext = false, initialRecovery = false))
         assertTrue(canInstallRecoveryKey(hasCiphertext = true, initialRecovery = false))
