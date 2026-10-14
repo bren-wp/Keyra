@@ -2909,7 +2909,7 @@ private fun RowScope.NavItem(
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(if (compact) 52.dp else 58.dp)
+            .height(if (compact) 62.dp else 64.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(
                 if (selected)
@@ -2937,10 +2937,10 @@ private fun RowScope.NavItem(
             Text(
                 label,
                 color = if (selected) Cyan else Muted,
-                fontSize = if (compact) 9.sp else 11.sp,
+                fontSize = if (compact) 11.sp else 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                softWrap = false,
+                maxLines = 2,
+                softWrap = true,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
