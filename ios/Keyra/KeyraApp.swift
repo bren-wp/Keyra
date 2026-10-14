@@ -813,9 +813,15 @@ final class EncryptedVault {
             withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.complete]
         )
+        // Reapply protection even if this directory predates current versions.
+        // Never silently continue when iOS cannot enforce backup exclusion.
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directory.path
+        )
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
-        try? directory.setResourceValues(values)
+        try directory.setResourceValues(values)
         return directory.appendingPathComponent("vault.bin", isDirectory: false)
     }
 
@@ -1450,7 +1456,9 @@ final class KeyraStore: ObservableObject {
         let savedSensitiveReauth = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
         self.biometricEnabled = savedBiometric && authenticationAvailable
         self.sensitiveReauthEnabled = savedSensitiveReauth && savedBiometric && authenticationAvailable
-        self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
+        let persistedAutoLock = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
+        self.autoLockSeconds = [0, 30, 60, 300].contains(persistedAutoLock)
+            ? persistedAutoLock : 0
         let code = defaults.string(forKey: "preferred_language_v1") ?? "en"
         self.preferredLanguage = keyraLanguages.contains(where: { $0.code == code }) ? code : "en"
     }
@@ -2187,7 +2195,7 @@ struct RootView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var splash = true
-    @State private var backgroundedAt: Date?
+    @State private var backgroundedAt: ContinuousClock.Instant?
     @State private var screenCaptured = UIScreen.main.isCaptured
     @State private var appPrivacyShield = false
 
@@ -2286,13 +2294,15 @@ struct RootView: View {
                 if store.autoLockSeconds == 0 {
                     store.lock()
                 } else {
-                    backgroundedAt = Date()
+                    backgroundedAt = ContinuousClock().now
                 }
             } else if phase == .active {
                 if
                     let started = backgroundedAt,
                     store.autoLockSeconds > 0,
-                    Date().timeIntervalSince(started) >= Double(store.autoLockSeconds)
+                    (started.duration(to: ContinuousClock().now) < .zero ||
+                     started.duration(to: ContinuousClock().now) >=
+                        Duration.seconds(Int64(store.autoLockSeconds)))
                 {
                     store.lock()
                 }
@@ -5835,7 +5845,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://brendigo.com/o-nama/") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra") {
                             openURL(url)
                         }
                     } label: {
@@ -5843,6 +5853,21 @@ struct SettingsView: View {
                             icon: "info.circle",
                             title: keyraLocalized(store.preferredLanguage, "About Keyra", "O aplikaciji"),
                             subtitle: "Keyra \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") • Brendigo"
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        if let url = URL(string: "https://brendigo.com/") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "person.crop.circle.badge.checkmark",
+                            title: keyraLocalized(store.preferredLanguage, "Developed by Brendigo", "Razvio Brendigo"),
+                            subtitle: "brendigo.com"
                         ) {
                             Image(systemName: "arrow.up.right").foregroundStyle(ice)
                         }
