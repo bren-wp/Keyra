@@ -1348,8 +1348,9 @@ private class CryptoStore(private val prefs: android.content.SharedPreferences) 
     // Recovery exports must NEVER generate a replacement key when a vault
     // has lost its original wrapped key.
     fun existingPortableKeyBytes(): ByteArray {
-        val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
-        require(!wrapped.isNullOrBlank()) { "Postojeći ključ trezora nije dostupan." }
+        val wrapped = requireExistingWrappedVaultKey(
+            prefs.getString(WRAPPED_KEY_PREF, null)
+        )
         return unwrapRawKey(wrapped)
     }
 
@@ -1474,6 +1475,13 @@ internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Bool
 
 // An orphaned encrypted vault is never overwritten by first-run setup.
 internal fun canCreateFreshVault(hasCiphertext: Boolean): Boolean = !hasCiphertext
+
+// Existing-vault export is a read-only operation. A missing key cannot be
+// regenerated because doing so would misrepresent the vault's recovery data.
+internal fun requireExistingWrappedVaultKey(wrapped: String?): String {
+    require(!wrapped.isNullOrBlank()) { "Postojeći ključ trezora nije dostupan." }
+    return wrapped
+}
 
 // Measure time away with a monotonic clock, not mutable wall-clock time.
 // A reboot or unexpected counter reset must fail closed instead of extending access.
