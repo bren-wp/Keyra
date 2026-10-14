@@ -697,6 +697,11 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun lock() {
         authenticationEpoch++
+        // Revoke clipboard secrets immediately on an explicit foreground lock.
+        // Preserve third-party clipboard updates via the ownership check.
+        if (appInForeground) {
+            runCatching { SensitiveClipboard.clearIfOwned(getApplication()) }
+        }
         unlocked = false
         sessionPassword = null
         backgroundAt = null
