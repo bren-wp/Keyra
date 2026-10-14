@@ -307,3 +307,19 @@ manifest, README-brand assets, and public privacy/security documentation.
 - **Clipboard lifetime:** foreground manual vault locks revoke the last Keyra-owned clipboard entry immediately when possible, leaving newer third-party clipboard contents untouched. Existing 30-second expiration is retained where platform/background access does not permit instant cleanup.
 - **Release supply-chain integrity:** workflow_dispatch version input now enters Bash through environment variables and is checked against strict `MAJOR.MINOR.PATCH` syntax. Release publication is main-only, refuses an existing release or Git tag, checks eight non-empty expected artifacts and verifies both SHA-256 manifests before publication. Previously published archives cannot be overwritten by `--clobber`.
 - **Remaining security test gaps:** real-device Keychain/Keystore errors, OS clipboard behavior on backgrounding, legacy migrations, restore failures caused by low storage, manual touchscreen/accessibility QA, and independent penetration testing. These changes are preventive fixes with automated regressions, not proof of zero vulnerabilities.
+
+## v0.6.30 — keyboard/IME and adaptive readability follow-up
+
+Reviewed the first-run Android Compose password form, iOS SwiftUI SecretField
+and corresponding instrumented/UI test suites. Both platforms already constrain
+new-vault password input to 256 characters and avoid printing credentials in
+test diagnostics. The existing iOS Binding setter avoids re-entrant
+`onChange` text updates during keyboard entry. Android keeps a remembered
+password visual transformation, with safe surrogate boundary truncation.
+
+Updated navigation/onboarding constraints and bounded first-run guidance,
+without changing existing encrypted storage, portable backup formats, KDF,
+unlock credential persistence or key generation. Retained all password input
+callbacks and SwiftUI field implementations: no unused code could be proven
+safe to delete without actual IME stack traces and physical-device regression
+coverage. Issue #25 is **not** considered resolved by these preventive changes.
