@@ -71,4 +71,21 @@ assert "SecureClipboard.clearIfOwned()" in ios_lock, "iOS lock should revoke own
 assert "shouldClearOwnedClipboard(" in android_code, "Android clipboard ownership verifier is missing"
 assert "pasteboard.changeCount == expected" in ios_code, "iOS clipboard ownership verifier is missing"
 
-print("Keyra Android/iOS vault privacy: backup exclusions, storage protection, monotonic lock and clipboard ownership verified")
+# Recovery export can only rewrap the existing vault key. A missing
+# device-wrapped key must never be silently replaced with a new random one.
+android_recovery = android_code.split("private class VaultStore(", 1)[1].split("internal fun readUtf8Limited(", 1)[0]
+ios_vault = ios_code.split("final class EncryptedVault {", 1)[1].split("enum PortableBackup {", 1)[0]
+assert "fun existingPortableKeyBytes(): ByteArray" in android_code, (
+    "Android read-only portable key accessor is missing"
+)
+assert "fun recoveryKeyBytes(): ByteArray = crypto.existingPortableKeyBytes()" in android_recovery, (
+    "Android Recovery Key export must never create a replacement vault key"
+)
+assert "static func existingRawKeyData() throws -> Data" in ios_code, (
+    "iOS existing Keychain key accessor is missing"
+)
+assert "try KeychainVault.existingRawKeyData()" in ios_vault, (
+    "iOS Recovery Key export must never generate a new Keychain key"
+)
+
+print("Keyra vault privacy gates passed: encrypted-storage, clipboard, monotonic locks and read-only Recovery Key exports")
