@@ -1733,7 +1733,9 @@ internal object PortableBackup {
                     derive(password, salt, iterationCount),
                     GCMParameterSpec(128, iv)
                 )
-                return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+                // Authenticated backup content must also be strictly valid UTF-8.
+                // Never replace malformed bytes inside a restored vault.
+                return decodeUtf8Strict(cipher.doFinal(encrypted))
             } catch (error: Exception) {
                 lastError = error
             }
