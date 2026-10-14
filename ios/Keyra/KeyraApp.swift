@@ -1388,9 +1388,12 @@ private let keyraCoreTranslations: [String: [String]] = [
     "ja": ["保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語"]
 ]
 
+private let keyraCoreKeyIndices: [String: Int] =
+    Dictionary(uniqueKeysWithValues: keyraCoreKeys.enumerated().map { ($0.element, $0.offset) })
+
 private func keyraLocalized(_ code: String, _ english: String, _ croatian: String) -> String {
     if code == "hr" { return croatian }
-    guard let index = keyraCoreKeys.firstIndex(of: english),
+    guard let index = keyraCoreKeyIndices[english],
           let translated = keyraCoreTranslations[code],
           translated.indices.contains(index) else {
         return english
