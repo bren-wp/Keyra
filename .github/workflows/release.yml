@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.29"
+        default: "0.6.30"
 
 permissions:
   contents: read
@@ -416,7 +416,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.29 hardens first-run backup imports to prevent accidental replacement of a surviving encrypted vault. Android and iOS now use monotonic background timers for more reliable auto-lock, reject invalid stored lock intervals, and provide clearer privacy and deletion controls. iOS also enforces vault-directory file protection and backup exclusion without silently ignoring errors; Android rejects malformed decrypted backup text. Compact navigation, localization lookups and app/developer settings links were polished. KEYRA1/KEYRA2/KEYRAREC1 compatibility remains intact, and the release includes a genuine iOS onboarding screenshot.
+          Keyra 0.6.30 improves readability on compact phones and with larger text: responsive scrolling prevents onboarding content from being clipped, navigation labels can wrap onto two lines, and new-vault password and confirmation fields provide accessible length/match feedback. Android Compose and iOS XCTest regressions now check the first-keystroke UI continuity and confirmation hints. KEYRA1/KEYRA2/KEYRAREC1 formats remain unchanged. The original issue #25 crash still requires physical-device evidence; simulator and emulator tests do not constitute proof of a hardware fix.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
