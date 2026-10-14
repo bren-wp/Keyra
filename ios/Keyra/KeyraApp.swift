@@ -1797,6 +1797,12 @@ final class KeyraStore: ObservableObject {
 
     func lock() {
         authenticationEpoch &+= 1
+        // Expire a Keyra-owned secret immediately when the user locks.
+        // Background access to the general pasteboard may be restricted;
+        // its existing 30-second expiration remains the fallback.
+        if UIApplication.shared.applicationState == .active {
+            SecureClipboard.clearIfOwned()
+        }
         items = []
         selected = nil
         sessionPassword = nil
