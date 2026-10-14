@@ -300,3 +300,10 @@ manifest, README-brand assets, and public privacy/security documentation.
   migrations; a textual dead-code report must never be represented as
   evidence that all runtime-reachable paths are safe. No PR merge without
   green Android and iOS checks on the same final SHA.
+
+## 14 October 2026 — v0.6.29 follow-up key lifecycle / release integrity
+
+- **Confirmed read-only recovery export risk:** Android `CryptoStore.portableKeyBytes()` and iOS `KeychainVault.rawKeyData()` are allowed to create a key during **new vault initialization**, but were also reused in export-only Recovery Key retrieval. If the original wrapped/keychain key disappears while the session is still accessible, an export could create a fresh unrelated key. The export call sites now use dedicated `existingPortableKeyBytes` / `existingRawKeyData` methods that reject absent or unreadable key material instead of silently replacing it. Android's missing-key requirement is unit-tested; cross-platform source-integrity CI asserts correct wiring.
+- **Clipboard lifetime:** foreground manual vault locks revoke the last Keyra-owned clipboard entry immediately when possible, leaving newer third-party clipboard contents untouched. Existing 30-second expiration is retained where platform/background access does not permit instant cleanup.
+- **Release supply-chain integrity:** workflow_dispatch version input now enters Bash through environment variables and is checked against strict `MAJOR.MINOR.PATCH` syntax. Release publication is main-only, refuses an existing release or Git tag, checks eight non-empty expected artifacts and verifies both SHA-256 manifests before publication. Previously published archives cannot be overwritten by `--clobber`.
+- **Remaining security test gaps:** real-device Keychain/Keystore errors, OS clipboard behavior on backgrounding, legacy migrations, restore failures caused by low storage, manual touchscreen/accessibility QA, and independent penetration testing. These changes are preventive fixes with automated regressions, not proof of zero vulnerabilities.
