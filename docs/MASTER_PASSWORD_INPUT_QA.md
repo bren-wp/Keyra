@@ -66,3 +66,48 @@ The resulting file is **private/unredacted** and is **not ready to upload**. Man
 For iOS, retrieve the Keyra report from device Analytics Data or Xcode Devices and Simulators. Privately inspect the exception type and crashed thread, then manually redact all device identifiers, paths, addresses, input strings and potentially identifying metadata. Share only the sanitized exception category, relevant symbolicated Keyra frames, device/OS version and steps.
 
 If the failure cannot be reproduced and no sanitized trace is available, leave #25 open and record the tested configurations and unverified criteria; do not claim a confirmed fix.
+
+## v0.6.30 — readability and additional keyboard continuity coverage
+
+- Android and iOS create-vault editors now show **12–256-character guidance** and
+  a live password/confirmation matching hint. They display only lengths and
+  matching status, not characters or entropy estimates.
+- Android instrumented Compose regression verifies that the first inserted
+  digit updates the visible guidance while the field stays mounted, that the
+  confirmation hint appears and that previous Unicode/256-character/create/
+  relock/wrong-password tests still run.
+- iOS XCTest verifies first- and second-character field continuity, the
+  corresponding accessible guidance and the confirmation status in addition
+  to its secure/reveal/focus/Unicode/256-character/create/reopen tests.
+- Android/iOS onboarding can scroll when larger accessibility text or a
+  short screen would otherwise clip primary actions; on regular devices
+  buttons remain reachable without needing to scroll. Navigation labels use
+  larger type and up to two lines, rather than shrinking to tiny labels.
+- **Original crash root cause remains unknown.** A correctly passing
+  emulator/simulator suite cannot prove that the physical-device report is
+  resolved. Neither the user report nor CI provides a matching physical
+  device model, OS build, keyboard/IME, exception trace or crash signature.
+
+### Exact physical-device evidence required before closing issue #25
+
+On both an Android handset and an iPhone, using synthetic credentials only:
+
+1. Clean install, choose Create vault, focus the master-password field and
+   enter the *first character* using the real on-screen keyboard. Repeat for
+   the second character, after emoji/diacritics, after revealing/hiding text,
+   and after changing focus to the confirmation field.
+2. Repeat with a third-party keyboard/IME when applicable, keyboard suggestion
+   bar active, display/font scaling increased, narrow display, landscape and
+   TalkBack/VoiceOver. Do not disable accessibility just to make the test pass.
+3. Exercise 11/12/256-character boundaries, vault creation, app termination,
+   relock, invalid unlock and correct unlock. Ensure unexpected process
+   termination never destroys or replaces ciphertext.
+4. If any crash occurs, capture a **sanitized** logcat exception/ANR tombstone
+   or iOS crash report with only app stack, OS/device and keyboard version.
+   Never upload typed credentials, clipboard content, item details, private
+   backup files, authentication keys or full unredacted logs.
+5. Attach device/OS/keyboard matrix and a redacted trace or a signed-off
+   physical regression checklist to issue #25 before closing it.
+
+Any passing CI run should record its **exact head SHA**. Cancelling older
+runs after a new commit is not a passing result for the current head.
