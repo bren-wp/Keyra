@@ -31,7 +31,7 @@ struct RecoveryCiphertextPolicyTests {
         )
         precondition(
             !RecoveryCiphertextPolicy.allowsFreshVaultCreation(hasCiphertext: true),
-            "First-run setup must not overwrite orphaned encrypted vault data."
+            "First-run creation and import must not overwrite orphaned encrypted vault data."
         )
         precondition(
             RecoveryCiphertextPolicy.allowsFreshVaultCreation(hasCiphertext: false),

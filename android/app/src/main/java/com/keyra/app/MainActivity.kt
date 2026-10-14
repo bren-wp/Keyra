@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -57,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
@@ -174,10 +176,13 @@ internal val keyraCoreTranslations: Map<String, List<String>> = mapOf(
     "ja" to listOf("保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語")
 )
 
+private val keyraCoreKeyIndices: Map<String, Int> =
+    keyraCoreKeys.withIndex().associate { (index, key) -> key to index }
+
 internal fun keyraLocalized(code: String, english: String, croatian: String): String {
     if (code == "hr") return croatian
-    val index = keyraCoreKeys.indexOf(english)
-    return if (index >= 0) keyraCoreTranslations[code]?.getOrNull(index) ?: english else english
+    val index = keyraCoreKeyIndices[english] ?: return english
+    return keyraCoreTranslations[code]?.getOrNull(index) ?: english
 }
 
 // Export deliberately excludes vault titles, usernames, passwords,
@@ -344,7 +349,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             prefs.getBoolean("biometric_enabled", true) &&
             deviceAuthenticationAvailable
     )
-    var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
+    var autoLockSeconds by mutableIntStateOf(
+        prefs.getInt("auto_lock_seconds", 0).takeIf { it in setOf(0, 30, 60, 300) } ?: 0
+    )
     var languageCode by mutableStateOf(
         prefs.getString("preferred_language_v1", "en")?.takeIf { it in keyraLanguageNames } ?: "en"
     )
@@ -469,6 +476,13 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         isImportingVault = true
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
+                // Initial import must not overwrite surviving encrypted vault data.
+                // Use explicit Recovery Key flow to replace an existing vault.
+                if (!canCreateFreshVault(store.hasPersistedCiphertext())) {
+                    return@withContext Pair<List<VaultItem>?, String>(
+                        null, "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+                    )
+                }
                 val imported = runCatching {
                     val json = PortableBackup.decrypt(payload, password)
                     store.fromJson(json)
@@ -683,8 +697,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun lock() {
         authenticationEpoch++
+        // Revoke clipboard secrets immediately on an explicit foreground lock.
+        // Preserve third-party clipboard updates via the ownership check.
+        if (appInForeground) {
+            runCatching { SensitiveClipboard.clearIfOwned(getApplication()) }
+        }
         unlocked = false
         sessionPassword = null
+        backgroundAt = null
         items.clear()
         selected = null
         vaultCategoryFilter = null
@@ -1085,7 +1105,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         if (autoLockSeconds == 0) {
             lock()
         } else {
-            backgroundAt = System.currentTimeMillis()
+            backgroundAt = SystemClock.elapsedRealtime()
         }
     }
 
@@ -1093,7 +1113,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         appInForeground = true
         val started = backgroundAt ?: return
         backgroundAt = null
-        if (unlocked && System.currentTimeMillis() - started >= autoLockSeconds * 1000L) {
+        if (unlocked && shouldLockAfterBackground(
+            SystemClock.elapsedRealtime(), started, autoLockSeconds
+        )) {
             lock()
         }
     }
@@ -1323,6 +1345,15 @@ private class CryptoStore(private val prefs: android.content.SharedPreferences) 
         }
     }
 
+    // Recovery exports must NEVER generate a replacement key when a vault
+    // has lost its original wrapped key.
+    fun existingPortableKeyBytes(): ByteArray {
+        val wrapped = requireExistingWrappedVaultKey(
+            prefs.getString(WRAPPED_KEY_PREF, null)
+        )
+        return unwrapRawKey(wrapped)
+    }
+
     fun portableKeyBytes(): ByteArray {
         val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
         if (!wrapped.isNullOrBlank()) {
@@ -1445,6 +1476,25 @@ internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Bool
 // An orphaned encrypted vault is never overwritten by first-run setup.
 internal fun canCreateFreshVault(hasCiphertext: Boolean): Boolean = !hasCiphertext
 
+// Existing-vault export is a read-only operation. A missing key cannot be
+// regenerated because doing so would misrepresent the vault's recovery data.
+internal fun requireExistingWrappedVaultKey(wrapped: String?): String {
+    require(!wrapped.isNullOrBlank()) { "Postojeći ključ trezora nije dostupan." }
+    return wrapped
+}
+
+// Measure time away with a monotonic clock, not mutable wall-clock time.
+// A reboot or unexpected counter reset must fail closed instead of extending access.
+internal fun shouldLockAfterBackground(
+    elapsedRealtimeNow: Long,
+    backgroundStarted: Long,
+    lockAfterSeconds: Int
+): Boolean {
+    if (lockAfterSeconds !in setOf(30, 60, 300)) return true
+    if (elapsedRealtimeNow < backgroundStarted) return true
+    return elapsedRealtimeNow - backgroundStarted >= lockAfterSeconds * 1_000L
+}
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
 
@@ -1463,7 +1513,7 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         // Short-circuit: never delete the wrapping key while encrypted data remains.
         destroyVaultInOrder(::clear, crypto::clearKey)
 
-    fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
+    fun recoveryKeyBytes(): ByteArray = crypto.existingPortableKeyBytes()
 
     fun installRecoveryKey(rawKey: ByteArray, initialRecovery: Boolean = false): List<VaultItem> {
         val blob = prefs.getString("vault_blob", null)
@@ -1708,7 +1758,9 @@ internal object PortableBackup {
                     derive(password, salt, iterationCount),
                     GCMParameterSpec(128, iv)
                 )
-                return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+                // Authenticated backup content must also be strictly valid UTF-8.
+                // Never replace malformed bytes inside a restored vault.
+                return decodeUtf8Strict(cipher.doFinal(encrypted))
             } catch (error: Exception) {
                 lastError = error
             }
@@ -2865,7 +2917,11 @@ private fun RowScope.NavItem(
                 color = if (selected) Cyan else Muted,
                 fontSize = if (compact) 9.sp else 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
             )
             Spacer(Modifier.height(3.dp))
             Box(
@@ -5504,11 +5560,16 @@ private fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
                 icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
-                title = { Text("Izbrisati sve podatke?") },
+                title = {
+                    Text(keyraLocalized(model.languageCode, "Delete all local data?", "Izbrisati sve podatke?"))
+                },
                 text = {
                     Text(
-                        "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
-                            "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                        keyraLocalized(
+                            model.languageCode,
+                            "Your vault, master password and settings will be permanently erased from this device. Encrypted .keyra backups saved elsewhere will not be deleted.",
+                            "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                        )
                     )
                 },
                 confirmButton = {
@@ -5524,11 +5585,13 @@ private fun SettingsScreen(
                             }
                         }
                     ) {
-                        Text("Trajno izbriši", color = Danger)
+                        Text(keyraLocalized(model.languageCode, "Permanently delete", "Trajno izbriši"), color = Danger)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmErase = false }) { Text("Odustani") }
+                    TextButton(onClick = { confirmErase = false }) {
+                        Text(keyraLocalized(model.languageCode, "Cancel", "Odustani"))
+                    }
                 },
                 containerColor = Slate
             )
@@ -5740,7 +5803,7 @@ private fun SettingsScreen(
                 }
             }
 
-            item { SectionTitle("INFORMACIJE") }
+            item { SectionTitle(keyraLocalized(model.languageCode, "PRIVACY & APP", "PRIVATNOST I APLIKACIJA")) }
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
@@ -5771,7 +5834,19 @@ private fun SettingsScreen(
                     keyraLocalized(model.languageCode, "About Keyra", "O aplikaciji"),
                     "Keyra $versionName • Brendigo",
                     onClick = {
-                        if (!openWebsite(context, "https://brendigo.com/o-nama/")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
+                )
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Verified,
+                    keyraLocalized(model.languageCode, "Developed by Brendigo", "Razvio Brendigo"),
+                    "brendigo.com",
+                    onClick = {
+                        if (!openWebsite(context, "https://brendigo.com/")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
@@ -5780,8 +5855,8 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.DeleteForever,
-                    "Izbriši sve podatke",
-                    "Trajno izbrišite trezor i postavke s ovog uređaja.",
+                    keyraLocalized(model.languageCode, "Delete all local data", "Izbriši sve podatke"),
+                    keyraLocalized(model.languageCode, "Permanently erase this vault and its settings from your device.", "Trajno izbrišite trezor i postavke s ovog uređaja."),
                     onClick = { confirmErase = true }
                 )
             }

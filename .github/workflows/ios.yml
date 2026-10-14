@@ -11,17 +11,27 @@ on:
       - "ios/**"
       - ".github/workflows/ios.yml"
       - ".github/scripts/validate_localizations.py"
+      - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/validate_initial_import_preflight.py"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
       - ".github/scripts/validate_localizations.py"
+      - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/validate_initial_import_preflight.py"
 
 jobs:
   build:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
+
+      - name: Verify first-run import preserves encrypted vault data
+        run: python3 .github/scripts/validate_initial_import_preflight.py
+
+      - name: Verify cross-platform vault storage and lifecycle privacy
+        run: python3 .github/scripts/validate_vault_transfer.py
 
       - name: Verify Keyra language parity on Android and iOS
         run: python3 .github/scripts/validate_localizations.py

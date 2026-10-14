@@ -11,10 +11,10 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.28"
+        default: "0.6.29"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: keyra-release-${{ github.ref }}
@@ -29,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify first-run import preserves encrypted vault data
+        run: python3 .github/scripts/validate_initial_import_preflight.py
+
       - name: Verify Android/iOS localization parity
         run: python3 .github/scripts/validate_localizations.py
 
@@ -37,13 +40,16 @@ jobs:
 
       - id: version
         name: Uskladi Android i iOS verziju
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
 
           ANDROID_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
           IOS_VERSION=$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' ios/Keyra.xcodeproj/project.pbxproj | head -n 1 | tr -d '[:space:]')
-          REQUESTED="${{ inputs.version }}"
+          REQUESTED="${REQUESTED_VERSION:-}"
 
           if [ -n "$REQUESTED" ]; then
             VERSION="$REQUESTED"
@@ -51,9 +57,29 @@ jobs:
             VERSION="$ANDROID_VERSION"
           fi
 
-          test -n "$VERSION"
+          # Never publish directly from an unmerged feature or PR branch.
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Release publication requires the protected main branch."
+            exit 1
+          fi
+
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid semantic version; expected MAJOR.MINOR.PATCH."
+            exit 1
+          fi
           test "$ANDROID_VERSION" = "$VERSION"
           test "$IOS_VERSION" = "$VERSION"
+
+          # Published artifacts are immutable; never build or overwrite a
+          # previously published version from a different source revision.
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists. Bump the version for a new release."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists; reuse of release tags is forbidden."
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   android:
@@ -372,6 +398,8 @@ jobs:
     name: Objavi izdanje
     needs: [prepare, android, ios]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -388,7 +416,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.28 adds explicit Android 12+ cloud and device-to-device vault exclusion rules, prevents expired sessions from exporting PDF overview files, optimizes aggregate PDF/ZIP reports on both platforms, and includes a genuine iOS onboarding screenshot captured from the release simulator. Existing encrypted backups, multi-language onboarding, Keychain protections and KEYRA1/KEYRA2/KEYRAREC1 compatibility remain intact.
+          Keyra 0.6.29 hardens first-run backup imports to prevent accidental replacement of a surviving encrypted vault. Android and iOS now use monotonic background timers for more reliable auto-lock, reject invalid stored lock intervals, and provide clearer privacy and deletion controls. iOS also enforces vault-directory file protection and backup exclusion without silently ignoring errors; Android rejects malformed decrypted backup text. Compact navigation, localization lookups and app/developer settings links were polished. KEYRA1/KEYRA2/KEYRAREC1 compatibility remains intact, and the release includes a genuine iOS onboarding screenshot.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
@@ -402,18 +430,41 @@ jobs:
           Refer to docs/STORE_RELEASE_CHECKLIST.md before submission.
           EOF
 
-      - name: Objavi ili ažuriraj GitHub izdanje
+      - name: Verify release assets and published SHA-256 manifests
+        run: |
+          set -euo pipefail
+          for asset in \
+            "Keyra-${VERSION}-Android-debug.apk" \
+            "Keyra-${VERSION}-Android-unsigned.apk" \
+            "Keyra-${VERSION}-Android.aab" \
+            "Keyra-${VERSION}-iOS-Onboarding.png" \
+            "Keyra-${VERSION}-iOS-Simulator.zip" \
+            "Keyra-${VERSION}-iOS-unsigned.ipa" \
+            "SHA256SUMS-Android.txt" \
+            "SHA256SUMS-iOS.txt"; do
+            test -s "dist/${asset}" || { echo "Missing or empty artifact: ${asset}"; exit 1; }
+          done
+          (
+            cd dist
+            sha256sum -c SHA256SUMS-Android.txt
+            sha256sum -c SHA256SUMS-iOS.txt
+          )
+
+      - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            gh release upload "v${VERSION}" dist/* --clobber
-            gh release edit "v${VERSION}" --title "Keyra ${VERSION}" --notes-file RELEASE_NOTES.md
-          else
-            gh release create "v${VERSION}" \
-              --target "${GITHUB_SHA}" \
-              --title "Keyra ${VERSION}" \
-              --notes-file RELEASE_NOTES.md \
-              dist/*
+            echo "Refusing to overwrite already-published v${VERSION} artifacts."
+            exit 1
           fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Refusing to publish over existing tag v${VERSION}."
+            exit 1
+          fi
+          gh release create "v${VERSION}" \
+            --target "${GITHUB_SHA}" \
+            --title "Keyra ${VERSION}" \
+            --notes-file RELEASE_NOTES.md \
+            dist/*

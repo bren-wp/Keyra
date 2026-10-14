@@ -570,6 +570,15 @@ enum KeychainVault {
         return SymmetricKey(data: data)
     }
 
+    // Export/recovery operations must never generate a new key if the old
+    // device-bound key is missing or temporarily unreadable.
+    static func existingRawKeyData() throws -> Data {
+        guard let data = try existingKeyData() else {
+            throw KeyraError.keyUnavailable
+        }
+        return data
+    }
+
     static func rawKeyData() throws -> Data {
         if let existing = try existingKeyData() {
             return existing
@@ -813,9 +822,15 @@ final class EncryptedVault {
             withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.complete]
         )
+        // Reapply protection even if this directory predates current versions.
+        // Never silently continue when iOS cannot enforce backup exclusion.
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: directory.path
+        )
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
-        try? directory.setResourceValues(values)
+        try directory.setResourceValues(values)
         return directory.appendingPathComponent("vault.bin", isDirectory: false)
     }
 
@@ -884,7 +899,7 @@ final class EncryptedVault {
     }
 
     func recoveryKeyData() throws -> Data {
-        try KeychainVault.rawKeyData()
+        try KeychainVault.existingRawKeyData()
     }
 
     func installRecoveryKey(_ data: Data, initialRecovery: Bool = false) throws -> [VaultItem] {
@@ -1382,9 +1397,12 @@ private let keyraCoreTranslations: [String: [String]] = [
     "ja": ["保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語"]
 ]
 
+private let keyraCoreKeyIndices: [String: Int] =
+    Dictionary(uniqueKeysWithValues: keyraCoreKeys.enumerated().map { ($0.element, $0.offset) })
+
 private func keyraLocalized(_ code: String, _ english: String, _ croatian: String) -> String {
     if code == "hr" { return croatian }
-    guard let index = keyraCoreKeys.firstIndex(of: english),
+    guard let index = keyraCoreKeyIndices[english],
           let translated = keyraCoreTranslations[code],
           translated.indices.contains(index) else {
         return english
@@ -1450,7 +1468,9 @@ final class KeyraStore: ObservableObject {
         let savedSensitiveReauth = defaults.object(forKey: "sensitive_reauth_enabled") as? Bool ?? true
         self.biometricEnabled = savedBiometric && authenticationAvailable
         self.sensitiveReauthEnabled = savedSensitiveReauth && savedBiometric && authenticationAvailable
-        self.autoLockSeconds = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
+        let persistedAutoLock = defaults.object(forKey: "auto_lock_seconds") as? Int ?? 0
+        self.autoLockSeconds = [0, 30, 60, 300].contains(persistedAutoLock)
+            ? persistedAutoLock : 0
         let code = defaults.string(forKey: "preferred_language_v1") ?? "en"
         self.preferredLanguage = keyraLanguages.contains(where: { $0.code == code }) ? code : "en"
     }
@@ -1586,7 +1606,14 @@ final class KeyraStore: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let imported: [VaultItem]?
+            var failureMessage = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
             do {
+                // Preserve an orphaned ciphertext vault; recovery is an explicit flow.
+                guard RecoveryCiphertextPolicy.allowsFreshVaultCreation(
+                    hasCiphertext: try self.vault.hasPersistedCiphertext()
+                ) else {
+                    throw KeyraError.existingVaultData
+                }
                 let decoded = try PortableBackup.decrypt(payload, password: password)
                 try self.vault.save(decoded)
                 if self.auth.create(password: password) {
@@ -1597,7 +1624,11 @@ final class KeyraStore: ObservableObject {
                 }
             } catch {
                 imported = nil
+                if case KeyraError.existingVaultData = error {
+                    failureMessage = "Postojeći šifrirani podaci nisu zamijenjeni. Za obnovu upotrijebite Recovery Key i sigurnosnu kopiju."
+                }
             }
+            let resolvedFailureMessage = failureMessage
             DispatchQueue.main.async {
                 self.isImportingVault = false
                 if let imported {
@@ -1607,7 +1638,7 @@ final class KeyraStore: ObservableObject {
                     )
                     self.message = "Keyra trezor uspješno je uvezen."
                 } else {
-                    self.message = "Uvoz nije uspio. Provjerite kopiju, lozinku i raspoloživi prostor."
+                    self.message = resolvedFailureMessage
                 }
             }
         }
@@ -1775,6 +1806,12 @@ final class KeyraStore: ObservableObject {
 
     func lock() {
         authenticationEpoch &+= 1
+        // Expire a Keyra-owned secret immediately when the user locks.
+        // Background access to the general pasteboard may be restricted;
+        // its existing 30-second expiration remains the fallback.
+        if UIApplication.shared.applicationState == .active {
+            SecureClipboard.clearIfOwned()
+        }
         items = []
         selected = nil
         sessionPassword = nil
@@ -2176,7 +2213,7 @@ struct RootView: View {
     @EnvironmentObject var store: KeyraStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var splash = true
-    @State private var backgroundedAt: Date?
+    @State private var backgroundedAt: ContinuousClock.Instant?
     @State private var screenCaptured = UIScreen.main.isCaptured
     @State private var appPrivacyShield = false
 
@@ -2275,13 +2312,15 @@ struct RootView: View {
                 if store.autoLockSeconds == 0 {
                     store.lock()
                 } else {
-                    backgroundedAt = Date()
+                    backgroundedAt = ContinuousClock().now
                 }
             } else if phase == .active {
                 if
                     let started = backgroundedAt,
                     store.autoLockSeconds > 0,
-                    Date().timeIntervalSince(started) >= Double(store.autoLockSeconds)
+                    (started.duration(to: ContinuousClock().now) < .zero ||
+                     started.duration(to: ContinuousClock().now) >=
+                        Duration.seconds(Int64(store.autoLockSeconds)))
                 {
                     store.lock()
                 }
@@ -3265,6 +3304,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
         .accessibilityIdentifier("keyra-nav-" + testIdentifier)
     }
 }
@@ -5791,7 +5831,7 @@ struct SettingsView: View {
                         .accessibilityLabel("Uvezi Recovery Key")
                     }
 
-                    SectionLabel("PRIVATNOST I APLIKACIJA")
+                    SectionLabel(keyraLocalized(store.preferredLanguage, "PRIVACY & APP", "PRIVATNOST I APLIKACIJA"))
 
                     Button {
                         if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
@@ -5824,7 +5864,7 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        if let url = URL(string: "https://brendigo.com/o-nama/") {
+                        if let url = URL(string: "https://github.com/bren-wp/Keyra") {
                             openURL(url)
                         }
                     } label: {
@@ -5839,12 +5879,27 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     Button {
+                        if let url = URL(string: "https://brendigo.com/") {
+                            openURL(url)
+                        }
+                    } label: {
+                        SettingRow(
+                            icon: "person.crop.circle.badge.checkmark",
+                            title: keyraLocalized(store.preferredLanguage, "Developed by Brendigo", "Razvio Brendigo"),
+                            subtitle: "brendigo.com"
+                        ) {
+                            Image(systemName: "arrow.up.right").foregroundStyle(ice)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
                         confirmErase = true
                     } label: {
                         SettingRow(
                             icon: "trash.slash.fill",
-                            title: "Izbriši sve podatke",
-                            subtitle: "Trajno izbrišite trezor i postavke s ovog uređaja."
+                            title: keyraLocalized(store.preferredLanguage, "Delete all local data", "Izbriši sve podatke"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "Permanently erase this vault and its settings from your device.", "Trajno izbrišite trezor i postavke s ovog uređaja.")
                         ) {
                             Image(systemName: "chevron.right").foregroundStyle(danger)
                         }
@@ -5908,21 +5963,22 @@ struct SettingsView: View {
             pdfOverviewDocument = KeyraZipDocument()
         }
         .confirmationDialog(
-            "Izbrisati sve podatke?",
+            keyraLocalized(store.preferredLanguage, "Delete all local data?", "Izbrisati sve podatke?"),
             isPresented: $confirmErase,
             titleVisibility: .visible
         ) {
-            Button("Trajno izbriši", role: .destructive) {
+            Button(keyraLocalized(store.preferredLanguage, "Permanently delete", "Trajno izbriši"), role: .destructive) {
                 store.authorizeCritical(reason: "Potvrdite brisanje podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }
-            Button("Odustani", role: .cancel) {}
+            Button(keyraLocalized(store.preferredLanguage, "Cancel", "Odustani"), role: .cancel) {}
         } message: {
-            Text(
-                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
-                "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
-            )
+            Text(keyraLocalized(
+                store.preferredLanguage,
+                "Your vault, master password and settings will be permanently erased from this device. Encrypted .keyra backups saved elsewhere will not be deleted.",
+                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+            ))
         }
         .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
             SecureField("Recovery lozinka", text: $recoveryExportPassphrase)
