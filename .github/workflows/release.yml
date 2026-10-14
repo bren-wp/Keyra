@@ -14,7 +14,7 @@ on:
         default: "0.6.29"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: keyra-release-${{ github.ref }}
@@ -398,6 +398,8 @@ jobs:
     name: Objavi izdanje
     needs: [prepare, android, ios]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
