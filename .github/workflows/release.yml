@@ -40,13 +40,16 @@ jobs:
 
       - id: version
         name: Uskladi Android i iOS verziju
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
 
           ANDROID_VERSION=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)
           IOS_VERSION=$(sed -n 's/.*MARKETING_VERSION = \([^;]*\);.*/\1/p' ios/Keyra.xcodeproj/project.pbxproj | head -n 1 | tr -d '[:space:]')
-          REQUESTED="${{ inputs.version }}"
+          REQUESTED="${REQUESTED_VERSION:-}"
 
           if [ -n "$REQUESTED" ]; then
             VERSION="$REQUESTED"
@@ -54,9 +57,19 @@ jobs:
             VERSION="$ANDROID_VERSION"
           fi
 
-          test -n "$VERSION"
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid semantic version; expected MAJOR.MINOR.PATCH."
+            exit 1
+          fi
           test "$ANDROID_VERSION" = "$VERSION"
           test "$IOS_VERSION" = "$VERSION"
+
+          # Published artifacts are immutable; never build or overwrite a
+          # previously published version from a different source revision.
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists. Bump the version for a new release."
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   android:
@@ -405,18 +418,37 @@ jobs:
           Refer to docs/STORE_RELEASE_CHECKLIST.md before submission.
           EOF
 
-      - name: Objavi ili ažuriraj GitHub izdanje
+      - name: Verify release assets and published SHA-256 manifests
+        run: |
+          set -euo pipefail
+          for asset in \
+            "Keyra-${VERSION}-Android-debug.apk" \
+            "Keyra-${VERSION}-Android-unsigned.apk" \
+            "Keyra-${VERSION}-Android.aab" \
+            "Keyra-${VERSION}-iOS-Onboarding.png" \
+            "Keyra-${VERSION}-iOS-Simulator.zip" \
+            "Keyra-${VERSION}-iOS-unsigned.ipa" \
+            "SHA256SUMS-Android.txt" \
+            "SHA256SUMS-iOS.txt"; do
+            test -s "dist/${asset}" || { echo "Missing or empty artifact: ${asset}"; exit 1; }
+          done
+          (
+            cd dist
+            sha256sum -c SHA256SUMS-Android.txt
+            sha256sum -c SHA256SUMS-iOS.txt
+          )
+
+      - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            gh release upload "v${VERSION}" dist/* --clobber
-            gh release edit "v${VERSION}" --title "Keyra ${VERSION}" --notes-file RELEASE_NOTES.md
-          else
-            gh release create "v${VERSION}" \
-              --target "${GITHUB_SHA}" \
-              --title "Keyra ${VERSION}" \
-              --notes-file RELEASE_NOTES.md \
-              dist/*
+            echo "Refusing to overwrite already-published v${VERSION} artifacts."
+            exit 1
           fi
+          gh release create "v${VERSION}" \
+            --target "${GITHUB_SHA}" \
+            --title "Keyra ${VERSION}" \
+            --notes-file RELEASE_NOTES.md \
+            dist/*
