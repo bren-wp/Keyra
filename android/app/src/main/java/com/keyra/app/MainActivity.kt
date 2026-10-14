@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.os.SystemClock
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -344,7 +345,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             prefs.getBoolean("biometric_enabled", true) &&
             deviceAuthenticationAvailable
     )
-    var autoLockSeconds by mutableIntStateOf(prefs.getInt("auto_lock_seconds", 0))
+    var autoLockSeconds by mutableIntStateOf(
+        prefs.getInt("auto_lock_seconds", 0).takeIf { it in setOf(0, 30, 60, 300) } ?: 0
+    )
     var languageCode by mutableStateOf(
         prefs.getString("preferred_language_v1", "en")?.takeIf { it in keyraLanguageNames } ?: "en"
     )
@@ -692,6 +695,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         authenticationEpoch++
         unlocked = false
         sessionPassword = null
+        backgroundAt = null
         items.clear()
         selected = null
         vaultCategoryFilter = null
@@ -1092,7 +1096,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         if (autoLockSeconds == 0) {
             lock()
         } else {
-            backgroundAt = System.currentTimeMillis()
+            backgroundAt = SystemClock.elapsedRealtime()
         }
     }
 
@@ -1100,7 +1104,9 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
         appInForeground = true
         val started = backgroundAt ?: return
         backgroundAt = null
-        if (unlocked && System.currentTimeMillis() - started >= autoLockSeconds * 1000L) {
+        if (unlocked && shouldLockAfterBackground(
+            SystemClock.elapsedRealtime(), started, autoLockSeconds
+        )) {
             lock()
         }
     }
@@ -1451,6 +1457,18 @@ internal fun canInstallRecoveryKey(hasCiphertext: Boolean, initialRecovery: Bool
 
 // An orphaned encrypted vault is never overwritten by first-run setup.
 internal fun canCreateFreshVault(hasCiphertext: Boolean): Boolean = !hasCiphertext
+
+// Measure time away with a monotonic clock, not mutable wall-clock time.
+// A reboot or unexpected counter reset must fail closed instead of extending access.
+internal fun shouldLockAfterBackground(
+    elapsedRealtimeNow: Long,
+    backgroundStarted: Long,
+    lockAfterSeconds: Int
+): Boolean {
+    if (lockAfterSeconds !in setOf(30, 60, 300)) return true
+    if (elapsedRealtimeNow < backgroundStarted) return true
+    return elapsedRealtimeNow - backgroundStarted >= lockAfterSeconds * 1_000L
+}
 
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
@@ -5778,7 +5796,19 @@ private fun SettingsScreen(
                     keyraLocalized(model.languageCode, "About Keyra", "O aplikaciji"),
                     "Keyra $versionName • Brendigo",
                     onClick = {
-                        if (!openWebsite(context, "https://brendigo.com/o-nama/")) {
+                        if (!openWebsite(context, "https://github.com/bren-wp/Keyra")) {
+                            model.message = "Stranicu nije moguće otvoriti."
+                        }
+                    }
+                )
+            }
+            item {
+                SettingRow(
+                    Icons.Outlined.Verified,
+                    keyraLocalized(model.languageCode, "Developed by Brendigo", "Razvio Brendigo"),
+                    "brendigo.com",
+                    onClick = {
+                        if (!openWebsite(context, "https://brendigo.com/")) {
                             model.message = "Stranicu nije moguće otvoriti."
                         }
                     }
