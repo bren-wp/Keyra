@@ -3293,16 +3293,16 @@ struct BottomBar: View {
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .semibold))
                 Text(title)
-                    .font(.caption2)
-                    .fontWeight(selected ? .bold : .medium)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .font(.system(size: 12, weight: selected ? .bold : .medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.9)
                 Capsule()
                     .fill(cyan)
                     .frame(width: selected ? 26 : 0, height: 2)
             }
             .foregroundStyle(selected ? cyan : muted)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 60)
             .background(
                 selected
                     ? LinearGradient(
