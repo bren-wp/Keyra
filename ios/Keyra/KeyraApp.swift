@@ -570,6 +570,15 @@ enum KeychainVault {
         return SymmetricKey(data: data)
     }
 
+    // Export/recovery operations must never generate a new key if the old
+    // device-bound key is missing or temporarily unreadable.
+    static func existingRawKeyData() throws -> Data {
+        guard let data = try existingKeyData() else {
+            throw KeyraError.keyUnavailable
+        }
+        return data
+    }
+
     static func rawKeyData() throws -> Data {
         if let existing = try existingKeyData() {
             return existing
@@ -890,7 +899,7 @@ final class EncryptedVault {
     }
 
     func recoveryKeyData() throws -> Data {
-        try KeychainVault.rawKeyData()
+        try KeychainVault.existingRawKeyData()
     }
 
     func installRecoveryKey(_ data: Data, initialRecovery: Bool = false) throws -> [VaultItem] {
