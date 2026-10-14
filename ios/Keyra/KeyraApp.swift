@@ -2471,7 +2471,7 @@ struct BrandHeader: View {
 
                     if notificationCount > 0 {
                         Text(notificationCount > 9 ? "9+" : "\(notificationCount)")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -3617,7 +3617,7 @@ struct Summary: View {
                 .font(.system(size: 30, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(muted)
         }
@@ -4356,7 +4356,7 @@ struct AddEditView: View {
                         .font(.system(size: 24, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                     Text(original == nil ? "NOVA STAVKA" : "UREĐIVANJE STAVKE")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .tracking(1.4)
                         .foregroundStyle(muted)
                 }
@@ -4808,7 +4808,7 @@ struct DetailView: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.72)
                         Text((item.kind + " • " + item.category).uppercased())
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .tracking(0.7)
                             .foregroundStyle(muted)
                             .lineLimit(1)
