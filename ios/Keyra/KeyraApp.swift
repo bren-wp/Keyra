@@ -5812,7 +5812,7 @@ struct SettingsView: View {
                         .accessibilityLabel("Uvezi Recovery Key")
                     }
 
-                    SectionLabel("PRIVATNOST I APLIKACIJA")
+                    SectionLabel(keyraLocalized(store.preferredLanguage, "PRIVACY & APP", "PRIVATNOST I APLIKACIJA"))
 
                     Button {
                         if let url = URL(string: "https://github.com/bren-wp/Keyra/blob/main/PRIVACY.md") {
@@ -5879,8 +5879,8 @@ struct SettingsView: View {
                     } label: {
                         SettingRow(
                             icon: "trash.slash.fill",
-                            title: "Izbriši sve podatke",
-                            subtitle: "Trajno izbrišite trezor i postavke s ovog uređaja."
+                            title: keyraLocalized(store.preferredLanguage, "Delete all local data", "Izbriši sve podatke"),
+                            subtitle: keyraLocalized(store.preferredLanguage, "Permanently erase this vault and its settings from your device.", "Trajno izbrišite trezor i postavke s ovog uređaja.")
                         ) {
                             Image(systemName: "chevron.right").foregroundStyle(danger)
                         }
@@ -5944,21 +5944,22 @@ struct SettingsView: View {
             pdfOverviewDocument = KeyraZipDocument()
         }
         .confirmationDialog(
-            "Izbrisati sve podatke?",
+            keyraLocalized(store.preferredLanguage, "Delete all local data?", "Izbrisati sve podatke?"),
             isPresented: $confirmErase,
             titleVisibility: .visible
         ) {
-            Button("Trajno izbriši", role: .destructive) {
+            Button(keyraLocalized(store.preferredLanguage, "Permanently delete", "Trajno izbriši"), role: .destructive) {
                 store.authorizeCritical(reason: "Potvrdite brisanje podataka.") {
                     _ = store.eraseAllLocalData()
                 }
             }
-            Button("Odustani", role: .cancel) {}
+            Button(keyraLocalized(store.preferredLanguage, "Cancel", "Odustani"), role: .cancel) {}
         } message: {
-            Text(
-                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
-                "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
-            )
+            Text(keyraLocalized(
+                store.preferredLanguage,
+                "Your vault, master password and settings will be permanently erased from this device. Encrypted .keyra backups saved elsewhere will not be deleted.",
+                "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+            ))
         }
         .alert("Izvezi Recovery Key", isPresented: $showRecoveryExportPrompt) {
             SecureField("Recovery lozinka", text: $recoveryExportPassphrase)
