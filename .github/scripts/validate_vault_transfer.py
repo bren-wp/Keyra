@@ -62,4 +62,13 @@ assert "try? directory.setResourceValues(values)" not in storage, (
     "iOS backup exclusion errors must not be silently swallowed"
 )
 
-print("Keyra Android/iOS vault privacy: backup, migration, file protection, monotonic lifecycle gates verified")
+# Locking a vault must revoke a Keyra-owned clipboard entry without clearing
+# clipboard content copied later by the user or another app.
+android_lock = android_code.split("    fun lock() {", 1)[1].split("    fun eraseAllLocalData()", 1)[0]
+ios_lock = ios_code.split("    func lock() {", 1)[1].split("    @discardableResult", 1)[0]
+assert "SensitiveClipboard.clearIfOwned(" in android_lock, "Android lock should revoke owned clipboard secrets"
+assert "SecureClipboard.clearIfOwned()" in ios_lock, "iOS lock should revoke owned clipboard secrets"
+assert "shouldClearOwnedClipboard(" in android_code, "Android clipboard ownership verifier is missing"
+assert "pasteboard.changeCount == expected" in ios_code, "iOS clipboard ownership verifier is missing"
+
+print("Keyra Android/iOS vault privacy: backup exclusions, storage protection, monotonic lock and clipboard ownership verified")
