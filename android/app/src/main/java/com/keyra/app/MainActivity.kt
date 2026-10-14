@@ -2137,7 +2137,7 @@ private fun BrandHeader(
                                 Text(
                                     if (notificationCount > 9) "9+" else notificationCount.toString(),
                                     color = Color.White,
-                                    fontSize = 8.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )
@@ -2244,12 +2244,13 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 .fillMaxSize()
                 .widthIn(max = 680.dp)
                 .align(Alignment.TopCenter)
-                .padding(horizontal = horizontal)
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(horizontal = horizontal),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -2266,9 +2267,11 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 Text(
                     keyraLocalized(model.languageCode, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"),
                     color = Muted,
-                    fontSize = if (compact) 9.sp else 11.sp,
-                    letterSpacing = if (compact) 1.4.sp else 2.sp,
-                    maxLines = 1
+                    fontSize = if (compact) 11.sp else 13.sp,
+                    letterSpacing = if (compact) 0.6.sp else 1.sp,
+                    maxLines = 2,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(Modifier.height(if (compact) 7.dp else 12.dp))
@@ -2654,13 +2657,27 @@ private fun UnlockScreen(
                         testTag = "keyra-master-password"
                     )
                     if (creating && !importing) {
+                        Text(
+                            "Najmanje 12, najviše 256 znakova • ${password.length}/256",
+                            color = if (password.length in 12..256) Good else Muted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.testTag("keyra-master-password-guidance")
+                        )
                         Spacer(Modifier.height(10.dp))
                         KeyraPasswordField(
                             confirm, { confirm = boundedNewMasterPasswordInput(it) },
                             show, { show = !show }, "Ponovite glavnu lozinku",
                             testTag = "keyra-confirm-master-password"
                         )
-                        Text("Glavna lozinka: najmanje 12 znakova.", color = Muted, fontSize = 12.sp)
+                        if (confirm.isNotEmpty()) {
+                            Text(
+                                if (password == confirm) "Lozinke se podudaraju."
+                                else "Lozinke se još ne podudaraju.",
+                                color = if (password == confirm) Good else Warn,
+                                fontSize = 13.sp,
+                                modifier = Modifier.testTag("keyra-master-password-match")
+                            )
+                        }
                     }
                     if (importing) {
                         Spacer(Modifier.height(8.dp))
@@ -2734,7 +2751,12 @@ private fun UnlockScreen(
                         ) {
                             Icon(Icons.Outlined.Fingerprint, null, tint = Cyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("Biometrijsko otključavanje", color = Color.White, maxLines = 1)
+                            Text(
+                            "Biometrijsko otključavanje",
+                            color = Color.White,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center
+                        )
                         }
                     }
                 }
@@ -2887,7 +2909,7 @@ private fun RowScope.NavItem(
     Box(
         modifier = Modifier
             .weight(1f)
-            .height(if (compact) 52.dp else 58.dp)
+            .height(if (compact) 62.dp else 64.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(
                 if (selected)
@@ -2915,10 +2937,10 @@ private fun RowScope.NavItem(
             Text(
                 label,
                 color = if (selected) Cyan else Muted,
-                fontSize = if (compact) 9.sp else 11.sp,
+                fontSize = if (compact) 11.sp else 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                softWrap = false,
+                maxLines = 2,
+                softWrap = true,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
@@ -4204,9 +4226,9 @@ private fun AddScreen(model: KeyraViewModel) {
                     Text(
                         if (original == null) "NOVA STAVKA" else "UREĐIVANJE STAVKE",
                         color = Muted,
-                        fontSize = 9.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.4.sp
+                        letterSpacing = .7.sp
                     )
                 }
             }

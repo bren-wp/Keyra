@@ -92,6 +92,7 @@ class MasterPasswordEntryInstrumentedTest {
         compose.onNodeWithText("Create my vault").assertExists()
         compose.onNodeWithTag("keyra-first-run-create").performClick()
         waitFor("keyra-master-password")
+        waitFor("keyra-master-password-guidance")
 
         val master = compose.onNodeWithTag("keyra-master-password")
         val confirm = compose.onNodeWithTag("keyra-confirm-master-password")
@@ -104,6 +105,11 @@ class MasterPasswordEntryInstrumentedTest {
         master.performTextInput("1")
         assertEquals(
             1, master.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
+        )
+        assertTrue(
+            compose.onNodeWithTag("keyra-master-password-guidance")
+                .fetchSemanticsNode().config[SemanticsProperties.Text]
+                .any { it.text.contains("1/256") }
         )
         master.performTextInput("2")
         assertEquals(
@@ -130,6 +136,7 @@ class MasterPasswordEntryInstrumentedTest {
         master.performTextInput(underlength)
         confirm.performClick()
         confirm.performTextInput(underlength)
+        waitFor("keyra-master-password-match")
         submit.performClick()
         compose.waitUntil(20_000) {
             compose.onAllNodesWithText("Glavna lozinka mora imati između 12 i 256 znakova.")

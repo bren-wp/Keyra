@@ -2471,7 +2471,7 @@ struct BrandHeader: View {
 
                     if notificationCount > 0 {
                         Text(notificationCount > 9 ? "9+" : "\(notificationCount)")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -2661,28 +2661,32 @@ struct KeyraLanguageMenu: View {
 
 struct OnboardingView: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .largeTitle) private var headingSize: CGFloat = 42
+    @ScaledMetric(relativeTo: .title) private var heroTitleSize: CGFloat = 31
+    @ScaledMetric(relativeTo: .caption) private var subtitleSize: CGFloat = 11
 
     var body: some View {
         GeometryReader { proxy in
             let compact = proxy.size.height < 800 || proxy.size.width < 360
             let short = proxy.size.height < 590
 
-            VStack(spacing: 0) {
-                VStack(spacing: compact ? 7 : 11) {
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    VStack(spacing: compact ? 7 : 11) {
                         KeyraMark(size: short ? 50 : (compact ? 64 : 82))
                             .padding(.top, compact ? 6 : 14)
 
                         Text("Keyra")
-                            .font(.system(size: compact ? 34 : 42, weight: .black, design: .rounded))
+                            .font(.system(size: compact ? headingSize * (34.0 / 42.0) : headingSize, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
                         Text(keyraLocalized(store.preferredLanguage, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
-                            .font(.system(size: compact ? 9 : 11))
+                            .font(.system(size: compact ? subtitleSize * (9.0 / 11.0) : subtitleSize))
                             .tracking(compact ? 1.4 : 2)
                             .foregroundStyle(muted)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.82)
 
                         if !short {
                             OnboardingVaultHero(compact: compact)
@@ -2691,9 +2695,10 @@ struct OnboardingView: View {
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
                             Text(keyraLocalized(store.preferredLanguage, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"))
-                                .font(.system(size: compact ? 25 : 31, weight: .black))
+                                .font(.system(size: compact ? heroTitleSize * (25.0 / 31.0) : heroTitleSize, weight: .black))
                                 .foregroundStyle(.white)
-                                .minimumScaleFactor(0.8)
+                                .minimumScaleFactor(0.85)
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(keyraLocalized(store.preferredLanguage, "Keep everything important in one secure vault.", "Čuvajte svoje lozinke i osjetljive podatke na jednom sigurnom mjestu."))
                                 .font(compact ? .subheadline : .body)
                                 .foregroundStyle(muted)
@@ -2704,7 +2709,8 @@ struct OnboardingView: View {
 
                     }
                 .padding(.horizontal, compact ? 16 : 22)
-                .frame(maxHeight: .infinity)
+
+                Spacer(minLength: 12)
 
                 VStack(spacing: 8) {
                     Button {
@@ -2753,7 +2759,12 @@ struct OnboardingView: View {
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom, 8))
+                }
+                .frame(maxWidth: 680)
+                .frame(minHeight: proxy.size.height)
+                .frame(maxWidth: .infinity)
             }
+            .scrollIndicators(.hidden)
             .overlay(alignment: .topTrailing) {
                 KeyraLanguageMenu()
                     .accessibilityIdentifier("keyra-onboarding-language")
@@ -3009,6 +3020,8 @@ struct RecoverySetupView: View {
 
 struct UnlockView: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .largeTitle) private var headingSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .title) private var formTitleSize: CGFloat = 31
     @State private var password = ""
     @State private var confirm = ""
     @State private var reveal = false
@@ -3043,7 +3056,7 @@ struct UnlockView: View {
             VStack(spacing: compact ? 11 : 16) {
                 KeyraMark(size: compact ? 66 : 84).padding(.top, compact ? 10 : 24)
                 Text("Keyra")
-                    .font(.system(size: compact ? 36 : 44, weight: .black, design: .rounded))
+                    .font(.system(size: compact ? headingSize * (36.0 / 44.0) : headingSize, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                 Text("SIGURNI UPRAVITELJ LOZINKI")
                     .font(.system(size: 12))
@@ -3056,7 +3069,7 @@ struct UnlockView: View {
                             ? "Uvezite Keyra trezor"
                             : (creating ? "Izradite trezor" : "Otključajte trezor")
                     )
-                    .font(.system(size: compact ? 26 : 31, weight: .black))
+                    .font(.system(size: compact ? formTitleSize * (26.0 / 31.0) : formTitleSize, weight: .black))
                     .foregroundStyle(.white)
 
                     Text(
@@ -3070,10 +3083,17 @@ struct UnlockView: View {
 
                     SecretField(title: "Glavna lozinka", text: masterPasswordBinding, reveal: $reveal, testIdentifier: "keyra-master-password")
                     if creating && !importing {
+                        Text("Najmanje 12, najviše 256 znakova • \(password.count)/256")
+                            .font(.subheadline)
+                            .foregroundStyle((12...256).contains(password.count) ? good : muted)
+                            .accessibilityIdentifier("keyra-master-password-guidance")
                         SecretField(title: "Ponovite glavnu lozinku", text: confirmationBinding, reveal: $reveal, testIdentifier: "keyra-confirm-master-password")
-                        Text("Glavna lozinka: najmanje 12 znakova.")
-                            .font(.caption)
-                            .foregroundStyle(muted)
+                        if !confirm.isEmpty {
+                            Text(password == confirm ? "Lozinke se podudaraju." : "Lozinke se još ne podudaraju.")
+                                .font(.subheadline)
+                                .foregroundStyle(password == confirm ? good : warn)
+                                .accessibilityIdentifier("keyra-master-password-match")
+                        }
                     }
                     if importing {
                         Button {
@@ -3243,6 +3263,7 @@ struct SecretField: View {
 
 struct BottomBar: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .footnote) private var navLabelSize: CGFloat = 12
 
     var body: some View {
         HStack(spacing: 4) {
@@ -3278,16 +3299,16 @@ struct BottomBar: View {
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .semibold))
                 Text(title)
-                    .font(.caption2)
-                    .fontWeight(selected ? .bold : .medium)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .font(.system(size: min(navLabelSize, 17), weight: selected ? .bold : .medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.9)
                 Capsule()
                     .fill(cyan)
                     .frame(width: selected ? 26 : 0, height: 2)
             }
             .foregroundStyle(selected ? cyan : muted)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 60)
             .background(
                 selected
                     ? LinearGradient(
@@ -3602,7 +3623,7 @@ struct Summary: View {
                 .font(.system(size: 30, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(muted)
         }
@@ -4341,7 +4362,7 @@ struct AddEditView: View {
                         .font(.system(size: 24, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                     Text(original == nil ? "NOVA STAVKA" : "UREĐIVANJE STAVKE")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .tracking(1.4)
                         .foregroundStyle(muted)
                 }
@@ -4793,7 +4814,7 @@ struct DetailView: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.72)
                         Text((item.kind + " • " + item.category).uppercased())
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 12, weight: .semibold))
                             .tracking(0.7)
                             .foregroundStyle(muted)
                             .lineLimit(1)
