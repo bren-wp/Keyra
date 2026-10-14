@@ -175,10 +175,13 @@ internal val keyraCoreTranslations: Map<String, List<String>> = mapOf(
     "ja" to listOf("保管庫", "コレクション", "生成ツール", "設定", "保管庫を作成", "保管庫をインポート", "アプリの言語")
 )
 
+private val keyraCoreKeyIndices: Map<String, Int> =
+    keyraCoreKeys.withIndex().associate { (index, key) -> key to index }
+
 internal fun keyraLocalized(code: String, english: String, croatian: String): String {
     if (code == "hr") return croatian
-    val index = keyraCoreKeys.indexOf(english)
-    return if (index >= 0) keyraCoreTranslations[code]?.getOrNull(index) ?: english else english
+    val index = keyraCoreKeyIndices[english] ?: return english
+    return keyraCoreTranslations[code]?.getOrNull(index) ?: english
 }
 
 // Export deliberately excludes vault titles, usernames, passwords,
