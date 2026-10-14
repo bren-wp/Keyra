@@ -2661,6 +2661,9 @@ struct KeyraLanguageMenu: View {
 
 struct OnboardingView: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .largeTitle) private var headingSize: CGFloat = 42
+    @ScaledMetric(relativeTo: .title) private var heroTitleSize: CGFloat = 31
+    @ScaledMetric(relativeTo: .caption) private var subtitleSize: CGFloat = 11
 
     var body: some View {
         GeometryReader { proxy in
@@ -2674,12 +2677,12 @@ struct OnboardingView: View {
                             .padding(.top, compact ? 6 : 14)
 
                         Text("Keyra")
-                            .font(.system(size: compact ? 34 : 42, weight: .black, design: .rounded))
+                            .font(.system(size: compact ? headingSize * (34.0 / 42.0) : headingSize, weight: .black, design: .rounded))
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
                         Text(keyraLocalized(store.preferredLanguage, "PRIVATE PASSWORD MANAGER", "SIGURNI UPRAVITELJ LOZINKI"))
-                            .font(.system(size: compact ? 9 : 11))
+                            .font(.system(size: compact ? subtitleSize * (9.0 / 11.0) : subtitleSize))
                             .tracking(compact ? 1.4 : 2)
                             .foregroundStyle(muted)
                             .lineLimit(2)
@@ -2692,7 +2695,7 @@ struct OnboardingView: View {
 
                         VStack(alignment: .leading, spacing: compact ? 5 : 8) {
                             Text(keyraLocalized(store.preferredLanguage, "Your passwords. Beautifully protected.", "Sigurniji način upravljanja lozinkama"))
-                                .font(.system(size: compact ? 25 : 31, weight: .black))
+                                .font(.system(size: compact ? heroTitleSize * (25.0 / 31.0) : heroTitleSize, weight: .black))
                                 .foregroundStyle(.white)
                                 .minimumScaleFactor(0.85)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -3017,6 +3020,8 @@ struct RecoverySetupView: View {
 
 struct UnlockView: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .largeTitle) private var headingSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .title) private var formTitleSize: CGFloat = 31
     @State private var password = ""
     @State private var confirm = ""
     @State private var reveal = false
@@ -3051,7 +3056,7 @@ struct UnlockView: View {
             VStack(spacing: compact ? 11 : 16) {
                 KeyraMark(size: compact ? 66 : 84).padding(.top, compact ? 10 : 24)
                 Text("Keyra")
-                    .font(.system(size: compact ? 36 : 44, weight: .black, design: .rounded))
+                    .font(.system(size: compact ? headingSize * (36.0 / 44.0) : headingSize, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                 Text("SIGURNI UPRAVITELJ LOZINKI")
                     .font(.system(size: 12))
@@ -3064,7 +3069,7 @@ struct UnlockView: View {
                             ? "Uvezite Keyra trezor"
                             : (creating ? "Izradite trezor" : "Otključajte trezor")
                     )
-                    .font(.system(size: compact ? 26 : 31, weight: .black))
+                    .font(.system(size: compact ? formTitleSize * (26.0 / 31.0) : formTitleSize, weight: .black))
                     .foregroundStyle(.white)
 
                     Text(
@@ -3258,6 +3263,7 @@ struct SecretField: View {
 
 struct BottomBar: View {
     @EnvironmentObject var store: KeyraStore
+    @ScaledMetric(relativeTo: .footnote) private var navLabelSize: CGFloat = 12
 
     var body: some View {
         HStack(spacing: 4) {
@@ -3293,7 +3299,7 @@ struct BottomBar: View {
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 12, weight: selected ? .bold : .medium))
+                    .font(.system(size: min(navLabelSize, 17), weight: selected ? .bold : .medium))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.9)
