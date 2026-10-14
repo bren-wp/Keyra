@@ -3289,6 +3289,7 @@ struct BottomBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
         .accessibilityIdentifier("keyra-nav-" + testIdentifier)
     }
 }
