@@ -5531,11 +5531,16 @@ private fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { confirmErase = false },
                 icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = Danger) },
-                title = { Text("Izbrisati sve podatke?") },
+                title = {
+                    Text(keyraLocalized(model.languageCode, "Delete all local data?", "Izbrisati sve podatke?"))
+                },
                 text = {
                     Text(
-                        "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. " +
-                            "Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                        keyraLocalized(
+                            model.languageCode,
+                            "Your vault, master password and settings will be permanently erased from this device. Encrypted .keyra backups saved elsewhere will not be deleted.",
+                            "Trezor, glavna lozinka i postavke bit će trajno izbrisani s ovog uređaja. Ova radnja ne briše .keyra kopije koje ste sami spremili u Files ili cloud."
+                        )
                     )
                 },
                 confirmButton = {
@@ -5551,11 +5556,13 @@ private fun SettingsScreen(
                             }
                         }
                     ) {
-                        Text("Trajno izbriši", color = Danger)
+                        Text(keyraLocalized(model.languageCode, "Permanently delete", "Trajno izbriši"), color = Danger)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmErase = false }) { Text("Odustani") }
+                    TextButton(onClick = { confirmErase = false }) {
+                        Text(keyraLocalized(model.languageCode, "Cancel", "Odustani"))
+                    }
                 },
                 containerColor = Slate
             )
@@ -5767,7 +5774,7 @@ private fun SettingsScreen(
                 }
             }
 
-            item { SectionTitle("INFORMACIJE") }
+            item { SectionTitle(keyraLocalized(model.languageCode, "PRIVACY & APP", "PRIVATNOST I APLIKACIJA")) }
             item {
                 SettingRow(
                     Icons.Outlined.PrivacyTip,
@@ -5819,8 +5826,8 @@ private fun SettingsScreen(
             item {
                 SettingRow(
                     Icons.Outlined.DeleteForever,
-                    "Izbriši sve podatke",
-                    "Trajno izbrišite trezor i postavke s ovog uređaja.",
+                    keyraLocalized(model.languageCode, "Delete all local data", "Izbriši sve podatke"),
+                    keyraLocalized(model.languageCode, "Permanently erase this vault and its settings from your device.", "Trajno izbrišite trezor i postavke s ovog uređaja."),
                     onClick = { confirmErase = true }
                 )
             }
