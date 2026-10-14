@@ -1345,6 +1345,14 @@ private class CryptoStore(private val prefs: android.content.SharedPreferences) 
         }
     }
 
+    // Recovery exports must NEVER generate a replacement key when a vault
+    // has lost its original wrapped key.
+    fun existingPortableKeyBytes(): ByteArray {
+        val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
+        require(!wrapped.isNullOrBlank()) { "Postojeći ključ trezora nije dostupan." }
+        return unwrapRawKey(wrapped)
+    }
+
     fun portableKeyBytes(): ByteArray {
         val wrapped = prefs.getString(WRAPPED_KEY_PREF, null)
         if (!wrapped.isNullOrBlank()) {
@@ -1497,7 +1505,7 @@ private class VaultStore(private val prefs: android.content.SharedPreferences) {
         // Short-circuit: never delete the wrapping key while encrypted data remains.
         destroyVaultInOrder(::clear, crypto::clearKey)
 
-    fun recoveryKeyBytes(): ByteArray = crypto.portableKeyBytes()
+    fun recoveryKeyBytes(): ByteArray = crypto.existingPortableKeyBytes()
 
     fun installRecoveryKey(rawKey: ByteArray, initialRecovery: Boolean = false): List<VaultItem> {
         val blob = prefs.getString("vault_blob", null)
