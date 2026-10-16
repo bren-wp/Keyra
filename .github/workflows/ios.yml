@@ -13,6 +13,7 @@ on:
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_vault_transfer.py"
       - ".github/scripts/validate_initial_import_preflight.py"
+      - ".github/scripts/validate_password_input_migration.py"
   pull_request:
     paths:
       - "ios/**"
@@ -20,6 +21,7 @@ on:
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_vault_transfer.py"
       - ".github/scripts/validate_initial_import_preflight.py"
+      - ".github/scripts/validate_password_input_migration.py"
 
 jobs:
   build:
@@ -29,6 +31,9 @@ jobs:
 
       - name: Verify first-run import preserves encrypted vault data
         run: python3 .github/scripts/validate_initial_import_preflight.py
+
+      - name: Verify recovery password input and verifier migration safety
+        run: python3 .github/scripts/validate_password_input_migration.py
 
       - name: Verify cross-platform vault storage and lifecycle privacy
         run: python3 .github/scripts/validate_vault_transfer.py
