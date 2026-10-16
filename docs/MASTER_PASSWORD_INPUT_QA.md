@@ -196,3 +196,25 @@ counters, ciphertext, KDF or backup formats.
 The v0.6.33 Android and iOS build versions are synchronized at build 39.
 Device-specific keyboard/IME crash #25 still requires a sanitized real-device
 trace or documented physical-device reproduction before closure.
+
+## v0.6.34 — durable Android unlock rejection and biometric success cleanup
+
+Reviewed Android's `KeyraViewModel.unlock`, lockout, `lock`,
+`unlockFromBiometric`, and the real Compose unlock form after v0.6.33.
+Unlike iOS, Android still displayed a rejected password only through a
+2.6-second global notification. The non-secret `unlockFailureMessage`
+is now retained on the unlock form, with test tag `keyra-unlock-failure`,
+readable scalable text, and no clipboard or credential content. It resets
+before a new password attempt, on manual lock, and after successful biometric
+unlock. An invalid password still increments the original persisted failed
+attempt counter; the existing lockout thresholds and KDF are unchanged.
+
+The Android emulator regression asserts both the persisted rejection count
+and the durable UI error, the locked ViewModel state, and removal of the
+message after successful synthetic unlock. Cross-platform source-contract
+checks guard this UI accessibility wiring. On iOS, successful biometric
+unlock now also clears any stale rejection text. No vault contents, backup
+formats or encryption keys are altered. This work is not proof of a fix for
+physical keyboard crash #25, which remains open.
+
+Both platform build identifiers are now `0.6.34`, build `40`.

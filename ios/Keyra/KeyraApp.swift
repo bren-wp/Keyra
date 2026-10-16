@@ -1804,6 +1804,7 @@ final class KeyraStore: ObservableObject {
                 guard self.canFinishAuthentication(requestEpoch), self.screen == .unlock else { return }
                 if success {
                     if self.load() {
+                        self.unlockFailureMessage = nil
                         self.screen = .vault
                     }
                 } else if let error {

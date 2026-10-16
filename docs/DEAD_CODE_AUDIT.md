@@ -353,3 +353,19 @@ No additional code or resources were proved dead within this limited review.
 Remaining gaps: iOS physical-device VoiceOver/IME checks; the issue #25
 hardware crash is not reproduced; complete dead-code, memory and security
 audits of other application subsystems are not claimed by this patch.
+
+## v0.6.34 — scoped Android unlock feedback audit
+
+Checked all writes to `KeyraViewModel.message` on wrong-password and lockout
+paths, related `unlock`, `unlockFromBiometric`, `lock`, and the Compose
+UI test. The short-lived global notice is still used across the application
+for unrelated status messages; deleting it would break those flows. The
+new dedicated inline failure state is intentionally ViewModel-owned rather
+than ephemeral Compose state, preserving the visible result across normal
+recomposition. Added a focused source-contract regression and improved
+the Android instrumented assertion, plus iOS biometric cleanup.
+
+No security primitives, old vault formats or persistence migration were
+modified. No unrelated dead code was removed: a complete project-wide
+dead-code or security audit is **not** claimed. Real-device IME crash data,
+screen-reader exploration and low-storage/key-loss testing remain outstanding.
