@@ -12,6 +12,7 @@ on:
       - ".github/workflows/android.yml"
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_initial_import_preflight.py"
+      - ".github/scripts/validate_password_input_migration.py"
       - ".github/scripts/validate_vault_transfer.py"
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - ".github/workflows/android.yml"
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_initial_import_preflight.py"
+      - ".github/scripts/validate_password_input_migration.py"
       - ".github/scripts/validate_vault_transfer.py"
 
 jobs:
@@ -29,6 +31,9 @@ jobs:
 
       - name: Verify first-run import preserves encrypted vault data
         run: python3 .github/scripts/validate_initial_import_preflight.py
+
+      - name: Verify recovery password input and verifier migration safety
+        run: python3 .github/scripts/validate_password_input_migration.py
 
       - name: Verify Keyra language parity on Android and iOS
         run: python3 .github/scripts/validate_localizations.py
