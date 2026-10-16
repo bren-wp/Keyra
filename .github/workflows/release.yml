@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.31"
+        default: "0.6.32"
 
 permissions:
   contents: read
@@ -403,6 +403,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -414,12 +415,46 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Gate publishing on Android and iOS main-branch CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The release's own emulator may pass even if the main UI run fails.
+          # Require success on this exact commit in both independent CI jobs.
+          for attempt in $(seq 1 40); do
+            RUNS=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")
+            ANDROID=$(jq -r --arg sha "$GITHUB_SHA" '
+              [.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .name == "Android")]
+              | sort_by(.run_number) | last
+              | if . == null or .status != "completed" then "pending"
+                else (.conclusion // "failure") end' <<< "$RUNS")
+            IOS=$(jq -r --arg sha "$GITHUB_SHA" '
+              [.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .name == "iOS")]
+              | sort_by(.run_number) | last
+              | if . == null or .status != "completed" then "pending"
+                else (.conclusion // "failure") end' <<< "$RUNS")
+            echo "main CI for ${GITHUB_SHA}: Android=${ANDROID} iOS=${IOS}"
+            if [ "$ANDROID" = "success" ] && [ "$IOS" = "success" ]; then
+              exit 0
+            fi
+            if { [ "$ANDROID" != "pending" ] && [ "$ANDROID" != "success" ]; } ||
+               { [ "$IOS" != "pending" ] && [ "$IOS" != "success" ]; }; then
+              echo "Refusing to publish while a main-branch platform check failed."
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "Timed out awaiting green main CI for both platforms on this SHA."
+          exit 1
+
       - name: Pripremi bilješke izdanja
         run: |
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.31 hardens the first-run Recovery Key password fields on Android and iOS, using stable secure-text input and synchronous 256-character bounds instead of re-entrant keyboard updates. It also clarifies password-length and confirmation states, disables recovery until both new-master fields match, and prevents valid legacy master passwords from being falsely rejected when a best-effort verifier upgrade temporarily fails. The existing KEYRA1/KEYRA2/KEYRAREC1 formats and offline vault safeguards are preserved. The Android emulator and iOS simulator first-run regressions now exercise the recovery editor's first digits and Unicode typing. Original issue #25 hardware crash evidence is still unavailable; simulation results do not establish the root cause.
+          Keyra 0.6.32 stabilizes the Android wrong-password UI regression: the emulator test now confirms a durable failed-attempt counter, rejected authentication, and the locked vault instead of waiting for a 2.6-second toast that may disappear before sampling on loaded runners. No credential or vault format changes are made. The release pipeline now additionally requires green Android and iOS main-branch workflow conclusions on the exact release SHA before publishing any assets. Issue #25 remains open pending physical-device evidence of the originally reported keyboard crash.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions

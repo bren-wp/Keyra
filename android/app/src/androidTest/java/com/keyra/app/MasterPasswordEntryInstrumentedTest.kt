@@ -195,8 +195,20 @@ class MasterPasswordEntryInstrumentedTest {
         val unlock = compose.onNodeWithTag("keyra-master-password")
         unlock.performTextInput("PogresnaLozinka2026")
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
-        compose.waitUntil(20_000) {
-            compose.onAllNodesWithText("Glavna lozinka nije ispravna.").fetchSemanticsNodes().isNotEmpty()
+        // UI notifications intentionally disappear after ~2.6 seconds. On a
+        // slower emulator the authentication finishes before waitUntil samples
+        // that short-lived toast. Wait for the durable failed-attempt state
+        // instead, then assert the vault stayed locked. This verifies the
+        // security behavior without relying on transient text timing.
+        compose.waitUntil(30_000) {
+            compose.activity.getSharedPreferences("keyra", Context.MODE_PRIVATE)
+                .getInt("unlock_failed_attempts", 0) == 1
+        }
+        compose.runOnIdle {
+            val model = ViewModelProvider(compose.activity)[KeyraViewModel::class.java]
+            assertEquals("Wrong password must preserve the unlock screen", Screen.UNLOCK, model.screen)
+            assertFalse("Wrong password must never unlock the vault", model.unlocked)
+            assertFalse("Wrong-password verification must finish", model.isUnlockingVault)
         }
         unlock.performTextClearance()
         unlock.performTextInput(synthetic)
