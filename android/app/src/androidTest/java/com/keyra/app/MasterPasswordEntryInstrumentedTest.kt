@@ -90,6 +90,29 @@ class MasterPasswordEntryInstrumentedTest {
         waitFor("keyra-language-en")
         compose.onNodeWithTag("keyra-language-en").performClick()
         compose.onNodeWithText("Create my vault").assertExists()
+
+        // Recovery uses a second new-master-password editor. Exercise actual
+        // first-character keyboard input before creating any synthetic vault.
+        compose.onNodeWithTag("keyra-first-run-recover").performClick()
+        waitFor("keyra-recovery-new-master")
+        val recoveryMaster = compose.onNodeWithTag("keyra-recovery-new-master")
+        recoveryMaster.performClick()
+        recoveryMaster.performTextInput("1")
+        assertEquals(
+            1, recoveryMaster.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
+        )
+        recoveryMaster.performTextInput("2Č")
+        assertEquals(
+            3, recoveryMaster.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
+        )
+        recoveryMaster.performTextClearance()
+        recoveryMaster.performTextInput("Z".repeat(280))
+        assertEquals(
+            256, recoveryMaster.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.length
+        )
+        compose.onNodeWithTag("keyra-recovery-back").performClick()
+        waitFor("keyra-first-run-create")
+
         compose.onNodeWithTag("keyra-first-run-create").performClick()
         waitFor("keyra-master-password")
         waitFor("keyra-master-password-guidance")
