@@ -111,3 +111,32 @@ On both an Android handset and an iPhone, using synthetic credentials only:
 
 Any passing CI run should record its **exact head SHA**. Cancelling older
 runs after a new commit is not a passing result for the current head.
+
+## v0.6.31 — Recovery Key keyboard and verifier migration follow-up
+
+The first-run **Restore with Recovery Key** flow has a separate password editor from
+**Create vault**. Prior iOS code rewrote `newPassword` and `confirmPassword` in
+SwiftUI `.onChange` callbacks while the IME was editing. It now constrains both
+inputs in synchronous `Binding` setters and uses the same `SecretField` component
+as the standard new-vault editor, preserving focus on reveal/hide. Android's
+recovery fields now reuse one remembered `PasswordVisualTransformation` during
+recomposition. Both platforms display a non-secret length/matching hint and
+require matching new passwords before enabling restore.
+
+- Android Compose instrumented first-run test enters successive characters,
+  Croatian Unicode and an oversized synthetic paste into the recovery password
+  editor, then safely returns to onboarding before normal vault creation tests.
+- iOS XCTest opens recovery before the first vault is created, enters the first
+  and next characters (including Croatian diacritics), checks visible guidance
+  and returns to onboarding. Its earlier 11/12/256-character new-vault tests
+  remain; they do not constitute an independent 256-character iOS recovery test.
+- Android/iOS opportunistic legacy master-password verifier migration no longer
+  treats a correct password as wrong when the new verifier cannot be saved.
+  The old verifier is preserved for retry; the vault's actual decryption
+  still must succeed before any data is displayed.
+- Cross-platform source-integrity CI enforces these input and verifier
+  contracts, in addition to full Android/iOS build and simulator UI tests.
+
+**Issue #25 remains open until the original hardware-reported crash can be
+reproduced or excluded on documented real devices with privacy-safe diagnostic
+evidence.** Emulator/simulator green results show their covered paths only.
