@@ -40,6 +40,8 @@ assert "newPassword == confirmPassword" in android_recovery
 
 assert "keyra-first-run-recover" in android_ui and "keyra-recovery-new-master" in android_ui
 assert "keyra-first-run-recover" in ios_ui and "keyra-recovery-new-master" in ios_ui
+assert "recoveryBack.waitForExistence" in ios_ui
+assert "recoveryScroll.swipeUp()" in ios_ui and "recoveryScroll.swipeDown()" in ios_ui
 
 # Stable and accessible rejection UI across both platforms, independent of
 # short-lived global notices, without changing verifier or ciphertext behavior.

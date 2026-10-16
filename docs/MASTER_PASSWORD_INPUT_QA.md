@@ -218,3 +218,30 @@ formats or encryption keys are altered. This work is not proof of a fix for
 physical keyboard crash #25, which remains open.
 
 Both platform build identifiers are now `0.6.34`, build `40`.
+
+## v0.6.35 release follow-up — offscreen iOS recovery keyboard regression
+
+The merged v0.6.35 main Android and iOS workflows both succeeded on
+`942054ecbfdcfb452ef3e2b8e731d8bb90896e77`, but independent release
+run 38978160202 stopped in the iOS XCTest suite before publishing.
+Its actual XCTest transcript showed the onboarding Recovery Key button was
+tapped, followed by a 15-second timeout finding
+`keyra-recovery-new-master` and no matching SecureTextField in the
+accessibility snapshot query. The recovery editor is below two document
+pickers in a scrollable SwiftUI form. The old test neither asserted that
+the recovery view itself appeared nor scrolled to an offscreen element.
+There is no evidence in these logs of user-key loss or a native crash.
+
+The corrected XCTest explicitly waits for the recovery view's back
+control, then scrolls the real recovery form until the secure password
+editor is hittable, exercises synthetic Unicode text, scrolls back
+to its navigation control, and continues the existing first-run,
+lock/relaunch, wrong-password and missing-Keychain regressions. If the
+view or field is genuinely unavailable, the test still **fails** with
+a precise message; no assertion or release gate is disabled.
+The static cross-platform input contract now requires this traversal.
+
+Existing master password code, cryptography, encrypted data, UI geometry,
+fonts, assets, version name (0.6.35) and build (41) are unchanged. This
+test-specific repair requires Android and iOS CI plus actual release
+workflow verification before declaring v0.6.35 published.
