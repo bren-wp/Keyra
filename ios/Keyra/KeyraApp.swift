@@ -1440,6 +1440,9 @@ final class KeyraStore: ObservableObject {
     @Published var importingNewVault = false
     @Published private(set) var isCreatingVault = false
     @Published private(set) var isUnlockingVault = false
+    // Stable, non-secret UI rejection state. Unlike the 2.6-second toast,
+    // this remains observable by VoiceOver and UI regressions until retry.
+    @Published private(set) var unlockFailureMessage: String?
     @Published private(set) var isImportingVault = false
     @Published private(set) var isRecoveringVault = false
     @Published private(set) var isProcessingBackup = false
@@ -1741,11 +1744,12 @@ final class KeyraStore: ObservableObject {
 
     func unlock(password: String) {
         guard !isUnlockingVault, !isCreatingVault, !isRecoveringVault else { return }
+        unlockFailureMessage = nil
         let now = Date().timeIntervalSince1970
         let lockoutUntil = defaults.double(forKey: "unlock_lockout_until")
         if lockoutUntil > now {
             let seconds = max(1, Int(ceil(lockoutUntil - now)))
-            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
+            unlockFailureMessage = "Previše neuspjelih pokušaja. Pokušajte ponovno za \(seconds) s."
             return
         }
         let requestEpoch = authenticationEpoch
@@ -1769,7 +1773,7 @@ final class KeyraStore: ObservableObject {
                     }
                     self.defaults.set(attempts, forKey: "unlock_failed_attempts")
                     self.defaults.set(penalty > 0 ? now + penalty : 0, forKey: "unlock_lockout_until")
-                    self.message = penalty > 0
+                    self.unlockFailureMessage = penalty > 0
                         ? "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
                         : "Glavna lozinka nije ispravna."
                     return
@@ -1811,6 +1815,7 @@ final class KeyraStore: ObservableObject {
 
     func lock() {
         authenticationEpoch &+= 1
+        unlockFailureMessage = nil
         // Expire a Keyra-owned secret immediately when the user locks.
         // Background access to the general pasteboard may be restricted;
         // its existing 30-second expiration remains the fallback.
@@ -3166,6 +3171,15 @@ struct UnlockView: View {
                     .clipShape(Capsule())
                     .disabled(store.isCreatingVault || store.isImportingVault || store.isUnlockingVault || (importing && importPayload == nil))
                     .accessibilityIdentifier("keyra-submit-master-password")
+
+                    if !creating, let failure = store.unlockFailureMessage {
+                        Text(failure)
+                            .font(.subheadline)
+                            .foregroundStyle(warn)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("keyra-unlock-failure")
+                    }
 
                     if creating {
                         Button {

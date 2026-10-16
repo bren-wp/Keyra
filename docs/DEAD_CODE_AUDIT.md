@@ -339,3 +339,17 @@ existing verifier and ciphertext remain unchanged on the migration failure
 path; normal vault decryption remains mandatory. This is a functional/security
 review, **not** a guarantee that the original unspecific physical keyboard
 crash has been resolved or that all unused code has been removed.
+
+## v0.6.33 — scoped iOS error-state lifecycle review
+
+Reviewed the iOS unlock error presentation, `KeyraStore.unlock` failure and
+lockout branches, `KeyraStore.lock`, and the corresponding XCTest sequence.
+Replaced the timing-dependent use of a 2.6-second notification *for unlock
+failure specifically* with a durable view-scoped error observable without
+credentials or saved-item data. The shared notification channel is still
+required by import, recovery, and save operations, so it was **not** removed.
+No additional code or resources were proved dead within this limited review.
+
+Remaining gaps: iOS physical-device VoiceOver/IME checks; the issue #25
+hardware crash is not reproduced; complete dead-code, memory and security
+audits of other application subsystems are not claimed by this patch.
