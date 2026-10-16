@@ -10,3 +10,15 @@ enum RecoveryCiphertextPolicy {
         !hasCiphertext
     }
 }
+
+    
+// Keep this pure policy in the compiled iOS target AND in standalone Swift
+// regression tests. No save is permitted to replace ciphertext with a
+// snapshot which cannot be safely reloaded.
+enum VaultWritePolicy {
+    static let maxItems = 10_000
+
+    static func allowsWrite<ID: Hashable>(itemIDs: [ID]) -> Bool {
+        itemIDs.count <= maxItems && Set(itemIDs).count == itemIDs.count
+    }
+}

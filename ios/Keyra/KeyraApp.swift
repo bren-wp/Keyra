@@ -464,8 +464,14 @@ enum PasswordTools {
             throw KeyraError.invalidData
         }
 
-        let passwordBytes = Array(password.utf8)
+        var passwordBytes = Array(password.utf8)
         var output = [UInt8](repeating: 0, count: keyLength)
+        // The result is copied into Data. Wipe temporary PBKDF2 input/output
+        // on every exit, without exposing password bytes in diagnostics.
+        defer {
+            for index in passwordBytes.indices { passwordBytes[index] = 0 }
+            for index in output.indices { output[index] = 0 }
+        }
         let status = passwordBytes.withUnsafeBytes { passwordBuffer in
             salt.withUnsafeBytes { saltBuffer in
                 CCKeyDerivationPBKDF(
@@ -846,6 +852,9 @@ final class EncryptedVault {
     }
 
     func save(_ items: [VaultItem]) throws {
+        guard VaultWritePolicy.allowsWrite(itemIDs: items.map(\.id)) else {
+            throw KeyraError.invalidData
+        }
         let url = try storageURL()
         // Persisted ciphertext must never be re-encrypted under a newly
         // generated key if its existing Keychain item is missing/unreadable.
@@ -2090,7 +2099,8 @@ final class KeyraStore: ObservableObject {
             let payload: String?
             do {
                 guard let self else { return }
-                let key = try self.vault.recoveryKeyData()
+                var key = try self.vault.recoveryKeyData()
+                defer { key.resetBytes(in: 0..<key.count) }
                 payload = try RecoveryKeyEnvelope.encrypt(key, passphrase: passphrase)
             } catch {
                 payload = nil

@@ -369,3 +369,40 @@ No security primitives, old vault formats or persistence migration were
 modified. No unrelated dead code was removed: a complete project-wide
 dead-code or security audit is **not** claimed. Real-device IME crash data,
 screen-reader exploration and low-storage/key-loss testing remain outstanding.
+
+## v0.6.35 — whole-repository static reachability and security audit
+
+Reviewed the actual repository inventory (all tracked source, test, CI,
+resources, project metadata and documentation) with extra attention to the
+Android Compose/ViewModel/Kotlin crypto module, iOS SwiftUI/Keychain/crypto
+module, both native UI suites, Gradle/Xcode build, recovery/backup, privacy
+gates, and GitHub release workflow. Scanned private-method usage and the
+complete root navigation enum on both platforms; no proven unreachable
+private method was identified. One-call methods, lifecycle overrides,
+reflective use and SwiftUI/Compose callbacks must not be deleted solely
+based on text-count heuristics.
+
+A new repeatable `.github/scripts/audit_reachability.py` runs in Android
+and iOS CI. It checks all declared root routes, required platform resources,
+connections to security UI regressions and the ordering of write validation
+before ciphertext replacement. It also flags private methods with no
+identifiable reference for review, without deleting them automatically.
+
+**Confirmed and fixed risk:** ordinary vault writes previously did not
+enforce all limits expected by the Android importer or iOS portable backup
+decoder. Both now reject duplicates and over-10,000-item snapshots before
+ciphertext replacement. Android also rejects blank item IDs. Android JVM and
+native standalone Swift policy tests cover empty, valid, duplicate and
+boundary cases. No existing legacy vault is discarded at read time.
+
+**Memory handling:** iOS PBKDF2 now overwrites temporary password UTF-8
+and derived-byte arrays on exit; Recovery Key export overwrites its
+temporary unwrapped key Data once the encrypted envelope is produced.
+
+**Dead code actually removed:** none. The conservative audit did not prove
+a safe, unreachable implementation; removing legacy decryptors, migration
+helpers, tests or routes speculatively could cause data loss. Remaining
+limits: compiler/runtime/IME coverage, race-condition instrumentation,
+performance benchmarks, low-storage/Keychain/Keystore fault injection,
+full VoiceOver/TalkBack audits, third-party penetration testing and the
+real-device report in issue #25. Do **not** call this proof of zero bugs.

@@ -14,6 +14,7 @@ on:
       - ".github/scripts/validate_initial_import_preflight.py"
       - ".github/scripts/validate_password_input_migration.py"
       - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/audit_reachability.py"
   pull_request:
     paths:
       - "android/**"
@@ -22,12 +23,16 @@ on:
       - ".github/scripts/validate_initial_import_preflight.py"
       - ".github/scripts/validate_password_input_migration.py"
       - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/audit_reachability.py"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Audit cross-platform route and resource reachability
+        run: python3 .github/scripts/audit_reachability.py
 
       - name: Verify first-run import preserves encrypted vault data
         run: python3 .github/scripts/validate_initial_import_preflight.py

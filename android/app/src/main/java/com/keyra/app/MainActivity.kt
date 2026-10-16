@@ -1504,12 +1504,21 @@ internal fun shouldLockAfterBackground(
     return elapsedRealtimeNow - backgroundStarted >= lockAfterSeconds * 1_000L
 }
 
+// A write may never produce an encrypted snapshot that load() rejects.
+// Validate first, without replacing existing ciphertext or key material.
+internal fun canPersistVaultItemIds(ids: List<String>): Boolean =
+    ids.size <= MAX_VAULT_ITEMS && ids.all { it.isNotBlank() } &&
+        ids.toSet().size == ids.size
+
 private class VaultStore(private val prefs: android.content.SharedPreferences) {
     private val crypto = CryptoStore(prefs)
 
     fun hasPersistedCiphertext(): Boolean = prefs.contains("vault_blob")
 
     fun save(items: List<VaultItem>) {
+        require(canPersistVaultItemIds(items.map { it.id })) {
+            "Trezor ima previše stavki ili nevaljane identifikatore."
+        }
         val encrypted = crypto.encrypt(toJson(items))
         check(prefs.edit().putString("vault_blob", encrypted).commit()) {
             "Trezor nije moguće trajno spremiti."
