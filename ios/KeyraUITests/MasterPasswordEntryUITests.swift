@@ -17,8 +17,26 @@ final class MasterPasswordEntryUITests: XCTestCase {
         let recovery = app.buttons["keyra-first-run-recover"]
         XCTAssertTrue(recovery.exists, "Recovery must be accessible from onboarding")
         recovery.tap()
+        // The recovery password editor follows two file pickers and their
+        // descriptions inside a long ScrollView. On smaller or busy iOS
+        // simulators the off-screen SecureField may not yet be represented
+        // in the accessibility tree. Verify actual recovery navigation, then
+        // scroll to the *real* editor rather than racing its existence.
+        let recoveryBack = app.buttons["keyra-recovery-back"]
+        XCTAssertTrue(recoveryBack.waitForExistence(timeout: 15),
+                      "Recovery navigation must display its own back control")
+        let recoveryScroll = app.scrollViews.firstMatch
+        XCTAssertTrue(recoveryScroll.waitForExistence(timeout: 10),
+                      "The recovery form must remain scrollable on compact screens")
         let recoveryMaster = app.secureTextFields["keyra-recovery-new-master"]
-        XCTAssertTrue(recoveryMaster.waitForExistence(timeout: 15))
+        for _ in 0..<10 {
+            if recoveryMaster.isHittable { break }
+            recoveryScroll.swipeUp()
+        }
+        guard recoveryMaster.isHittable else {
+            XCTFail("Recovery password field is unreachable after scrolling the actual form")
+            return
+        }
         recoveryMaster.tap()
         recoveryMaster.typeText("1")
         XCTAssertTrue(recoveryMaster.exists, "First recovery digit must retain the keyboard field")
@@ -27,8 +45,16 @@ final class MasterPasswordEntryUITests: XCTestCase {
         XCTAssertTrue(recoveryGuidance.label.contains("1/256"))
         recoveryMaster.typeText("2Čć")
         XCTAssertTrue(recoveryMaster.exists, "Unicode input must not dismiss recovery")
-        let recoveryBack = app.buttons["keyra-recovery-back"]
-        XCTAssertTrue(recoveryBack.exists)
+        // A password field can move the first action out of view after
+        // keyboard presentation. Test that the user can scroll back to it.
+        for _ in 0..<10 {
+            if recoveryBack.isHittable { break }
+            recoveryScroll.swipeDown()
+        }
+        guard recoveryBack.isHittable else {
+            XCTFail("Recovery back control is unreachable after entering a password")
+            return
+        }
         recoveryBack.tap()
         XCTAssertTrue(create.waitForExistence(timeout: 15), "Cancel recovery must return to onboarding")
         create.tap()
