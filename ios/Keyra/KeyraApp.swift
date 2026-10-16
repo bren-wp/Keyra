@@ -764,7 +764,10 @@ final class AuthStore {
 
             let ok = constantTimeEqual(actual, verifier.hash)
             if ok && verifier.iterations < PasswordTools.currentIterations {
-                return create(password: password)
+                // Opportunistic verifier upgrade must not turn a valid password
+                // into a failed unlock when protected storage is unavailable.
+                // create() preserves the existing verifier on a write failure.
+                _ = create(password: password)
             }
             return ok
         }
@@ -786,9 +789,11 @@ final class AuthStore {
 
         let ok = constantTimeEqual(actual, expected)
         if ok {
-            return create(password: password)
+            // Keep the old valid verifier when Keychain migration is
+            // temporarily unavailable. Never count it as a wrong password.
+            _ = create(password: password)
         }
-        return false
+        return ok
     }
 
     private func clearLegacyDefaults() {
