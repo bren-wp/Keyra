@@ -12,6 +12,7 @@ on:
       - ".github/workflows/ios.yml"
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/audit_reachability.py"
       - ".github/scripts/validate_initial_import_preflight.py"
       - ".github/scripts/validate_password_input_migration.py"
   pull_request:
@@ -20,6 +21,7 @@ on:
       - ".github/workflows/ios.yml"
       - ".github/scripts/validate_localizations.py"
       - ".github/scripts/validate_vault_transfer.py"
+      - ".github/scripts/audit_reachability.py"
       - ".github/scripts/validate_initial_import_preflight.py"
       - ".github/scripts/validate_password_input_migration.py"
 
@@ -28,6 +30,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
+
+      - name: Audit cross-platform route and resource reachability
+        run: python3 .github/scripts/audit_reachability.py
 
       - name: Verify first-run import preserves encrypted vault data
         run: python3 .github/scripts/validate_initial_import_preflight.py

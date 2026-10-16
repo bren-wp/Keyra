@@ -8,6 +8,18 @@ import org.junit.Test
 
 class PasswordToolsTest {
     @Test
+    fun vaultWritesRejectDuplicateMissingOrExcessiveIdsBeforeEncryption() {
+        assertTrue(canPersistVaultItemIds(emptyList()))
+        assertTrue(canPersistVaultItemIds(listOf("valid-1", "valid-2")))
+        assertFalse(canPersistVaultItemIds(listOf("same", "same")))
+        assertFalse(canPersistVaultItemIds(listOf("")))
+        assertFalse(canPersistVaultItemIds(listOf("  ")))
+        val atLimit = (0 until 10_000).map { "synthetic-$it" }
+        assertTrue(canPersistVaultItemIds(atLimit))
+        assertFalse(canPersistVaultItemIds(atLimit + "synthetic-over-limit"))
+    }
+
+    @Test
     fun backupDecoderRejectsMalformedUtf8AndPreservesValidCharacters() {
         assertEquals("Keyra – šifrirani trezor", decodeUtf8Strict("Keyra – šifrirani trezor".toByteArray(Charsets.UTF_8)))
         assertTrue(runCatching { decodeUtf8Strict(byteArrayOf(0xC3.toByte(), 0x28)) }.isFailure)

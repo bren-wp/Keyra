@@ -37,6 +37,16 @@ struct RecoveryCiphertextPolicyTests {
             RecoveryCiphertextPolicy.allowsFreshVaultCreation(hasCiphertext: false),
             "Brand-new vault creation must remain possible with empty storage."
         )
-        print("Recovery ciphertext policy: 6 assertions passed")
+        precondition(VaultWritePolicy.allowsWrite(itemIDs: [Int]()),
+                     "Encrypted empty vaults must remain valid.")
+        precondition(VaultWritePolicy.allowsWrite(itemIDs: [1, 2]),
+                     "Distinct synthetic identifiers must be accepted.")
+        precondition(!VaultWritePolicy.allowsWrite(itemIDs: [1, 1]),
+                     "Duplicate identifiers must never be persisted.")
+        precondition(VaultWritePolicy.allowsWrite(itemIDs: Array(0..<10_000)),
+                     "The maximum supported item count must remain writable.")
+        precondition(!VaultWritePolicy.allowsWrite(itemIDs: Array(0..<10_001)),
+                     "Oversized snapshots must not replace ciphertext.")
+        print("Recovery and vault-write policies: 11 assertions passed")
     }
 }

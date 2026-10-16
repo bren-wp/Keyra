@@ -81,3 +81,17 @@ The first-run typing crash in issue #25 remains open until physical-device repro
 ## Release policy
 
 Version **0.6.24 / build 30** requires successful Android and iOS PR checks on the same final SHA, successful separate main-branch checks, and confirmation of the release tag, all seven nonempty assets and SHA-256 checksum manifests before claiming publication. Public CI packages must not be described as production-signed app-store uploads.
+
+## v0.6.35 — encrypted persistence preflight
+
+Vault writes reject oversize or duplicate-ID snapshots **before**
+encryption and replacement of persisted ciphertext. Android validates
+all IDs as non-blank; iOS uses the existing UUID type. The same 10,000
+item maximum applies on both platforms. Existing vaults are not
+retroactively erased or reset on load when legacy malformed data is
+encountered. On failed validation the user sees the existing save
+failure, leaving the prior encrypted bytes and cryptographic keys intact.
+
+Android JVM and iOS standalone Swift policy checks include the 10,000
+accepted / 10,001 rejected boundary. This is a data-integrity guard,
+not a migration or a new vault format.
