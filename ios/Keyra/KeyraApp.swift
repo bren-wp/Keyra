@@ -764,7 +764,10 @@ final class AuthStore {
 
             let ok = constantTimeEqual(actual, verifier.hash)
             if ok && verifier.iterations < PasswordTools.currentIterations {
-                return create(password: password)
+                // Opportunistic verifier upgrade must not turn a valid password
+                // into a failed unlock when protected storage is unavailable.
+                // create() preserves the existing verifier on a write failure.
+                _ = create(password: password)
             }
             return ok
         }
@@ -786,9 +789,11 @@ final class AuthStore {
 
         let ok = constantTimeEqual(actual, expected)
         if ok {
-            return create(password: password)
+            // Keep the old valid verifier when Keychain migration is
+            // temporarily unavailable. Never count it as a wrong password.
+            _ = create(password: password)
         }
-        return false
+        return ok
     }
 
     private func clearLegacyDefaults() {
@@ -2755,6 +2760,7 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(ice)
+                    .accessibilityIdentifier("keyra-first-run-recover")
                 }
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
@@ -2787,13 +2793,23 @@ struct RecoverySetupView: View {
     @State private var showRecoveryPicker = false
     @State private var showBackupPicker = false
 
+    // Limit the password in the Binding setter, not via onChange while the
+    // keyboard/IME is editing. This matches the hardened first-run editor.
+    private var newMasterBinding: Binding<String> {
+        Binding(get: { newPassword }, set: { newPassword = String($0.prefix(256)) })
+    }
+
+    private var confirmationBinding: Binding<String> {
+        Binding(get: { confirmPassword }, set: { confirmPassword = String($0.prefix(256)) })
+    }
+
     private var canRestore: Bool {
         recoveryPayload != nil &&
         backupPayload != nil &&
         !recoveryPassphrase.isEmpty &&
         !backupPassword.isEmpty &&
-        newPassword.count >= 12 &&
-        !confirmPassword.isEmpty
+        (12...256).contains(newPassword.count) &&
+        newPassword == confirmPassword
     }
 
     var body: some View {
@@ -2812,6 +2828,7 @@ struct RecoverySetupView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(ice)
+                        .accessibilityIdentifier("keyra-recovery-back")
                         Spacer()
                     }
 
@@ -2892,29 +2909,33 @@ struct RecoverySetupView: View {
                             .font(.headline)
                             .foregroundStyle(.white)
 
-                        Group {
-                            if reveal {
-                                TextField("Nova glavna lozinka", text: $newPassword)
-                                TextField("Ponovite novu glavnu lozinku", text: $confirmPassword)
-                            } else {
-                                SecureField("Nova glavna lozinka", text: $newPassword)
-                                SecureField("Ponovite novu glavnu lozinku", text: $confirmPassword)
-                            }
+                        SecretField(
+                            title: "Nova glavna lozinka",
+                            text: newMasterBinding,
+                            reveal: $reveal,
+                            testIdentifier: "keyra-recovery-new-master"
+                        )
+                        Text("Najmanje 12, najviše 256 znakova • \(newPassword.count)/256")
+                            .font(.subheadline)
+                            .foregroundStyle((12...256).contains(newPassword.count) ? good : muted)
+                            .accessibilityIdentifier("keyra-recovery-password-guidance")
+                        SecretField(
+                            title: "Ponovite novu glavnu lozinku",
+                            text: confirmationBinding,
+                            reveal: $reveal,
+                            testIdentifier: "keyra-recovery-confirm-master"
+                        )
+                        if !confirmPassword.isEmpty {
+                            Text(newPassword == confirmPassword
+                                 ? "Lozinke se podudaraju."
+                                 : "Lozinke se još ne podudaraju.")
+                                .font(.subheadline)
+                                .foregroundStyle(newPassword == confirmPassword ? good : warn)
+                                .accessibilityIdentifier("keyra-recovery-password-match")
                         }
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onChange(of: newPassword) { _, value in
-                            if value.count > 256 { newPassword = String(value.prefix(256)) }
-                        }
-                        .onChange(of: confirmPassword) { _, value in
-                            if value.count > 256 { confirmPassword = String(value.prefix(256)) }
-                        }
-                        .padding(14)
-                        .background(slate2)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
 
                         HStack {
-                            Text("Najmanje 12 znakova.")
+                            Text("Lozinke ostaju samo na uređaju.")
                                 .font(.caption)
                                 .foregroundStyle(muted)
                             Spacer()

@@ -323,3 +323,19 @@ unlock credential persistence or key generation. Retained all password input
 callbacks and SwiftUI field implementations: no unused code could be proven
 safe to delete without actual IME stack traces and physical-device regression
 coverage. Issue #25 is **not** considered resolved by these preventive changes.
+
+## v0.6.31 — recovery editor and opportunistic verifier upgrades
+
+Reviewed Android `RecoverySetupScreen`, iOS `RecoverySetupView`, both
+master-password verifier implementations and native first-run UI regressions.
+Eliminated two iOS recovery `.onChange` callbacks that performed redundant,
+re-entrant writes while the keyboard was editing. Reused the tested `SecretField`
+for iOS recovery rather than maintaining separate field implementations.
+Android recovery now holds its password masking transformation stable.
+
+Both verifiers retain upgrade attempts when possible, but an upgrade-write
+failure no longer masquerades as an invalid entered master password. The
+existing verifier and ciphertext remain unchanged on the migration failure
+path; normal vault decryption remains mandatory. This is a functional/security
+review, **not** a guarantee that the original unspecific physical keyboard
+crash has been resolved or that all unused code has been removed.

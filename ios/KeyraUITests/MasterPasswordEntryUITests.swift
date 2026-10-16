@@ -12,6 +12,25 @@ final class MasterPasswordEntryUITests: XCTestCase {
             app.descendants(matching: .any)["keyra-onboarding-language"].exists,
             "Users must be able to choose a language before creating the first vault"
         )
+        // Exercise the Recovery Key flow's *different* master-password input
+        // before creating a vault. All strings are synthetic only.
+        let recovery = app.buttons["keyra-first-run-recover"]
+        XCTAssertTrue(recovery.exists, "Recovery must be accessible from onboarding")
+        recovery.tap()
+        let recoveryMaster = app.secureTextFields["keyra-recovery-new-master"]
+        XCTAssertTrue(recoveryMaster.waitForExistence(timeout: 15))
+        recoveryMaster.tap()
+        recoveryMaster.typeText("1")
+        XCTAssertTrue(recoveryMaster.exists, "First recovery digit must retain the keyboard field")
+        let recoveryGuidance = app.staticTexts["keyra-recovery-password-guidance"]
+        XCTAssertTrue(recoveryGuidance.waitForExistence(timeout: 10))
+        XCTAssertTrue(recoveryGuidance.label.contains("1/256"))
+        recoveryMaster.typeText("2Čć")
+        XCTAssertTrue(recoveryMaster.exists, "Unicode input must not dismiss recovery")
+        let recoveryBack = app.buttons["keyra-recovery-back"]
+        XCTAssertTrue(recoveryBack.exists)
+        recoveryBack.tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 15), "Cancel recovery must return to onboarding")
         create.tap()
 
         var master = app.secureTextFields["keyra-master-password"]
