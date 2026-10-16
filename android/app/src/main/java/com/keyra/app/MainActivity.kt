@@ -2362,6 +2362,8 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var reveal by remember { mutableStateOf(false) }
+    // Stable mask avoids IME restarts when the first recovery characters arrive.
+    val masked = remember { PasswordVisualTransformation() }
 
     val recoveryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -2462,7 +2464,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         label = { Text("Recovery lozinka") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                        visualTransformation = if (reveal) VisualTransformation.None else masked
                     )
 
                     HorizontalDivider(color = Ice.copy(alpha = .18f))
@@ -2482,7 +2484,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                         label = { Text("Lozinka sigurnosne kopije") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                        visualTransformation = if (reveal) VisualTransformation.None else masked
                     )
 
                     HorizontalDivider(color = Ice.copy(alpha = .18f))
@@ -2490,22 +2492,33 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                     OutlinedTextField(
                         value = newPassword,
                         onValueChange = { newPassword = boundedNewMasterPasswordInput(it) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("keyra-recovery-new-master"),
                         label = { Text("Nova glavna lozinka") },
-                        supportingText = { Text("Najmanje 12 znakova.") },
+                        supportingText = {
+                            Text("Najmanje 12, najviše 256 znakova • ${newPassword.length}/256")
+                        },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                        visualTransformation = if (reveal) VisualTransformation.None else masked
                     )
                     OutlinedTextField(
                         value = confirmPassword,
                         onValueChange = { confirmPassword = boundedNewMasterPasswordInput(it) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("keyra-recovery-confirm-master"),
                         label = { Text("Ponovite novu glavnu lozinku") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation()
+                        visualTransformation = if (reveal) VisualTransformation.None else masked
                     )
+                    if (confirmPassword.isNotEmpty()) {
+                        Text(
+                            if (newPassword == confirmPassword) "Lozinke se podudaraju."
+                            else "Lozinke se još ne podudaraju.",
+                            color = if (newPassword == confirmPassword) Good else Warn,
+                            fontSize = 13.sp,
+                            modifier = Modifier.testTag("keyra-recovery-password-match")
+                        )
+                    }
                     TextButton(onClick = { reveal = !reveal }) {
                         Icon(
                             if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
@@ -2534,7 +2547,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                             recoveryPassphrase.isNotBlank() &&
                             backupPassword.isNotBlank() &&
                             newPassword.length >= 12 &&
-                            confirmPassword.isNotBlank() && !model.isRecoveringVault,
+                            newPassword == confirmPassword && !model.isRecoveringVault,
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Midnight),
                         shape = RoundedCornerShape(27.dp)
