@@ -187,14 +187,20 @@ final class MasterPasswordEntryUITests: XCTestCase {
         master.typeText("WrongDemo#2026")
         app.buttons["keyra-submit-master-password"].tap()
         XCTAssertTrue(master.waitForExistence(timeout: 15), "Wrong password must not unlock")
-        XCTAssertTrue(app.staticTexts["Glavna lozinka nije ispravna."].waitForExistence(timeout: 20),
-                      "Wrong-password authentication must finish before another attempt")
+        // A global notification expires after ~2.6 seconds; verify the
+        // persistent, accessible failure state instead of racing a toast.
+        let rejection = app.staticTexts["keyra-unlock-failure"]
+        XCTAssertTrue(rejection.waitForExistence(timeout: 25),
+                      "Wrong-password authentication must produce a stable rejection")
+        XCTAssertEqual(rejection.label, "Glavna lozinka nije ispravna.")
+        XCTAssertFalse(settings.exists, "Incorrect credentials must never expose the vault")
 
         master.tap()
         master.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 14))
         master.typeText(synthetic)
         app.buttons["keyra-submit-master-password"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 55), "Correct password must reopen vault")
+        XCTAssertFalse(rejection.exists, "Successful authentication must clear prior failure feedback")
 
         // A simulator-only launch argument makes both ciphertext locations
         // appear absent to load(), without deleting the synthetic vault or

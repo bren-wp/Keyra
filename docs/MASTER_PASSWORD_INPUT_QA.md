@@ -177,3 +177,22 @@ This correction addresses a confirmed CI timing defect. It is **not** a
 validated root-cause fix for the original hardware keyboard report #25,
 which remains open pending physical-device evidence. No real passwords,
 vaults or production keys were used in the failing synthetic test.
+
+## v0.6.33 — stable iOS unlock rejection feedback
+
+After the Android v0.6.32 timing regression, review found that the iOS XCTest
+unlock flow still waited for the same short-lived 2.6-second root notification.
+That observation was not a dependable assertion of authentication rejection.
+
+On iOS, an incorrect password or active lockout now sets a **non-secret,
+persistent inline error** on the unlock form, with a stable accessibility
+identifier `keyra-unlock-failure`. The state is cleared on retry and on
+manual lock. The root transient notification remains available for unrelated
+operations. The UI regression waits for the persistent rejection, confirms the
+vault's settings navigation is absent, and verifies that a subsequent correct
+unlock removes the failure state. This does not modify the verifier, lockout
+counters, ciphertext, KDF or backup formats.
+
+The v0.6.33 Android and iOS build versions are synchronized at build 39.
+Device-specific keyboard/IME crash #25 still requires a sanitized real-device
+trace or documented physical-device reproduction before closure.
