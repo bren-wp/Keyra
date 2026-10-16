@@ -32,6 +32,9 @@ jobs:
       - name: Verify first-run import preserves encrypted vault data
         run: python3 .github/scripts/validate_initial_import_preflight.py
 
+      - name: Verify recovery password input and verifier migration safety
+        run: python3 .github/scripts/validate_password_input_migration.py
+
       - name: Verify Android/iOS localization parity
         run: python3 .github/scripts/validate_localizations.py
 
