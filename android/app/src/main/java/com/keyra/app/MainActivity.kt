@@ -339,6 +339,10 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
     var screen by mutableStateOf(if (isSetup) Screen.UNLOCK else Screen.ONBOARDING)
     var selected by mutableStateOf<VaultItem?>(null)
     var message by mutableStateOf<String?>(null)
+    // Persistent non-secret error for the unlock form. The shared transient
+    // message channel is still used for other screens and save operations.
+    var unlockFailureMessage by mutableStateOf<String?>(null)
+        private set
     var vaultCategoryFilter by mutableStateOf<String?>(null)
     var vaultTypeFilter by mutableStateOf<String?>(null)
     var biometricEnabled by mutableStateOf(
@@ -616,11 +620,12 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unlock(password: String) {
         if (isUnlockingVault || isCreatingVault || isRecoveringVault) return
+        unlockFailureMessage = null
         val now = System.currentTimeMillis()
         val lockoutUntil = prefs.getLong("unlock_lockout_until", 0L)
         if (lockoutUntil > now) {
             val seconds = ((lockoutUntil - now + 999L) / 1000L).coerceAtLeast(1L)
-            message = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
+            unlockFailureMessage = "Previše neuspjelih pokušaja. Pokušajte ponovno za $seconds s."
             return
         }
         val requestEpoch = authenticationEpoch
@@ -644,7 +649,7 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
                     .putInt("unlock_failed_attempts", attempts)
                     .putLong("unlock_lockout_until", if (penaltyMs > 0L) now + penaltyMs else 0L)
                     .apply()
-                message = if (penaltyMs > 0L) {
+                unlockFailureMessage = if (penaltyMs > 0L) {
                     "Previše neuspjelih pokušaja. Trezor je privremeno zaključan."
                 } else {
                     "Glavna lozinka nije ispravna."
@@ -691,12 +696,14 @@ class KeyraViewModel(app: Application) : AndroidViewModel(app) {
             unlocked = false
             return
         }
+        unlockFailureMessage = null
         unlocked = true
         screen = Screen.VAULT
     }
 
     fun lock() {
         authenticationEpoch++
+        unlockFailureMessage = null
         // Revoke clipboard secrets immediately on an explicit foreground lock.
         // Preserve third-party clipboard updates via the ownership check.
         if (appInForeground) {
@@ -2749,6 +2756,20 @@ private fun UnlockScreen(
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    if (!creating) {
+                        model.unlockFailureMessage?.let { failure ->
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = failure,
+                                color = Warn,
+                                fontSize = 14.sp,
+                                softWrap = true,
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("keyra-unlock-failure")
+                            )
+                        }
                     }
 
                     if (!creating && model.biometricEnabled) {

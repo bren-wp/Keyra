@@ -41,4 +41,19 @@ assert "newPassword == confirmPassword" in android_recovery
 assert "keyra-first-run-recover" in android_ui and "keyra-recovery-new-master" in android_ui
 assert "keyra-first-run-recover" in ios_ui and "keyra-recovery-new-master" in ios_ui
 
-print("Keyra first-run recovery input and best-effort verifier migration contracts: OK")
+# Stable and accessible rejection UI across both platforms, independent of
+# short-lived global notices, without changing verifier or ciphertext behavior.
+android_unlock = segment(android, "    fun unlock(password: String) {", "    fun biometricRequestToken(): Long")
+ios_unlock = segment(ios, "    func unlock(password: String) {", "    func unlockBiometric() {")
+android_form = segment(android, "private fun UnlockScreen(", "private fun KeyraPasswordField(")
+ios_form = segment(ios, "struct UnlockView: View {", "struct SecretField: View {")
+assert "unlockFailureMessage = null" in android_unlock
+assert "unlockFailureMessage = " in android_unlock
+assert "keyra-unlock-failure" in android_form and "model.unlockFailureMessage" in android_form
+assert "keyra-unlock-failure" in android_ui and "unlockFailureMessage" in android_ui
+assert "unlockFailureMessage = nil" in ios_unlock
+assert "keyra-unlock-failure" in ios_form and "store.unlockFailureMessage" in ios_form
+assert "keyra-unlock-failure" in ios_ui
+assert "self.unlockFailureMessage = nil" in ios, "Biometric unlock must clear stale failure feedback"
+
+print("Keyra first-run input, stable unlock rejection UI and verifier migration contracts: OK")

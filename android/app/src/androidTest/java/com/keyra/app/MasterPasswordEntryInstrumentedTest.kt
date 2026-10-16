@@ -195,26 +195,35 @@ class MasterPasswordEntryInstrumentedTest {
         val unlock = compose.onNodeWithTag("keyra-master-password")
         unlock.performTextInput("PogresnaLozinka2026")
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
-        // UI notifications intentionally disappear after ~2.6 seconds. On a
-        // slower emulator the authentication finishes before waitUntil samples
-        // that short-lived toast. Wait for the durable failed-attempt state
-        // instead, then assert the vault stayed locked. This verifies the
-        // security behavior without relying on transient text timing.
+        // Read the durable persisted rejection counter and the stable,
+        // accessible inline error. Never race the 2.6-second toast.
         compose.waitUntil(30_000) {
             compose.activity.getSharedPreferences("keyra", Context.MODE_PRIVATE)
                 .getInt("unlock_failed_attempts", 0) == 1
         }
+        waitFor("keyra-unlock-failure")
+        assertTrue(
+            "Stable inline error must expose non-secret rejection feedback",
+            compose.onNodeWithTag("keyra-unlock-failure")
+                .fetchSemanticsNode().config[SemanticsProperties.Text]
+                .any { it.text == "Glavna lozinka nije ispravna." }
+        )
         compose.runOnIdle {
             val model = ViewModelProvider(compose.activity)[KeyraViewModel::class.java]
             assertEquals("Wrong password must preserve the unlock screen", Screen.UNLOCK, model.screen)
             assertFalse("Wrong password must never unlock the vault", model.unlocked)
             assertFalse("Wrong-password verification must finish", model.isUnlockingVault)
+            assertEquals("Glavna lozinka nije ispravna.", model.unlockFailureMessage)
         }
         unlock.performTextClearance()
         unlock.performTextInput(synthetic)
         compose.onNodeWithTag("keyra-submit-master-password").performClick()
         waitFor("keyra-nav-Postavke", 60_000)
         compose.onNodeWithTag("keyra-nav-Postavke").assertExists()
+        compose.runOnIdle {
+            val model = ViewModelProvider(compose.activity)[KeyraViewModel::class.java]
+            assertEquals("Successful unlock must clear the previous rejection", null, model.unlockFailureMessage)
+        }
 
         // Simulate the verifier surviving while the persisted encrypted blob
         // is missing. This test only uses the fresh emulator's synthetic vault.
