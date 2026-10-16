@@ -11,7 +11,7 @@ on:
       version:
         description: "Verzija bez prefiksa v; mora odgovarati Android/iOS verziji"
         required: false
-        default: "0.6.30"
+        default: "0.6.31"
 
 permissions:
   contents: read
@@ -419,7 +419,7 @@ jobs:
           cat > RELEASE_NOTES.md <<EOF
           # Keyra ${VERSION}
 
-          Keyra 0.6.30 improves readability on compact phones and with larger text: responsive scrolling prevents onboarding content from being clipped, navigation labels can wrap onto two lines, and new-vault password and confirmation fields provide accessible length/match feedback. Android Compose and iOS XCTest regressions now check the first-keystroke UI continuity and confirmation hints. KEYRA1/KEYRA2/KEYRAREC1 formats remain unchanged. The original issue #25 crash still requires physical-device evidence; simulator and emulator tests do not constitute proof of a hardware fix.
+          Keyra 0.6.31 hardens the first-run Recovery Key password fields on Android and iOS, using stable secure-text input and synchronous 256-character bounds instead of re-entrant keyboard updates. It also clarifies password-length and confirmation states, disables recovery until both new-master fields match, and prevents valid legacy master passwords from being falsely rejected when a best-effort verifier upgrade temporarily fails. The existing KEYRA1/KEYRA2/KEYRAREC1 formats and offline vault safeguards are preserved. The Android emulator and iOS simulator first-run regressions now exercise the recovery editor's first digits and Unicode typing. Original issue #25 hardware crash evidence is still unavailable; simulation results do not establish the root cause.
 
           ## Verification
           - Android lint, JVM tests, privacy gates, first-run emulator checked first/second digit typing via Compose semantics, visibility/Unicode/11/12/256-character flow, vault creation, relock, wrong-password rejection and recovery regressions
