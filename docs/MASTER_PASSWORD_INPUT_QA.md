@@ -140,3 +140,40 @@ require matching new passwords before enabling restore.
 **Issue #25 remains open until the original hardware-reported crash can be
 reproduced or excluded on documented real devices with privacy-safe diagnostic
 evidence.** Emulator/simulator green results show their covered paths only.
+
+## v0.6.32 — diagnosis of main Android CI failure (16 October 2026)
+
+This is **an Android instrumented test failure, not a demonstrated Keyra
+application crash**. At the merged v0.6.31 main SHA
+`4577418fcf4e389391360029dc16e68040769f99`,
+[Android Actions run 38958244102](https://github.com/bren-wp/Keyra/actions/runs/38958244102)
+failed inside `MasterPasswordEntryInstrumentedTest.kt:198` with a
+`ComposeTimeoutException` after 20 seconds. The Android build, lint, unit
+tests and source/privacy gates passed. The test had already created and
+relocked a synthetic vault, recreated its activity and submitted an
+intentionally incorrect password.
+
+The failing assertion waited for `Glavna lozinka nije ispravna.`, a visual
+message which the root UI dismisses after approximately **2.6 seconds**.
+Under variable emulator load, sampling that transient UI state is not a
+reliable authentication-result assertion. The captured logcat did **not**
+show a Keyra `FATAL EXCEPTION` or an attributable Android application
+crash. The same original SHA passed its independent Android release-packaging
+emulator run; that does not negate the main workflow test failure.
+
+The v0.6.32 correction waits for the persistent, synthetic
+`unlock_failed_attempts == 1` counter after submitting the incorrect
+password, then checks that the screen remains `UNLOCK`, the vault is **not
+unlocked**, and the asynchronous authentication request has completed. It
+continues to test a subsequent successful unlock and missing-ciphertext
+fail-closed behavior.
+
+Release publication now also requires successful **main** Android and iOS
+GitHub Actions workflows for the exact release commit, in addition to the
+release workflow's own platform tests. A red main-platform check must no
+longer be masked by a green independent packaging run.
+
+This correction addresses a confirmed CI timing defect. It is **not** a
+validated root-cause fix for the original hardware keyboard report #25,
+which remains open pending physical-device evidence. No real passwords,
+vaults or production keys were used in the failing synthetic test.
