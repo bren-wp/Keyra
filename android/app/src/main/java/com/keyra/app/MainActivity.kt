@@ -1231,7 +1231,9 @@ private class AuthStore(private val prefs: android.content.SharedPreferences) {
             val actual = derive(password, salt, iterations)
             try {
                 val ok = MessageDigest.isEqual(expected, actual)
-                if (ok && !create(password)) return false
+                // A valid legacy password must not be rejected solely because
+                // the optional verifier migration could not be persisted.
+                if (ok) create(password)
                 ok
             } finally {
                 salt.fill(0)
