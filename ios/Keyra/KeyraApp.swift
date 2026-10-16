@@ -2760,6 +2760,7 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(ice)
+                    .accessibilityIdentifier("keyra-first-run-recover")
                 }
                 .padding(.horizontal, compact ? 16 : 22)
                 .padding(.top, 8)
@@ -2827,6 +2828,7 @@ struct RecoverySetupView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(ice)
+                        .accessibilityIdentifier("keyra-recovery-back")
                         Spacer()
                     }
 
