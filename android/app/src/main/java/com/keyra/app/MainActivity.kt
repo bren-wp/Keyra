@@ -2326,6 +2326,7 @@ private fun OnboardingScreen(model: KeyraViewModel) {
                 TextButton(
                     onClick = model::startRecovery,
                     modifier = Modifier.fillMaxWidth().height(if (compact) 44.dp else 50.dp)
+                        .testTag("keyra-first-run-recover")
                 ) {
                     Icon(Icons.Outlined.Key, contentDescription = null, tint = Ice)
                     Spacer(Modifier.width(8.dp))
@@ -2415,7 +2416,7 @@ private fun RecoverySetupScreen(model: KeyraViewModel) {
                 Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = model::cancelSetup) {
+                IconButton(onClick = model::cancelSetup, modifier = Modifier.testTag("keyra-recovery-back")) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Natrag", tint = Ice)
                 }
                 Spacer(Modifier.weight(1f))
